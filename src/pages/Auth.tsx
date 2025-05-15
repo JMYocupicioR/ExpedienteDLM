@@ -50,138 +50,183 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
-      <div className={`relative w-[850px] h-[550px] bg-white rounded-[30px] shadow-lg overflow-hidden transition-all duration-700 ${isLogin ? '' : 'active'}`}>
-        {/* Login Form */}
-        <div className={`absolute top-0 w-1/2 h-full flex items-center justify-center transition-transform duration-700 ease-in-out ${isLogin ? 'left-0' : '-translate-x-full'}`}>
-          <form onSubmit={handleSubmit} className="w-full max-w-md p-8 space-y-6">
-            <h1 className="text-3xl font-bold text-gray-900 text-center">Iniciar Sesión</h1>
+      <div className="relative w-full max-w-4xl h-auto md:h-[550px] bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="flex flex-col md:flex-row w-full h-full">
+          {/* Login Form */}
+          <div className={`w-full md:w-1/2 transition-all duration-500 ease-in-out p-6 ${isLogin ? 'block' : 'hidden md:block'}`}>
+            <form onSubmit={handleSubmit} className="w-full max-w-md mx-auto p-4 space-y-6">
+              <h1 className="text-3xl font-bold text-gray-900 text-center mb-6">Iniciar Sesión</h1>
 
-            {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-lg flex items-center text-sm">
-                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-                {error}
+              {error && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg flex items-center text-sm mb-4">
+                  <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              <div className="relative mb-4">
+                <label htmlFor="email-login" className="block text-sm font-medium text-gray-700 mb-1">Correo electrónico</label>
+                <div className="relative">
+                  <input
+                    id="email-login"
+                    type="email"
+                    name="email"
+                    placeholder="Correo electrónico"
+                    required
+                    className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  <Mail className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                </div>
               </div>
-            )}
 
-            <div className="relative">
-              <input
-                type="email"
-                name="email"
-                placeholder="Correo electrónico"
-                required
-                className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-              <Mail className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            </div>
-
-            <div className="relative">
-              <input
-                type="password"
-                name="password"
-                placeholder="Contraseña"
-                required
-                className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-              <Lock className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            </div>
-
-            <div className="text-right">
-              <a href="#" className="text-sm text-blue-600 hover:text-blue-700">
-                ¿Olvidaste tu contraseña?
-              </a>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Cargando...' : 'Iniciar Sesión'}
-            </button>
-          </form>
-        </div>
-
-        {/* Register Form */}
-        <div className={`absolute top-0 w-1/2 h-full flex items-center justify-center transition-transform duration-700 ease-in-out ${isLogin ? 'translate-x-full right-0' : 'right-0'}`}>
-          <form onSubmit={handleSubmit} className="w-full max-w-md p-8 space-y-6">
-            <h1 className="text-3xl font-bold text-gray-900 text-center">Crear Cuenta</h1>
-
-            {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-lg flex items-center text-sm">
-                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-                {error}
+              <div className="relative mb-4">
+                <label htmlFor="password-login" className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                <div className="relative">
+                  <input
+                    id="password-login"
+                    type="password"
+                    name="password"
+                    placeholder="Contraseña"
+                    required
+                    className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  <Lock className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                </div>
               </div>
-            )}
 
-            <div className="relative">
-              <input
-                type="text"
-                name="fullName"
-                placeholder="Nombre completo"
-                required
-                className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-              <User className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            </div>
+              <div className="text-right mb-4">
+                <a href="#" className="text-sm text-blue-600 hover:text-blue-700">
+                  ¿Olvidaste tu contraseña?
+                </a>
+              </div>
 
-            <div className="relative">
-              <input
-                type="email"
-                name="email"
-                placeholder="Correo electrónico"
-                required
-                className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-              <Mail className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            </div>
-
-            <div className="relative">
-              <input
-                type="password"
-                name="password"
-                placeholder="Contraseña"
-                required
-                className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-              <Lock className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Cargando...' : 'Registrarse'}
-            </button>
-          </form>
-        </div>
-
-        {/* Toggle Box */}
-        <div className="absolute w-full h-full">
-          <div className={`absolute w-[300%] h-full bg-blue-600 rounded-[150px] transition-all duration-700 ease-in-out z-20 transform rotate-[10deg] origin-[0_100%] ${isLogin ? '-left-full' : 'left-1/2'}`} />
-
-          {/* Left Panel */}
-          <div className={`absolute left-0 w-1/2 h-full flex flex-col justify-center items-center text-white z-30 transition-all duration-700 ${isLogin ? '' : '-translate-x-full'}`}>
-            <h1 className="text-3xl font-bold mb-4">¡Bienvenido!</h1>
-            <p className="mb-8">¿No tienes una cuenta?</p>
-            <button
-              onClick={() => setIsLogin(false)}
-              className="px-10 py-3 border-2 border-white text-white rounded-lg font-semibold hover:bg-white/10 transition-colors"
-            >
-              Registrarse
-            </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Cargando...' : 'Iniciar Sesión'}
+              </button>
+            </form>
           </div>
 
-          {/* Right Panel */}
-          <div className={`absolute right-0 w-1/2 h-full flex flex-col justify-center items-center text-white z-30 transition-all duration-700 ${isLogin ? 'translate-x-full' : ''}`}>
-            <h1 className="text-3xl font-bold mb-4">¡Bienvenido de nuevo!</h1>
-            <p className="mb-8">¿Ya tienes una cuenta?</p>
-            <button
-              onClick={() => setIsLogin(true)}
-              className="px-10 py-3 border-2 border-white text-white rounded-lg font-semibold hover:bg-white/10 transition-colors"
-            >
-              Iniciar Sesión
-            </button>
+          {/* Register Form */}
+          <div className={`w-full md:w-1/2 transition-all duration-500 ease-in-out p-6 ${isLogin ? 'hidden md:block' : 'block'}`}>
+            <form onSubmit={handleSubmit} className="w-full max-w-md mx-auto p-4 space-y-6">
+              <h1 className="text-3xl font-bold text-gray-900 text-center mb-6">Crear Cuenta</h1>
+
+              {error && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg flex items-center text-sm mb-4">
+                  <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              <div className="relative mb-4">
+                <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
+                <div className="relative">
+                  <input
+                    id="fullName"
+                    type="text"
+                    name="fullName"
+                    placeholder="Nombre completo"
+                    required
+                    className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  <User className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="relative mb-4">
+                <label htmlFor="email-register" className="block text-sm font-medium text-gray-700 mb-1">Correo electrónico</label>
+                <div className="relative">
+                  <input
+                    id="email-register"
+                    type="email"
+                    name="email"
+                    placeholder="Correo electrónico"
+                    required
+                    className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  <Mail className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="relative mb-4">
+                <label htmlFor="password-register" className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                <div className="relative">
+                  <input
+                    id="password-register"
+                    type="password"
+                    name="password"
+                    placeholder="Contraseña"
+                    required
+                    className="w-full px-5 py-3 bg-gray-50 rounded-lg pr-12 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  <Lock className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Cargando...' : 'Registrarse'}
+              </button>
+            </form>
+          </div>
+
+          {/* Toggle Panel - Visible only on Desktop */}
+          <div className="hidden md:block absolute inset-y-0 w-1/2 bg-blue-600 transition-all duration-700 ease-in-out z-10"
+               style={{ 
+                 right: isLogin ? '0' : '50%',
+                 borderRadius: '0 1rem 1rem 0'
+               }}>
+            <div className="flex flex-col h-full items-center justify-center p-8 text-white">
+              {isLogin ? (
+                <>
+                  <h2 className="text-2xl font-bold mb-4">¿Aún no tienes una cuenta?</h2>
+                  <p className="text-center mb-8">Regístrate para acceder a todas las funcionalidades</p>
+                  <button
+                    onClick={() => setIsLogin(false)}
+                    className="px-8 py-2 border-2 border-white text-white rounded-lg font-semibold hover:bg-white/10 transition-colors"
+                  >
+                    Registrarse
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold mb-4">¿Ya tienes una cuenta?</h2>
+                  <p className="text-center mb-8">Inicia sesión para continuar</p>
+                  <button
+                    onClick={() => setIsLogin(true)}
+                    className="px-8 py-2 border-2 border-white text-white rounded-lg font-semibold hover:bg-white/10 transition-colors"
+                  >
+                    Iniciar Sesión
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile Toggle - Only visible on mobile */}
+          <div className="md:hidden w-full p-4 text-center">
+            {isLogin ? (
+              <button
+                onClick={() => setIsLogin(false)}
+                className="text-blue-600 font-medium hover:underline"
+              >
+                ¿No tienes una cuenta? Regístrate
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsLogin(true)}
+                className="text-blue-600 font-medium hover:underline"
+              >
+                ¿Ya tienes una cuenta? Inicia sesión
+              </button>
+            )}
           </div>
         </div>
       </div>
