@@ -51,63 +51,49 @@ export default function Dashboard() {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      if (sessionError) {
-        throw new Error('Error al verificar la sesión');
-      }
-
+      if (sessionError) throw sessionError;
       if (!session) {
         navigate('/auth');
         return;
       }
 
-      // First try to get the existing profile
-      const { data: profile, error: profileError } = await supabase
+      // Get or create profile
+      const { data: existingProfile } = await supabase
         .from('profiles')
         .select('role, full_name')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
-      // If no profile exists or there's a PGRST116 error, create one with default values
-      if ((!profile && !profileError) || (profileError && profileError.code === 'PGRST116')) {
+      if (!existingProfile) {
+        // Create new profile
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
-          .insert([{
+          .insert({
             id: session.user.id,
             email: session.user.email,
-            role: 'doctor', // Default role
-            full_name: session.user.email?.split('@')[0] || 'Usuario' // Default name from email
-          }])
+            role: 'doctor',
+            full_name: session.user.email?.split('@')[0] || 'Usuario'
+          })
           .select('role, full_name')
           .single();
 
-        if (createError) {
-          throw new Error('Error al crear el perfil de usuario');
-        }
-
+        if (createError) throw createError;
         setUserProfile(newProfile);
-      } else if (profileError && profileError.code !== 'PGRST116') {
-        // Handle other profile errors
-        throw new Error('Error al obtener el perfil de usuario');
       } else {
-        // Profile exists, check permissions
-        if (profile.role !== 'administrator' && profile.role !== 'doctor') {
-          throw new Error('No tienes permisos para acceder a esta sección');
-        }
+        setUserProfile(existingProfile);
+      }
 
-        setUserProfile(profile);
+      // Check role permissions
+      const profile = existingProfile || userProfile;
+      if (profile && profile.role !== 'administrator' && profile.role !== 'doctor') {
+        throw new Error('No tienes permisos para acceder a esta sección');
       }
 
       fetchPatients();
-
-    } catch (error) {
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('Error al verificar la sesión');
-      }
-      setTimeout(() => {
-        navigate('/auth');
-      }, 3000);
+    } catch (error: any) {
+      console.error('Session check error:', error);
+      setError(error.message);
+      setTimeout(() => navigate('/auth'), 3000);
     }
   };
 

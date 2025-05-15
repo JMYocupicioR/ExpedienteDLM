@@ -27,7 +27,19 @@ export default function Auth() {
         if (error) throw error;
         navigate('/dashboard');
       } else {
-        // First create the auth user
+        // Check if user exists first
+        const { data: { user: existingUser } } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (existingUser) {
+          setError('Este correo ya está registrado. Por favor inicia sesión.');
+          setIsLogin(true);
+          return;
+        }
+
+        // If user doesn't exist, proceed with signup
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -36,29 +48,15 @@ export default function Auth() {
         if (signUpError) throw signUpError;
         if (!authData.user) throw new Error('No se pudo crear el usuario');
 
-        // Then create their profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: authData.user.id,
-              email: email,
-              full_name: formData.get('fullName'),
-              role: 'doctor', // Default role
-            }
-          ]);
-
-        if (profileError) {
-          // If profile creation fails, we should clean up the auth user
-          await supabase.auth.signOut();
-          throw profileError;
-        }
-
         setError('Registro exitoso. Por favor inicia sesión.');
         setIsLogin(true);
       }
     } catch (err: any) {
-      setError(err.message);
+      if (err.message === 'Invalid login credentials') {
+        setError('Credenciales inválidas');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
