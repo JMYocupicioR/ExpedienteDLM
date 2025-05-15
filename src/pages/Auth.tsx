@@ -27,17 +27,33 @@ export default function Auth() {
         if (error) throw error;
         navigate('/dashboard');
       } else {
-        const { error } = await supabase.auth.signUp({
+        // First create the auth user
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            data: {
+        });
+
+        if (signUpError) throw signUpError;
+        if (!authData.user) throw new Error('No se pudo crear el usuario');
+
+        // Then create their profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: authData.user.id,
+              email: email,
               full_name: formData.get('fullName'),
               role: 'doctor', // Default role
-            },
-          },
-        });
-        if (error) throw error;
+            }
+          ]);
+
+        if (profileError) {
+          // If profile creation fails, we should clean up the auth user
+          await supabase.auth.signOut();
+          throw profileError;
+        }
+
         setError('Registro exitoso. Por favor inicia sesión.');
         setIsLogin(true);
       }
