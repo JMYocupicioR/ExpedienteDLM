@@ -1423,3 +1423,5 @@ const PatientRecord = () => {
 };
 
 export default PatientRecord;
+
+export default PatientRecord
