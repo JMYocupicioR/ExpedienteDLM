@@ -57,15 +57,20 @@ export default function Dashboard() {
         return;
       }
 
-      // Get or create profile
-      const { data: existingProfile } = await supabase
+      // Get profile
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role, full_name')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (!existingProfile) {
-        // Create new profile
+      if (profileError) throw profileError;
+
+      // If profile exists, use it
+      if (profile) {
+        setUserProfile(profile);
+      } else {
+        // Only create profile if it doesn't exist
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
           .insert({
@@ -79,13 +84,11 @@ export default function Dashboard() {
 
         if (createError) throw createError;
         setUserProfile(newProfile);
-      } else {
-        setUserProfile(existingProfile);
       }
 
-      // Check role permissions
-      const profile = existingProfile || userProfile;
-      if (profile && profile.role !== 'administrator' && profile.role !== 'doctor') {
+      // Check role permissions using the correct profile
+      const currentProfile = profile || userProfile;
+      if (currentProfile && currentProfile.role !== 'administrator' && currentProfile.role !== 'doctor') {
         throw new Error('No tienes permisos para acceder a esta sección');
       }
 
@@ -93,6 +96,9 @@ export default function Dashboard() {
     } catch (error: any) {
       console.error('Session check error:', error);
       setError(error.message);
+      if (error.message.includes('duplicate key')) {
+        setError('Error de sesión. Por favor, inicia sesión nuevamente.');
+      }
       setTimeout(() => navigate('/auth'), 3000);
     }
   };
