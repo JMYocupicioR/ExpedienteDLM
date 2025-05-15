@@ -60,25 +60,47 @@ export default function Dashboard() {
         return;
       }
 
+      // First try to get the existing profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role, full_name')
         .eq('id', session.user.id)
         .single();
 
-      if (profileError) {
-        throw new Error('Error al obtener el perfil de usuario');
+      // If no profile exists, create one with default values
+      if (!profile && !profileError) {
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert([{
+            id: session.user.id,
+            email: session.user.email,
+            role: 'doctor', // Default role
+            full_name: session.user.email?.split('@')[0] || 'Usuario' // Default name from email
+          }])
+          .select('role, full_name')
+          .single();
+
+        if (createError) {
+          throw new Error('Error al crear el perfil de usuario');
+        }
+
+        setUserProfile(newProfile);
+      } else if (profileError) {
+        if (profileError.code === 'PGRST116') {
+          // Handle the case where no profile exists differently
+          throw new Error('Perfil de usuario no encontrado. Por favor, contacte al administrador.');
+        } else {
+          throw new Error('Error al obtener el perfil de usuario');
+        }
+      } else {
+        // Profile exists, check permissions
+        if (profile.role !== 'administrator' && profile.role !== 'doctor') {
+          throw new Error('No tienes permisos para acceder a esta sección');
+        }
+
+        setUserProfile(profile);
       }
 
-      if (!profile) {
-        throw new Error('Perfil de usuario no encontrado');
-      }
-
-      if (profile.role !== 'administrator' && profile.role !== 'doctor') {
-        throw new Error('No tienes permisos para acceder a esta sección');
-      }
-
-      setUserProfile(profile);
       fetchPatients();
 
     } catch (error) {
