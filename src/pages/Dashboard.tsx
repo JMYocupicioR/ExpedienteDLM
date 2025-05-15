@@ -6,9 +6,11 @@ import { es } from 'date-fns/locale';
 import { Dialog } from '@headlessui/react';
 import { 
   Users, Search, UserPlus, Eye, Edit, 
-  FileText, Calendar, AlertCircle, LogOut
+  FileText, Calendar, AlertCircle, LogOut,
+  Settings
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import SettingsModal from '../components/SettingsModal';
 
 type Patient = {
   id: string;
@@ -29,14 +31,29 @@ type NewPatientForm = {
 };
 
 type UserProfile = {
+  id: string;
   role: string;
   full_name: string | null;
+  license_number?: string;
+  phone?: string;
+  schedule?: {
+    monday: boolean;
+    tuesday: boolean;
+    wednesday: boolean;
+    thursday: boolean;
+    friday: boolean;
+    saturday: boolean;
+    sunday: boolean;
+    start_time: string;
+    end_time: string;
+  };
 };
 
 export default function Dashboard() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewPatientOpen, setIsNewPatientOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -60,7 +77,7 @@ export default function Dashboard() {
       // Get profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('role, full_name')
+        .select('*')
         .eq('id', session.user.id)
         .maybeSingle();
 
@@ -79,7 +96,7 @@ export default function Dashboard() {
             role: 'doctor',
             full_name: session.user.email?.split('@')[0] || 'Usuario'
           })
-          .select('role, full_name')
+          .select('*')
           .single();
 
         if (createError) throw createError;
@@ -188,6 +205,13 @@ export default function Dashboard() {
                 <span className="text-sm text-gray-600">
                   {userProfile.full_name || 'Usuario'} ({userProfile.role})
                 </span>
+                <button
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-600 hover:text-gray-900"
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Configuración
+                </button>
                 <button
                   onClick={handleSignOut}
                   className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-600 hover:text-gray-900"
@@ -377,6 +401,16 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Settings Modal */}
+        {userProfile && (
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            userProfile={userProfile}
+            onUpdate={checkSession}
+          />
+        )}
 
         {/* Modal Nuevo Paciente */}
         <Dialog
