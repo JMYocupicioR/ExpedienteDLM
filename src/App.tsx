@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase';
 import LandingPage from './pages/LandingPage';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
+import PatientRecord from './pages/PatientRecord';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -42,6 +43,10 @@ function App() {
         <Route 
           path="/dashboard" 
           element={isAuthenticated ? <Dashboard /> : <Navigate to="/auth" />} 
+        />
+        <Route 
+          path="/expediente/:id" 
+          element={isAuthenticated ? <PatientRecord /> : <Navigate to="/auth" />} 
         />
       </Routes>
     </Router>
