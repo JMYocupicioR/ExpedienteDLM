@@ -21,6 +21,7 @@ interface Patient {
   phone: string | null;
   address: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 interface MedicalRecord {
@@ -73,25 +74,34 @@ const PatientRecord = () => {
       if (patientError) throw patientError;
       setPatient(patientData);
 
-      // Fetch medical record
+      // Fetch medical record - handle case where no record exists
       const { data: recordData, error: recordError } = await supabase
         .from('medical_records')
         .select('*')
-        .eq('patient_id', id)
-        .single();
+        .eq('patient_id', id);
 
-      if (recordError && recordError.code !== 'PGRST116') throw recordError;
-      setMedicalRecord(recordData);
+      // If no record found, set to null (not an error condition)
+      if (recordError && recordError.code === 'PGRST116') {
+        setMedicalRecord(null);
+      } else if (recordError) {
+        // Only throw if it's a different type of error
+        throw recordError;
+      } else {
+        // If we have records, take the first one (should only be one per patient)
+        setMedicalRecord(recordData?.[0] || null);
+      }
 
-      // Fetch attachments
-      if (recordData) {
+      // Only fetch attachments if we have a medical record
+      if (recordData?.[0]) {
         const { data: attachmentsData, error: attachmentsError } = await supabase
           .from('attachments')
           .select('*')
-          .eq('medical_record_id', recordData.id);
+          .eq('medical_record_id', recordData[0].id);
 
         if (attachmentsError) throw attachmentsError;
         setAttachments(attachmentsData || []);
+      } else {
+        setAttachments([]);
       }
 
     } catch (error: any) {
@@ -120,8 +130,9 @@ const PatientRecord = () => {
 
       if (updateError) throw updateError;
 
-      // Update medical record if it exists
-      if (medicalRecord) {
+      // Update or create medical record
+      if (medicalRecord?.id) {
+        // Update existing record
         const { error: recordError } = await supabase
           .from('medical_records')
           .update({
@@ -133,9 +144,26 @@ const PatientRecord = () => {
           .eq('id', medicalRecord.id);
 
         if (recordError) throw recordError;
+      } else if (medicalRecord) {
+        // Create new record
+        const { data: newRecord, error: createError } = await supabase
+          .from('medical_records')
+          .insert({
+            patient_id: id,
+            medical_history: medicalRecord.medical_history,
+            allergies: medicalRecord.allergies,
+            medications: medicalRecord.medications,
+            notes: medicalRecord.notes,
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        setMedicalRecord(newRecord);
       }
 
       setModoEdicion(false);
+      await fetchPatientData(); // Refresh data after save
     } catch (error: any) {
       console.error('Error saving changes:', error);
       setError(error.message);
@@ -167,6 +195,8 @@ const PatientRecord = () => {
       </div>
     );
   }
+
+  const lastUpdated = patient.updated_at || patient.created_at;
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -234,7 +264,7 @@ const PatientRecord = () => {
               Expediente Médico
             </h1>
             <p className="text-gray-500">
-              Última actualización: {format(new Date(patient.updated_at || patient.created_at), "d 'de' MMMM, yyyy", { locale: es })}
+              Última actualización: {format(new Date(lastUpdated), "d 'de' MMMM, yyyy", { locale: es })}
             </p>
           </div>
 
@@ -355,53 +385,78 @@ const PatientRecord = () => {
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-bold mb-6">Historial Médico</h2>
               
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Historia Clínica</label>
-                  <textarea
-                    value={medicalRecord?.medical_history || ''}
-                    onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, medical_history: e.target.value } : null)}
-                    readOnly={!modoEdicion}
-                    rows={6}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
+              {!medicalRecord && !modoEdicion ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 mb-4">No hay historial médico registrado para este paciente.</p>
+                  <button
+                    onClick={() => {
+                      setModoEdicion(true);
+                      setMedicalRecord({
+                        id: '',
+                        patient_id: id || '',
+                        medical_history: '',
+                        allergies: [],
+                        medications: [],
+                        notes: '',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                      });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center mx-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear Historial Médico
+                  </button>
                 </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Historia Clínica</label>
+                    <textarea
+                      value={medicalRecord?.medical_history || ''}
+                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, medical_history: e.target.value } : null)}
+                      readOnly={!modoEdicion}
+                      rows={6}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Alergias</label>
-                  <input
-                    type="text"
-                    value={medicalRecord?.allergies?.join(', ') || ''}
-                    onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, allergies: e.target.value.split(',').map(s => s.trim()) } : null)}
-                    readOnly={!modoEdicion}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Separar con comas"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Alergias</label>
+                    <input
+                      type="text"
+                      value={medicalRecord?.allergies?.join(', ') || ''}
+                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, allergies: e.target.value.split(',').map(s => s.trim()) } : null)}
+                      readOnly={!modoEdicion}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Separar con comas"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Medicamentos Actuales</label>
-                  <input
-                    type="text"
-                    value={medicalRecord?.medications?.join(', ') || ''}
-                    onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, medications: e.target.value.split(',').map(s => s.trim()) } : null)}
-                    readOnly={!modoEdicion}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Separar con comas"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Medicamentos Actuales</label>
+                    <input
+                      type="text"
+                      value={medicalRecord?.medications?.join(', ') || ''}
+                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, medications: e.target.value.split(',').map(s => s.trim()) } : null)}
+                      readOnly={!modoEdicion}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Separar con comas"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Notas Adicionales</label>
-                  <textarea
-                    value={medicalRecord?.notes || ''}
-                    onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, notes: e.target.value } : null)}
-                    readOnly={!modoEdicion}
-                    rows={4}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Notas Adicionales</label>
+                    <textarea
+                      value={medicalRecord?.notes || ''}
+                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, notes: e.target.value } : null)}
+                      readOnly={!modoEdicion}
+                      rows={4}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -409,36 +464,44 @@ const PatientRecord = () => {
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-bold mb-6">Documentos</h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {attachments.map((attachment) => (
-                  <div key={attachment.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center mb-2">
-                      <FileText className="h-5 w-5 text-blue-600 mr-2" />
-                      <h3 className="font-medium">{attachment.file_name}</h3>
+              {!medicalRecord ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">
+                    Para agregar documentos, primero debe crear un historial médico para el paciente.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {attachments.map((attachment) => (
+                    <div key={attachment.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center mb-2">
+                        <FileText className="h-5 w-5 text-blue-600 mr-2" />
+                        <h3 className="font-medium">{attachment.file_name}</h3>
+                      </div>
+                      <p className="text-sm text-gray-500 mb-3">
+                        {format(new Date(attachment.created_at), "d 'de' MMMM, yyyy", { locale: es })}
+                      </p>
+                      <a
+                        href={attachment.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline text-sm"
+                      >
+                        Ver documento
+                      </a>
                     </div>
-                    <p className="text-sm text-gray-500 mb-3">
-                      {format(new Date(attachment.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-                    </p>
-                    <a
-                      href={attachment.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm"
-                    >
-                      Ver documento
-                    </a>
-                  </div>
-                ))}
+                  ))}
 
-                {modoEdicion && (
-                  <div className="border border-dashed border-gray-300 rounded-lg p-4 flex items-center justify-center">
-                    <button className="text-blue-600 flex flex-col items-center">
-                      <Plus className="h-6 w-6 mb-2" />
-                      <span>Subir nuevo documento</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+                  {modoEdicion && (
+                    <div className="border border-dashed border-gray-300 rounded-lg p-4 flex items-center justify-center">
+                      <button className="text-blue-600 flex flex-col items-center">
+                        <Plus className="h-6 w-6 mb-2" />
+                        <span>Subir nuevo documento</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </main>
