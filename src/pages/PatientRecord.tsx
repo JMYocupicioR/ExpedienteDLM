@@ -2,15 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
-  ArrowLeft
+  ArrowLeft, AlertCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
 
 interface Patient {
   id: string;
@@ -20,28 +16,83 @@ interface Patient {
   email: string | null;
   phone: string | null;
   address: string | null;
+  city_of_birth: string | null;
+  city_of_residence: string | null;
+  social_security_number: string | null;
   created_at: string;
   updated_at: string | null;
 }
 
-interface MedicalRecord {
+interface HereditaryBackground {
   id: string;
   patient_id: string;
-  medical_history: string | null;
-  allergies: string[] | null;
-  medications: string[] | null;
+  relationship: string;
+  condition: string;
   notes: string | null;
   created_at: string;
   updated_at: string;
 }
 
-interface Attachment {
+interface PathologicalHistory {
   id: string;
-  medical_record_id: string;
-  file_name: string;
-  file_type: string;
-  file_url: string;
+  patient_id: string;
+  chronic_diseases: string[];
+  current_treatments: string[];
+  surgeries: string[];
+  fractures: string[];
+  previous_hospitalizations: string[];
+  substance_use: {
+    tobacco: { current: boolean; frequency?: string; };
+    alcohol: { current: boolean; frequency?: string; };
+    drugs: { current: boolean; substances?: string[]; };
+  };
   created_at: string;
+  updated_at: string;
+}
+
+interface NonPathologicalHistory {
+  id: string;
+  patient_id: string;
+  handedness: string;
+  religion: string;
+  marital_status: string;
+  education_level: string;
+  diet: string;
+  personal_hygiene: string;
+  vaccination_history: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+interface Consultation {
+  id: string;
+  patient_id: string;
+  doctor_id: string;
+  current_condition: string;
+  vital_signs: {
+    temperature: number;
+    heart_rate: number;
+    blood_pressure: string;
+    respiratory_rate: number;
+    oxygen_saturation: number;
+    weight: number;
+    height: number;
+  };
+  physical_examination: Record<string, any>;
+  diagnosis: string;
+  prognosis: string;
+  treatment: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PhysicalExamTemplate {
+  id: string;
+  doctor_id: string;
+  name: string;
+  fields: Record<string, any>;
+  created_at: string;
+  updated_at: string;
 }
 
 const PatientRecord = () => {
@@ -49,11 +100,18 @@ const PatientRecord = () => {
   const navigate = useNavigate();
   const [seccionActiva, setSeccionActiva] = useState('paciente');
   const [modoEdicion, setModoEdicion] = useState(false);
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [medicalRecord, setMedicalRecord] = useState<MedicalRecord | null>(null);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Data states
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [hereditaryBackgrounds, setHereditaryBackgrounds] = useState<HereditaryBackground[]>([]);
+  const [pathologicalHistory, setPathologicalHistory] = useState<PathologicalHistory | null>(null);
+  const [nonPathologicalHistory, setNonPathologicalHistory] = useState<NonPathologicalHistory | null>(null);
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const [examTemplates, setExamTemplates] = useState<PhysicalExamTemplate[]>([]);
+  const [newConsultation, setNewConsultation] = useState<Partial<Consultation> | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPatientData();
@@ -74,35 +132,53 @@ const PatientRecord = () => {
       if (patientError) throw patientError;
       setPatient(patientData);
 
-      // Fetch medical record - handle case where no record exists
-      const { data: recordData, error: recordError } = await supabase
-        .from('medical_records')
+      // Fetch hereditary backgrounds
+      const { data: hereditaryData, error: hereditaryError } = await supabase
+        .from('hereditary_backgrounds')
         .select('*')
         .eq('patient_id', id);
 
-      // If no record found, set to null (not an error condition)
-      if (recordError && recordError.code === 'PGRST116') {
-        setMedicalRecord(null);
-      } else if (recordError) {
-        // Only throw if it's a different type of error
-        throw recordError;
-      } else {
-        // If we have records, take the first one (should only be one per patient)
-        setMedicalRecord(recordData?.[0] || null);
-      }
+      if (hereditaryError) throw hereditaryError;
+      setHereditaryBackgrounds(hereditaryData || []);
 
-      // Only fetch attachments if we have a medical record
-      if (recordData?.[0]) {
-        const { data: attachmentsData, error: attachmentsError } = await supabase
-          .from('attachments')
-          .select('*')
-          .eq('medical_record_id', recordData[0].id);
+      // Fetch pathological history
+      const { data: pathologicalData, error: pathologicalError } = await supabase
+        .from('pathological_histories')
+        .select('*')
+        .eq('patient_id', id)
+        .maybeSingle();
 
-        if (attachmentsError) throw attachmentsError;
-        setAttachments(attachmentsData || []);
-      } else {
-        setAttachments([]);
-      }
+      if (pathologicalError && pathologicalError.code !== 'PGRST116') throw pathologicalError;
+      setPathologicalHistory(pathologicalData);
+
+      // Fetch non-pathological history
+      const { data: nonPathologicalData, error: nonPathologicalError } = await supabase
+        .from('non_pathological_histories')
+        .select('*')
+        .eq('patient_id', id)
+        .maybeSingle();
+
+      if (nonPathologicalError && nonPathologicalError.code !== 'PGRST116') throw nonPathologicalError;
+      setNonPathologicalHistory(nonPathologicalData);
+
+      // Fetch consultations
+      const { data: consultationsData, error: consultationsError } = await supabase
+        .from('consultations')
+        .select('*')
+        .eq('patient_id', id)
+        .order('created_at', { ascending: false });
+
+      if (consultationsError) throw consultationsError;
+      setConsultations(consultationsData || []);
+
+      // Fetch exam templates
+      const { data: templatesData, error: templatesError } = await supabase
+        .from('physical_exam_templates')
+        .select('*')
+        .order('name');
+
+      if (templatesError) throw templatesError;
+      setExamTemplates(templatesData || []);
 
     } catch (error: any) {
       console.error('Error fetching patient data:', error);
@@ -117,58 +193,83 @@ const PatientRecord = () => {
       setLoading(true);
       setError(null);
 
+      if (!patient) return;
+
       // Update patient data
       const { error: updateError } = await supabase
         .from('patients')
         .update({
-          full_name: patient?.full_name,
-          email: patient?.email,
-          phone: patient?.phone,
-          address: patient?.address,
+          full_name: patient.full_name,
+          email: patient.email,
+          phone: patient.phone,
+          address: patient.address,
+          city_of_birth: patient.city_of_birth,
+          city_of_residence: patient.city_of_residence,
+          social_security_number: patient.social_security_number,
         })
         .eq('id', id);
 
       if (updateError) throw updateError;
 
-      // Update or create medical record
-      if (medicalRecord?.id) {
-        // Update existing record
-        const { error: recordError } = await supabase
-          .from('medical_records')
-          .update({
-            medical_history: medicalRecord.medical_history,
-            allergies: medicalRecord.allergies,
-            medications: medicalRecord.medications,
-            notes: medicalRecord.notes,
-          })
-          .eq('id', medicalRecord.id);
-
-        if (recordError) throw recordError;
-      } else if (medicalRecord) {
-        // Create new record
-        const { data: newRecord, error: createError } = await supabase
-          .from('medical_records')
-          .insert({
+      // Update or create pathological history
+      if (pathologicalHistory) {
+        const { error: pathologicalError } = await supabase
+          .from('pathological_histories')
+          .upsert({
+            ...pathologicalHistory,
             patient_id: id,
-            medical_history: medicalRecord.medical_history,
-            allergies: medicalRecord.allergies,
-            medications: medicalRecord.medications,
-            notes: medicalRecord.notes,
-          })
-          .select()
-          .single();
+          });
 
-        if (createError) throw createError;
-        setMedicalRecord(newRecord);
+        if (pathologicalError) throw pathologicalError;
+      }
+
+      // Update or create non-pathological history
+      if (nonPathologicalHistory) {
+        const { error: nonPathologicalError } = await supabase
+          .from('non_pathological_histories')
+          .upsert({
+            ...nonPathologicalHistory,
+            patient_id: id,
+          });
+
+        if (nonPathologicalError) throw nonPathologicalError;
       }
 
       setModoEdicion(false);
-      await fetchPatientData(); // Refresh data after save
+      await fetchPatientData();
     } catch (error: any) {
       console.error('Error saving changes:', error);
       setError(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleNewConsultation = async () => {
+    try {
+      if (!newConsultation || !selectedTemplate) return;
+
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error('No user session found');
+
+      const { data: consultation, error } = await supabase
+        .from('consultations')
+        .insert({
+          ...newConsultation,
+          patient_id: id,
+          doctor_id: userData.user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setConsultations([consultation, ...consultations]);
+      setNewConsultation(null);
+      setSelectedTemplate(null);
+    } catch (error: any) {
+      console.error('Error creating consultation:', error);
+      setError(error.message);
     }
   };
 
@@ -195,8 +296,6 @@ const PatientRecord = () => {
       </div>
     );
   }
-
-  const lastUpdated = patient.updated_at || patient.created_at;
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -227,29 +326,51 @@ const PatientRecord = () => {
                 }`}
               >
                 <User className="h-5 w-5 mr-3" />
-                <span>Información Personal</span>
+                <span>Ficha de Identificación</span>
               </button>
             </li>
             <li>
               <button 
-                onClick={() => setSeccionActiva('historial')}
+                onClick={() => setSeccionActiva('heredofamiliar')}
                 className={`flex items-center w-full p-3 rounded-lg ${
-                  seccionActiva === 'historial' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                  seccionActiva === 'heredofamiliar' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
                 }`}
               >
                 <FileText className="h-5 w-5 mr-3" />
-                <span>Historial Médico</span>
+                <span>Antecedentes Heredofamiliares</span>
               </button>
             </li>
             <li>
               <button 
-                onClick={() => setSeccionActiva('documentos')}
+                onClick={() => setSeccionActiva('patologicos')}
                 className={`flex items-center w-full p-3 rounded-lg ${
-                  seccionActiva === 'documentos' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                  seccionActiva === 'patologicos' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                }`}
+              >
+                <Activity className="h-5 w-5 mr-3" />
+                <span>Antecedentes Patológicos</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => setSeccionActiva('no-patologicos')}
+                className={`flex items-center w-full p-3 rounded-lg ${
+                  seccionActiva === 'no-patologicos' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
                 }`}
               >
                 <FileText className="h-5 w-5 mr-3" />
-                <span>Documentos</span>
+                <span>Antecedentes No Patológicos</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => setSeccionActiva('consultas')}
+                className={`flex items-center w-full p-3 rounded-lg ${
+                  seccionActiva === 'consultas' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                }`}
+              >
+                <Calendar className="h-5 w-5 mr-3" />
+                <span>Consultas</span>
               </button>
             </li>
           </ul>
@@ -264,7 +385,7 @@ const PatientRecord = () => {
               Expediente Médico
             </h1>
             <p className="text-gray-500">
-              Última actualización: {format(new Date(lastUpdated), "d 'de' MMMM, yyyy", { locale: es })}
+              Última actualización: {format(new Date(patient.updated_at || patient.created_at), "d 'de' MMMM, yyyy", { locale: es })}
             </p>
           </div>
 
@@ -302,7 +423,7 @@ const PatientRecord = () => {
         <main className="p-6">
           {seccionActiva === 'paciente' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-6">Información Personal</h2>
+              <h2 className="text-xl font-bold mb-6">Ficha de Identificación</h2>
               
               <div className="grid grid-cols-2 gap-6">
                 <div>
@@ -341,6 +462,28 @@ const PatientRecord = () => {
                       <option value="otro">Otro</option>
                     </select>
                   </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Ciudad de nacimiento</label>
+                    <input
+                      type="text"
+                      value={patient.city_of_birth || ''}
+                      onChange={(e) => setPatient({ ...patient, city_of_birth: e.target.value })}
+                      readOnly={!modoEdicion}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Ciudad de residencia</label>
+                    <input
+                      type="text"
+                      value={patient.city_of_residence || ''}
+                      onChange={(e) => setPatient({ ...patient, city_of_residence: e.target.value })}
+                      readOnly={!modoEdicion}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -376,28 +519,132 @@ const PatientRecord = () => {
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Número de Seguro Social</label>
+                    <input
+                      type="text"
+                      value={patient.social_security_number || ''}
+                      onChange={(e) => setPatient({ ...patient, social_security_number: e.target.value })}
+                      readOnly={!modoEdicion}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {seccionActiva === 'historial' && (
+          {seccionActiva === 'heredofamiliar' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-6">Historial Médico</h2>
-              
-              {!medicalRecord && !modoEdicion ? (
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold">Antecedentes Heredofamiliares</h2>
+                {modoEdicion && (
+                  <button
+                    onClick={() => {
+                      setHereditaryBackgrounds([
+                        ...hereditaryBackgrounds,
+                        {
+                          id: '',
+                          patient_id: id || '',
+                          relationship: '',
+                          condition: '',
+                          notes: '',
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                        },
+                      ]);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar Antecedente
+                  </button>
+                )}
+              </div>
+
+              {hereditaryBackgrounds.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">
+                  No hay antecedentes heredofamiliares registrados
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {hereditaryBackgrounds.map((background, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Parentesco</label>
+                          <input
+                            type="text"
+                            value={background.relationship}
+                            onChange={(e) => {
+                              const newBackgrounds = [...hereditaryBackgrounds];
+                              newBackgrounds[index].relationship = e.target.value;
+                              setHereditaryBackgrounds(newBackgrounds);
+                            }}
+                            readOnly={!modoEdicion}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Padecimiento</label>
+                          <input
+                            type="text"
+                            value={background.condition}
+                            onChange={(e) => {
+                              const newBackgrounds = [...hereditaryBackgrounds];
+                              newBackgrounds[index].condition = e.target.value;
+                              setHereditaryBackgrounds(newBackgrounds);
+                            }}
+                            readOnly={!modoEdicion}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700">Notas</label>
+                        <textarea
+                          value={background.notes || ''}
+                          onChange={(e) => {
+                            const newBackgrounds = [...hereditaryBackgrounds];
+                            newBackgrounds[index].notes = e.target.value;
+                            setHereditaryBackgrounds(newBackgrounds);
+                          }}
+                          readOnly={!modoEdicion}
+                          rows={2}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {seccionActiva === 'patologicos' && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-bold mb-6">Antecedentes Patológicos</h2>
+
+              {!pathologicalHistory && !modoEdicion ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 mb-4">No hay historial médico registrado para este paciente.</p>
+                  <p className="text-gray-500 mb-4">No hay antecedentes patológicos registrados</p>
                   <button
                     onClick={() => {
                       setModoEdicion(true);
-                      setMedicalRecord({
+                      setPathologicalHistory({
                         id: '',
                         patient_id: id || '',
-                        medical_history: '',
-                        allergies: [],
-                        medications: [],
-                        notes: '',
+                        chronic_diseases: [],
+                        current_treatments: [],
+                        surgeries: [],
+                        fractures: [],
+                        previous_hospitalizations: [],
+                        substance_use: {
+                          tobacco: { current: false },
+                          alcohol: { current: false },
+                          drugs: { current: false },
+                        },
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
                       });
@@ -405,28 +652,22 @@ const PatientRecord = () => {
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center mx-auto"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Crear Historial Médico
+                    Agregar Antecedentes Patológicos
                   </button>
                 </div>
               ) : (
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Historia Clínica</label>
-                    <textarea
-                      value={medicalRecord?.medical_history || ''}
-                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, medical_history: e.target.value } : null)}
-                      readOnly={!modoEdicion}
-                      rows={6}
-                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Alergias</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Enfermedades Crónicas
+                    </label>
                     <input
                       type="text"
-                      value={medicalRecord?.allergies?.join(', ') || ''}
-                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, allergies: e.target.value.split(',').map(s => s.trim()) } : null)}
+                      value={pathologicalHistory?.chronic_diseases?.join(', ') || ''}
+                      onChange={(e) => setPathologicalHistory(prev => prev ? {
+                        ...prev,
+                        chronic_diseases: e.target.value.split(',').map(s => s.trim()),
+                      } : null)}
                       readOnly={!modoEdicion}
                       className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       placeholder="Separar con comas"
@@ -434,11 +675,16 @@ const PatientRecord = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Medicamentos Actuales</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tratamientos Actuales
+                    </label>
                     <input
                       type="text"
-                      value={medicalRecord?.medications?.join(', ') || ''}
-                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, medications: e.target.value.split(',').map(s => s.trim()) } : null)}
+                      value={pathologicalHistory?.current_treatments?.join(', ') || ''}
+                      onChange={(e) => setPathologicalHistory(prev => prev ? {
+                        ...prev,
+                        current_treatments: e.target.value.split(',').map(s => s.trim()),
+                      } : null)}
                       readOnly={!modoEdicion}
                       className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       placeholder="Separar con comas"
@@ -446,62 +692,707 @@ const PatientRecord = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Notas Adicionales</label>
-                    <textarea
-                      value={medicalRecord?.notes || ''}
-                      onChange={(e) => setMedicalRecord(prev => prev ? { ...prev, notes: e.target.value } : null)}
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cirugías
+                    </label>
+                    <input
+                      type="text"
+                      value={pathologicalHistory?.surgeries?.join(', ') || ''}
+                      onChange={(e) => setPathologicalHistory(prev => prev ? {
+                        ...prev,
+                        surgeries: e.target.value.split(',').map(s => s.trim()),
+                      } : null)}
                       readOnly={!modoEdicion}
-                      rows={4}
                       className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Separar con comas"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Fracturas
+                    </label>
+                    <input
+                      type="text"
+                      value={pathologicalHistory?.fractures?.join(', ') || ''}
+                      onChange={(e) => setPathologicalHistory(prev => prev ? {
+                        ...prev,
+                        fractures: e.target.value.split(',').map(s => s.trim()),
+                      } : null)}
+                      readOnly={!modoEdicion}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Separar con comas"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Hospitalizaciones Previas
+                    </label>
+                    <input
+                      type="text"
+                      value={pathologicalHistory?.previous_hospitalizations?.join(', ') || ''}
+                      onChange={(e) => setPathologicalHistory(prev => prev ? {
+                        ...prev,
+                        previous_hospitalizations: e.target.value.split(',').map(s => s.trim()),
+                      } : null)}
+                      readOnly={!modoEdicion}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Separar con comas"
+                    />
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Toxicomanías</h3>
+                    
+                    <div className="space-y-4">
+                      <div className="border border-gray-200 rounded-lg p-4">
+                        <label className="flex items-center mb-2">
+                          <input
+                            type="checkbox"
+                            checked={pathologicalHistory?.substance_use.tobacco.current || false}
+                            onChange={(e) => setPathologicalHistory(prev => prev ? {
+                              ...prev,
+                              substance_use: {
+                                ...prev.substance_use,
+                                tobacco: {
+                                  ...prev.substance_use.tobacco,
+                                  current: e.target.checked,
+                                },
+                              },
+                            } : null)}
+                            disabled={!modoEdicion}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="ml-2">Tabaquismo</span>
+                        </label>
+                        {pathologicalHistory?.substance_use.tobacco.current && (
+                          <input
+                            type="text"
+                            value={pathologicalHistory?.substance_use.tobacco.frequency || ''}
+                            onChange={(e) => setPathologicalHistory(prev => prev ? {
+                              ...prev,
+                              substance_use: {
+                                ...prev.substance_use,
+                                tobacco: {
+                                  ...prev.substance_use.tobacco,
+                                  frequency: e.target.value,
+                                },
+                              },
+                            } : null)}
+                            readOnly={!modoEdicion}
+                            placeholder="Frecuencia"
+                            className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        )}
+                      </div>
+
+                      <div className="border border-gray-200 rounded-lg p-4">
+                        <label className="flex items-center mb-2">
+                          <input
+                            type="checkbox"
+                            checked={pathologicalHistory?.substance_use.alcohol.current || false}
+                            onChange={(e) => setPathologicalHistory(prev => prev ? {
+                              ...prev,
+                              substance_use: {
+                                ...prev.substance_use,
+                                alcohol: {
+                                  ...prev.substance_use.alcohol,
+                                  current: e.target.checked,
+                                },
+                              },
+                            } : null)}
+                            disabled={!modoEdicion}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="ml-2">Alcoholismo</span>
+                        </label>
+                        {pathologicalHistory?.substance_use.alcohol.current && (
+                          <input
+                            type="text"
+                            value={pathologicalHistory?.substance_use.alcohol.frequency || ''}
+                            onChange={(e) => setPathologicalHistory(prev => prev ? {
+                              ...prev,
+                              substance_use: {
+                                ...prev.substance_use,
+                                alcohol: {
+                                  ...prev.substance_use.alcohol,
+                                  frequency: e.target.value,
+                                },
+                              },
+                            } : null)}
+                            readOnly={!modoEdicion}
+                            placeholder="Frecuencia"
+                            className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        )}
+                      </div>
+
+                      <div className="border border-gray-200 rounded-lg p-4">
+                        <label className="flex items-center mb-2">
+                          <input
+                            type="checkbox"
+                            checked={pathologicalHistory?.substance_use.drugs.current || false}
+                            onChange={(e) => setPathologicalHistory(prev => prev ? {
+                              ...prev,
+                              substance_use: {
+                                ...prev.substance_use,
+                                drugs: {
+                                  ...prev.substance_use.drugs,
+                                  current: e.target.checked,
+                                },
+                              },
+                            } : null)}
+                            disabled={!modoEdicion}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="ml-2">Otras Sustancias</span>
+                        </label>
+                        {pathologicalHistory?.substance_use.drugs.current && (
+                          <input
+                            type="text"
+                            value={pathologicalHistory?.substance_use.drugs.substances?.join(', ') || ''}
+                            onChange={(e) => setPathologicalHistory(prev => prev ? {
+                              ...prev,
+                              substance_use: {
+                                ...prev.substance_use,
+                                drugs: {
+                                  ...prev.substance_use.drugs,
+                                  substances: e.target.value.split(',').map(s => s.trim()),
+                                },
+                              },
+                            } : null)}
+                            readOnly={!modoEdicion}
+                            placeholder="Sustancias (separar con comas)"
+                            className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {seccionActiva === 'documentos' && (
+          {seccionActiva === 'no-patologicos' && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-6">Documentos</h2>
-              
-              {!medicalRecord ? (
+              <h2 className="text-xl font-bold mb-6">Antecedentes No Patológicos</h2>
+
+              {!nonPathologicalHistory && !modoEdicion ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">
-                    Para agregar documentos, primero debe crear un historial médico para el paciente.
-                  </p>
+                  <p className="text-gray-500 mb-4">No hay antecedentes no patológicos registrados</p>
+                  <button
+                    onClick={() => {
+                      setModoEdicion(true);
+                      setNonPathologicalHistory({
+                        id: '',
+                        patient_id: id || '',
+                        handedness: '',
+                        religion: '',
+                        marital_status: '',
+                        education_level: '',
+                        diet: '',
+                        personal_hygiene: '',
+                        vaccination_history: [],
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                      });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center mx-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar Antecedentes No Patológicos
+                  </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {attachments.map((attachment) => (
-                    <div key={attachment.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center mb-2">
-                        <FileText className="h-5 w-5 text-blue-600 mr-2" />
-                        <h3 className="font-medium">{attachment.file_name}</h3>
-                      </div>
-                      <p className="text-sm text-gray-500 mb-3">
-                        {format(new Date(attachment.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-                      </p>
-                      <a
-                        href={attachment.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline text-sm"
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">Lateralidad</label>
+                      <select
+                        value={nonPathologicalHistory?.handedness || ''}
+                        onChange={(e) => setNonPathologicalHistory(prev => prev ? {
+                          ...prev,
+                          handedness: e.target.value,
+                        } : null)}
+                        disabled={!modoEdicion}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       >
-                        Ver documento
-                      </a>
+                        <option value="">Seleccionar</option>
+                        <option value="diestro">Diestro</option>
+                        <option value="zurdo">Zurdo</option>
+                        <option value="ambidiestro">Ambidiestro</option>
+                      </select>
                     </div>
-                  ))}
 
-                  {modoEdicion && (
-                    <div className="border border-dashed border-gray-300 rounded-lg p-4 flex items-center justify-center">
-                      <button className="text-blue-600 flex flex-col items-center">
-                        <Plus className="h-6 w-6 mb-2" />
-                        <span>Subir nuevo documento</span>
-                      </button>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">Religión</label>
+                      <input
+                        type="text"
+                        value={nonPathologicalHistory?.religion || ''}
+                        onChange={(e) => setNonPathologicalHistory(prev => prev ? {
+                          ...prev,
+                          religion: e.target.value,
+                        } : null)}
+                        readOnly={!modoEdicion}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
                     </div>
-                  )}
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">Estado Civil</label>
+                      <select
+                        value={nonPathologicalHistory?.marital_status || ''}
+                        onChange={(e) => setNonPathologicalHistory(prev => prev ? {
+                          ...prev,
+                          marital_status: e.target.value,
+                        } : null)}
+                        disabled={!modoEdicion}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      >
+                        <option value="">Seleccionar</option>
+                        <option value="soltero">Soltero/a</option>
+                        <option value="casado">Casado/a</option>
+                        <option value="divorciado">Divorciado/a</option>
+                        <option value="viudo">Viudo/a</option>
+                        <option value="union_libre">Unión Libre</option>
+                      </select>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">Escolaridad</label>
+                      <input
+                        type="text"
+                        value={nonPathologicalHistory?.education_level || ''}
+                        onChange={(e) => setNonPathologicalHistory(prev => prev ? {
+                          ...prev,
+                          education_level: e.target.value,
+                        } : null)}
+                        readOnly={!modoEdicion}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">Alimentación</label>
+                      <textarea
+                        value={nonPathologicalHistory?.diet || ''}
+                        onChange={(e) => setNonPathologicalHistory(prev => prev ? {
+                          ...prev,
+                          diet: e.target.value,
+                        } : null)}
+                        readOnly={!modoEdicion}
+                        rows={3}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">Higiene Personal</label>
+                      <textarea
+                        value={nonPathologicalHistory?.personal_hygiene || ''}
+                        onChange={(e) => setNonPathologicalHistory(prev => prev ? {
+                          ...prev,
+                          personal_hygiene: e.target.value,
+                        } : null)}
+                        readOnly={!modoEdicion}
+                        rows={3}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700">Historial de Vacunación</label>
+                      <input
+                        type="text"
+                        value={nonPathologicalHistory?.vaccination_history?.join(', ') || ''}
+                        onChange={(e) => setNonPathologicalHistory(prev => prev ? {
+                          ...prev,
+                          vaccination_history: e.target.value.split(',').map(s => s.trim()),
+                        } : null)}
+                        readOnly={!modoEdicion}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Separar con comas"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {seccionActiva === 'consultas' && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold">Consultas</h2>
+                <button
+                  onClick={() => setNewConsultation({
+                    current_condition: '',
+                    vital_signs: {
+                      temperature: 0,
+                      heart_rate: 0,
+                      blood_pressure: '',
+                      respiratory_rate: 0,
+                      oxygen_saturation: 0,
+                      weight: 0,
+                      height: 0,
+                    },
+                    physical_examination: {},
+                    diagnosis: '',
+                    prognosis: '',
+                    treatment: '',
+                  })}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nueva Consulta
+                </button>
+              </div>
+
+              {newConsultation && (
+                <div className="mb-8 border border-blue-200 rounded-lg p-6 bg-blue-50">
+                  <h3 className="text-lg font-semibold mb-4">Nueva Consulta</h3>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Padecimiento Actual
+                      </label>
+                      <textarea
+                        value={newConsultation.current_condition || ''}
+                        onChange={(e) => setNewConsultation({
+                          ...newConsultation,
+                          current_condition: e.target.value,
+                        })}
+                        rows={4}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Signos Vitales</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm text-gray-600">Temperatura (°C)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={newConsultation.vital_signs?.temperature || ''}
+                            onChange={(e) => setNewConsultation({
+                              ...newConsultation,
+                              vital_signs: {
+                                ...newConsultation.vital_signs,
+                                temperature: parseFloat(e.target.value),
+                              },
+                            })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600">Frecuencia Cardíaca</label>
+                          <input
+                            type="number"
+                            value={newConsultation.vital_signs?.heart_rate || ''}
+                            onChange={(e) => setNewConsultation({
+                              ...newConsultation,
+                              vital_signs: {
+                                ...newConsultation.vital_signs,
+                                heart_rate: parseInt(e.target.value),
+                              },
+                            })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600">Presión Arterial</label>
+                          <input
+                            type="text"
+                            value={newConsultation.vital_signs?.blood_pressure || ''}
+                            onChange={(e) => setNewConsultation({
+                              ...newConsultation,
+                              vital_signs: {
+                                ...newConsultation.vital_signs,
+                                blood_pressure: e.target.value,
+                              },
+                            })}
+                            placeholder="120/80"
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600">Frecuencia Respiratoria</label>
+                          <input
+                            type="number"
+                            value={newConsultation.vital_signs?.respiratory_rate || ''}
+                            onChange={(e) => setNewConsultation({
+                              ...newConsultation,
+                              vital_signs: {
+                                ...newConsultation.vital_signs,
+                                respiratory_rate: parseInt(e.target.value),
+                              },
+                            })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600">Saturación O2 (%)</label>
+                          <input
+                            type="number"
+                            value={newConsultation.vital_signs?.oxygen_saturation || ''}
+                            onChange={(e) => setNewConsultation({
+                              ...newConsultation,
+                              vital_signs: {
+                                ...newConsultation.vital_signs,
+                                oxygen_saturation: parseInt(e.target.value),
+                              },
+                            })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600">Peso (kg)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={newConsultation.vital_signs?.weight || ''}
+                            onChange={(e) => setNewConsultation({
+                              ...newConsultation,
+                              vital_signs: {
+                                ...newConsultation.vital_signs,
+                                weight: parseFloat(e.target.value),
+                              },
+                            })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600">Altura (cm)</label>
+                          <input
+                            type="number"
+                            value={newConsultation.vital_signs?.height || ''}
+                            onChange={(e) => setNewConsultation({
+                              ...newConsultation,
+                              vital_signs: {
+                                ...newConsultation.vital_signs,
+                                height: parseInt(e.target.value),
+                              },
+                            })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Exploración Física</h4>
+                      <div className="mb-4">
+                        <label className="block text-sm text-gray-600">Seleccionar Plantilla</label>
+                        <select
+                          value={selectedTemplate || ''}
+                          onChange={(e) => {
+                            setSelectedTemplate(e.target.value);
+                            const template = examTemplates.find(t => t.id === e.target.value);
+                            if (template) {
+                              setNewConsultation({
+                                ...newConsultation,
+                                physical_examination: template.fields,
+                              });
+                            }
+                          }}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        >
+                          <option value="">Seleccionar plantilla</option>
+                          {examTemplates.map(template => (
+                            <option key={template.id} value={template.id}>
+                              {template.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedTemplate && (
+                        <div className="space-y-4">
+                          {Object.entries(newConsultation.physical_examination || {}).map(([key, value]) => (
+                            <div key={key}>
+                              <label className="block text-sm text-gray-600">{key}</label>
+                              <textarea
+                                value={value as string}
+                                onChange={(e) => setNewConsultation({
+                                  ...newConsultation,
+                                  physical_examination: {
+                                    ...newConsultation.physical_examination,
+                                    [key]: e.target.value,
+                                  },
+                                })}
+                                rows={2}
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Diagnóstico
+                      </label>
+                      <textarea
+                        value={newConsultation.diagnosis || ''}
+                        onChange={(e) => setNewConsultation({
+                          ...newConsultation,
+                          diagnosis: e.target.value,
+                        })}
+                        rows={3}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Pronóstico
+                      </label>
+                      <textarea
+                        value={newConsultation.prognosis || ''}
+                        onChange={(e) => setNewConsultation({
+                          ...newConsultation,
+                          prognosis: e.target.value,
+                        })}
+                        rows={2}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tratamiento
+                      </label>
+                      <textarea
+                        value={newConsultation.treatment || ''}
+                        onChange={(e) => setNewConsultation({
+                          ...newConsultation,
+                          treatment: e.target.value,
+                        })}
+                        rows={4}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex justify-end space-x-3">
+                      <button
+                        onClick={() => setNewConsultation(null)}
+                        className="px-4 py-2 text-gray-600 hover:text-gray-900"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleNewConsultation}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        Guardar Consulta
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-6">
+                {consultations.map((consultation) => (
+                  <div key={consultation.id} className="border border-gray-200 rounded-lg p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">
+                          Consulta del {format(new Date(consultation.created_at), "d 'de' MMMM, yyyy", { locale: es })}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {format(new Date(consultation.created_at), "HH:mm", { locale: es })} hrs
+                        </p>
+                      </div>
+                      <button className="text-blue-600 hover:text-blue-800">
+                        Imprimir
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-medium text-gray-700">Padecimiento Actual</h4>
+                        <p className="mt-1 text-gray-600">{consultation.current_condition}</p>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium text-gray-700">Signos Vitales</h4>
+                        <div className="mt-1 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Temperatura</p>
+                            <p className="text-gray-600">{consultation.vital_signs.temperature}°C</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Frecuencia Cardíaca</p>
+                            <p className="text-gray-600">{consultation.vital_signs.heart_rate} bpm</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Presión Arterial</p>
+                            <p className="text-gray-600">{consultation.vital_signs.blood_pressure}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Frecuencia Respiratoria</p>
+                            <p className="text-gray-600">{consultation.vital_signs.respiratory_rate} rpm</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Saturación O2</p>
+                            <p className="text-gray-600">{consultation.vital_signs.oxygen_saturation}%</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Peso</p>
+                            <p className="text-gray-600">{consultation.vital_signs.weight} kg</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Altura</p>
+                            <p className="text-gray-600">{consultation.vital_signs.height} cm</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium text-gray-700">Exploración Física</h4>
+                        <div className="mt-1 space-y-2">
+                          {Object.entries(consultation.physical_examination).map(([key, value]) => (
+                            <div key={key}>
+                              <p className="text-sm text-gray-500">{key}</p>
+                              <p className="text-gray-600">{value as string}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium text-gray-700">Diagnóstico</h4>
+                        <p className="mt-1 text-gray-600">{consultation.diagnosis}</p>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium text-gray-700">Pronóstico</h4>
+                        <p className="mt-1 text-gray-600">{consultation.prognosis}</p>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium text-gray-700">Tratamiento</h4>
+                        <p className="mt-1 text-gray-600">{consultation.treatment}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {consultations.length === 0 && (
+                  <p className="text-center text-gray-500 py-8">
+                    No hay consultas registradas
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </main>
