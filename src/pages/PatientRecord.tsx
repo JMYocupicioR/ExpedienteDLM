@@ -247,26 +247,47 @@ const PatientRecord = () => {
 
   const handleNewConsultation = async () => {
     try {
-      if (!newConsultation || !selectedTemplate) return;
+      if (!newConsultation || !selectedTemplate) {
+        setError('Por favor complete todos los campos requeridos');
+        return;
+      }
 
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error('No user session found');
 
+      // Format the consultation data
+      const consultationData = {
+        patient_id: id,
+        doctor_id: userData.user.id,
+        current_condition: newConsultation.current_condition || '',
+        vital_signs: newConsultation.vital_signs || {
+          temperature: 0,
+          heart_rate: 0,
+          blood_pressure: '',
+          respiratory_rate: 0,
+          oxygen_saturation: 0,
+          weight: 0,
+          height: 0
+        },
+        physical_examination: newConsultation.physical_examination || {},
+        diagnosis: newConsultation.diagnosis || '',
+        prognosis: newConsultation.prognosis || '',
+        treatment: newConsultation.treatment || ''
+      };
+
       const { data: consultation, error } = await supabase
         .from('consultations')
-        .insert({
-          ...newConsultation,
-          patient_id: id,
-          doctor_id: userData.user.id,
-        })
+        .insert(consultationData)
         .select()
         .single();
 
       if (error) throw error;
 
-      setConsultations([consultation, ...consultations]);
+      // Update the consultations list
+      setConsultations(prev => [consultation, ...prev]);
       setNewConsultation(null);
       setSelectedTemplate(null);
+      
     } catch (error: any) {
       console.error('Error creating consultation:', error);
       setError(error.message);
