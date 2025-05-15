@@ -50,7 +50,7 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
-      <div className={`relative w-[850px] h-[550px] bg-white rounded-[30px] shadow-lg overflow-hidden transition-all duration-700 ${isLogin ? '' : 'active'}`}>
+      <div className={`relative w-[850px] h-[550px] bg-white rounded-[30px] shadow-lg overflow-hidden`}>
         {/* Login Form */}
         <div className={`absolute top-0 w-1/2 h-full flex items-center justify-center transition-transform duration-700 ease-in-out ${isLogin ? 'left-0' : '-translate-x-full'}`}>
           <form onSubmit={handleSubmit} className="w-full max-w-md p-8 space-y-6">
@@ -158,7 +158,7 @@ export default function Auth() {
 
         {/* Toggle Box */}
         <div className="absolute w-full h-full">
-          <div className={`absolute w-[300%] h-full bg-blue-600 rounded-[150px] transition-all duration-700 ease-in-out z-20 transform rotate-[10deg] origin-[0_100%] ${isLogin ? '-left-full' : 'left-1/2'}`} />
+          <div className={`absolute w-[300%] h-full bg-blue-600 transition-all duration-700 ease-in-out transform ${isLogin ? 'rotate-[-10deg] -left-[100%]' : 'rotate-[10deg] left-[50%]'} origin-[0_100%] z-20`} />
 
           {/* Left Panel */}
           <div className={`absolute left-0 w-1/2 h-full flex flex-col justify-center items-center text-white z-30 transition-all duration-700 ${isLogin ? '' : '-translate-x-full'}`}>
