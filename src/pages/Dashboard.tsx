@@ -67,8 +67,8 @@ export default function Dashboard() {
         .eq('id', session.user.id)
         .single();
 
-      // If no profile exists, create one with default values
-      if (!profile && !profileError) {
+      // If no profile exists or there's a PGRST116 error, create one with default values
+      if ((!profile && !profileError) || (profileError && profileError.code === 'PGRST116')) {
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
           .insert([{
@@ -85,13 +85,9 @@ export default function Dashboard() {
         }
 
         setUserProfile(newProfile);
-      } else if (profileError) {
-        if (profileError.code === 'PGRST116') {
-          // Handle the case where no profile exists differently
-          throw new Error('Perfil de usuario no encontrado. Por favor, contacte al administrador.');
-        } else {
-          throw new Error('Error al obtener el perfil de usuario');
-        }
+      } else if (profileError && profileError.code !== 'PGRST116') {
+        // Handle other profile errors
+        throw new Error('Error al obtener el perfil de usuario');
       } else {
         // Profile exists, check permissions
         if (profile.role !== 'administrator' && profile.role !== 'doctor') {
