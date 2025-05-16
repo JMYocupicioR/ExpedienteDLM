@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
-  ArrowLeft, Clock, Heart, Brain, Dna
+  ArrowLeft, Clock, Heart, Brain, Dna, Trash2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import ConsultationForm from './ConsultationForm';
+import ConsultationForm from '../components/ConsultationForm';
 import type { Database } from '../lib/database.types';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
@@ -710,6 +710,7 @@ export default function PatientRecord() {
                     type="text"
                     value={nonPathologicalHistory?.vaccination_history?.join(',') || ''}
                     onChange={(e) => setNonPathologicalHistory(prev => ({
+                      
                       ...prev!,
                       vaccination_history: e.target.value.split(',').map(s => s.trim())
                     }))}
