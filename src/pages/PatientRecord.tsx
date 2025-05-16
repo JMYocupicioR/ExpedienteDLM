@@ -76,25 +76,48 @@ export default function PatientRecord() {
       if (patientError) throw patientError;
       setPatient(patientData);
 
-      // Fetch pathological history
+      // Fetch pathological history using maybeSingle()
       const { data: pathologicalData, error: pathologicalError } = await supabase
         .from('pathological_histories')
         .select('*')
         .eq('patient_id', id)
-        .single();
+        .maybeSingle();
 
-      if (pathologicalError && pathologicalError.code !== 'PGRST116') throw pathologicalError;
-      setPathologicalHistory(pathologicalData);
+      if (pathologicalError) throw pathologicalError;
+      setPathologicalHistory(pathologicalData || {
+        id: undefined,
+        patient_id: id,
+        chronic_diseases: [],
+        current_treatments: [],
+        surgeries: [],
+        fractures: [],
+        previous_hospitalizations: [],
+        substance_use: {},
+        created_at: null,
+        updated_at: null
+      });
 
-      // Fetch non-pathological history
+      // Fetch non-pathological history using maybeSingle()
       const { data: nonPathologicalData, error: nonPathologicalError } = await supabase
         .from('non_pathological_histories')
         .select('*')
         .eq('patient_id', id)
-        .single();
+        .maybeSingle();
 
-      if (nonPathologicalError && nonPathologicalError.code !== 'PGRST116') throw nonPathologicalError;
-      setNonPathologicalHistory(nonPathologicalData);
+      if (nonPathologicalError) throw nonPathologicalError;
+      setNonPathologicalHistory(nonPathologicalData || {
+        id: undefined,
+        patient_id: id,
+        handedness: null,
+        religion: null,
+        marital_status: null,
+        education_level: null,
+        diet: null,
+        personal_hygiene: null,
+        vaccination_history: [],
+        created_at: null,
+        updated_at: null
+      });
 
       // Fetch hereditary backgrounds
       const { data: hereditaryData, error: hereditaryError } = await supabase
@@ -710,7 +733,6 @@ export default function PatientRecord() {
                     type="text"
                     value={nonPathologicalHistory?.vaccination_history?.join(',') || ''}
                     onChange={(e) => setNonPathologicalHistory(prev => ({
-                      
                       ...prev!,
                       vaccination_history: e.target.value.split(',').map(s => s.trim())
                     }))}
