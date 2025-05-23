@@ -1,13 +1,23 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { 
   Plus, FileText, Search, Filter, Calendar, User, 
   Printer, Download, Edit, Eye, Clock, AlertTriangle,
-  Pill, Stethoscope, Activity, BookOpen, Save, Copy
+  Pill, Stethoscope, Activity, BookOpen, Save, Copy,
+  GripVertical, RotateCcw, Settings
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+
+interface SectionData {
+  id: string;
+  title: string;
+  icon: React.ComponentType<any>;
+  content: React.ReactNode;
+  defaultOrder: number;
+}
 
 type Prescription = {
   id: string;
@@ -61,7 +71,7 @@ export default function PrescriptionDashboard() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [predefinedPrescriptions, setPredefinedPrescriptions] = useState<PredefinedPrescription[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new' | 'history' | 'templates'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new' | 'history' | 'templates' | 'layout'>('dashboard');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState('');
@@ -83,6 +93,15 @@ export default function PrescriptionDashboard() {
     notes: '',
     expires_at: ''
   });
+
+  // Estados para el editor de layout
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [sectionOrder, setSectionOrder] = useState<string[]>([
+    'seccion-superior', 
+    'prescripcion', 
+    'info-receta'
+  ]);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -285,6 +304,200 @@ export default function PrescriptionDashboard() {
   const activePrescriptions = prescriptions.filter(p => p.status === 'active').length;
   const expiredPrescriptions = prescriptions.filter(p => p.status === 'expired').length;
 
+  // Funciones para el editor de layout
+  const updatePrintStyles = (order: string[]) => {
+    let existingStyle = document.querySelector('#css-print-orden');
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+
+    const style = document.createElement('style');
+    style.id = 'css-print-orden';
+    style.textContent = `
+      @media print {
+        body { margin: 0; padding: 0; }
+        .no-print { display: none !important; }
+        .print-container { 
+          display: flex; 
+          flex-direction: column; 
+          width: 100%; 
+          height: 100vh;
+          overflow: hidden;
+        }
+        .seccion { 
+          page-break-inside: avoid;
+          margin-bottom: 1rem;
+        }
+        ${order.map((id: string, idx: number) => `
+          .seccion[data-section-id="${id}"] { 
+            order: ${idx + 1}; 
+          }
+        `).join('\n')}
+      }
+    `;
+    document.head.appendChild(style);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handlePreview = () => {
+    setIsPreviewMode(!isPreviewMode);
+  };
+
+  const handleSaveOrder = () => {
+    localStorage.setItem('prescription-section-order', JSON.stringify(sectionOrder));
+    alert('Orden de secciones guardado correctamente');
+  };
+
+  const handleResetOrder = () => {
+    const defaultOrder = ['seccion-superior', 'prescripcion', 'info-receta'];
+    setSectionOrder(defaultOrder);
+    updatePrintStyles(defaultOrder);
+    localStorage.removeItem('prescription-section-order');
+  };
+
+  // Función para manejar el drag and drop con react-beautiful-dnd
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    
+    const items = Array.from(sectionOrder);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    
+    setSectionOrder(items);
+    updatePrintStyles(items);
+    localStorage.setItem('prescription-section-order', JSON.stringify(items));
+  };
+
+  // Definición de las secciones con datos por defecto
+  const getSectionData = (): SectionData[] => {
+    const defaultData = {
+      patient: { name: 'Paciente Ejemplo', age: 35, address: 'Dirección del paciente' },
+      doctor: { name: 'Dr. Juan Médico', license: 'CED-12345678', specialty: 'Medicina General' },
+      medications: [
+        { name: 'Amoxicilina', dosage: '500mg', frequency: 'Cada 8 horas', duration: '7 días', instructions: 'Con alimentos' },
+        { name: 'Ibuprofeno', dosage: '400mg', frequency: 'Cada 6 horas', duration: '5 días', instructions: 'Después de las comidas' }
+      ],
+      vitalSigns: { bloodPressure: '120/80 mmHg', heartRate: '72 bpm', temperature: '36.5°C', weight: '70 kg' },
+      diagnosis: 'Infección respiratoria aguda',
+      recommendations: 'Reposo relativo, abundantes líquidos, evitar cambios bruscos de temperatura.',
+      date: new Date().toLocaleDateString('es-ES')
+    };
+
+    return [
+      {
+        id: 'seccion-superior',
+        title: 'Encabezado y Títulos',
+        icon: FileText,
+        defaultOrder: 1,
+        content: (
+          <div className="text-center border-b-2 border-gray-300 pb-4 mb-4">
+            <div className="flex items-center justify-center mb-2">
+              <Stethoscope className="h-8 w-8 text-blue-600 mr-3" />
+              <h1 className="text-2xl font-bold text-gray-900">RECETA MÉDICA</h1>
+            </div>
+            <div className="text-sm text-gray-600">
+              <p className="font-semibold">{defaultData.doctor.name}</p>
+              <p>{defaultData.doctor.specialty}</p>
+              <p>Cédula Profesional: {defaultData.doctor.license}</p>
+            </div>
+            <div className="mt-2 text-right text-sm text-gray-500">
+              Fecha: {defaultData.date}
+            </div>
+          </div>
+        )
+      },
+      {
+        id: 'prescripcion',
+        title: 'Prescripción de Medicamentos',
+        icon: Pill,
+        defaultOrder: 2,
+        content: (
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+              <Pill className="h-5 w-5 mr-2" />
+              PRESCRIPCIÓN
+            </h2>
+            <div className="space-y-3">
+              {defaultData.medications.map((med, index) => (
+                <div key={index} className="border-l-4 border-blue-500 pl-4 py-2">
+                  <div className="font-medium text-gray-900">{med.name}</div>
+                  <div className="text-sm text-gray-600">
+                    <span className="inline-block mr-4">Dosis: {med.dosage}</span>
+                    <span className="inline-block mr-4">Frecuencia: {med.frequency}</span>
+                    <span className="inline-block">Duración: {med.duration}</span>
+                  </div>
+                  {med.instructions && (
+                    <div className="text-sm text-gray-500 italic">
+                      Instrucciones: {med.instructions}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      },
+      {
+        id: 'info-receta',
+        title: 'Información Clínica',
+        icon: Stethoscope,
+        defaultOrder: 3,
+        content: (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+              <Stethoscope className="h-5 w-5 mr-2" />
+              INFORMACIÓN CLÍNICA
+            </h2>
+            
+            <div className="mb-4 p-3 bg-gray-50 rounded">
+              <h3 className="font-medium text-gray-700 mb-2">Datos del Paciente:</h3>
+              <p><span className="font-medium">Nombre:</span> {defaultData.patient.name}</p>
+              <p><span className="font-medium">Edad:</span> {defaultData.patient.age} años</p>
+              <p><span className="font-medium">Dirección:</span> {defaultData.patient.address}</p>
+            </div>
+
+            <div className="mb-4 p-3 bg-blue-50 rounded">
+              <h3 className="font-medium text-gray-700 mb-2">Signos Vitales:</h3>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <p><span className="font-medium">Presión Arterial:</span> {defaultData.vitalSigns.bloodPressure}</p>
+                <p><span className="font-medium">Frecuencia Cardíaca:</span> {defaultData.vitalSigns.heartRate}</p>
+                <p><span className="font-medium">Temperatura:</span> {defaultData.vitalSigns.temperature}</p>
+                <p><span className="font-medium">Peso:</span> {defaultData.vitalSigns.weight}</p>
+              </div>
+            </div>
+
+            <div className="mb-4 p-3 bg-green-50 rounded">
+              <h3 className="font-medium text-gray-700 mb-2">Diagnóstico:</h3>
+              <p className="text-sm">{defaultData.diagnosis}</p>
+            </div>
+
+            <div className="p-3 bg-yellow-50 rounded">
+              <h3 className="font-medium text-gray-700 mb-2">Recomendaciones Generales:</h3>
+              <p className="text-sm">{defaultData.recommendations}</p>
+            </div>
+          </div>
+        )
+      }
+    ];
+  };
+
+  // Cargar orden guardado al montar el componente
+  useEffect(() => {
+    const savedOrder = localStorage.getItem('prescription-section-order');
+    if (savedOrder) {
+      try {
+        const order = JSON.parse(savedOrder);
+        setSectionOrder(order);
+        updatePrintStyles(order);
+      } catch (error) {
+        console.error('Error loading saved order:', error);
+      }
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -322,7 +535,8 @@ export default function PrescriptionDashboard() {
               { id: 'dashboard', label: 'Panel Principal', icon: Activity },
               { id: 'new', label: 'Nueva Receta', icon: Plus },
               { id: 'history', label: 'Historial', icon: FileText },
-              { id: 'templates', label: 'Plantillas', icon: BookOpen }
+              { id: 'templates', label: 'Plantillas', icon: BookOpen },
+              { id: 'layout', label: 'Editor de Layout', icon: Settings }
             ].map(tab => {
               const Icon = tab.icon;
               return (
@@ -924,6 +1138,174 @@ export default function PrescriptionDashboard() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Editor de Layout */}
+        {activeTab === 'layout' && (
+          <div className="space-y-6">
+            {/* Controles */}
+            <div className="no-print bg-white p-4 rounded-lg shadow-sm border">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Editor de Layout de Receta
+                </h2>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleResetOrder}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    title="Restablecer orden por defecto"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Resetear
+                  </button>
+                  <button
+                    onClick={handleSaveOrder}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    title="Guardar orden actual"
+                  >
+                    <Save className="h-4 w-4 mr-1" />
+                    Guardar
+                  </button>
+                  <button
+                    onClick={handlePreview}
+                    className={`inline-flex items-center px-3 py-2 border rounded-md text-sm font-medium ${
+                      isPreviewMode 
+                        ? 'border-blue-300 text-blue-700 bg-blue-50' 
+                        : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+                    }`}
+                    title="Vista previa de impresión"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    {isPreviewMode ? 'Salir Vista Previa' : 'Vista Previa'}
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="inline-flex items-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    title="Imprimir receta"
+                  >
+                    <Printer className="h-4 w-4 mr-1" />
+                    Imprimir
+                  </button>
+                </div>
+              </div>
+              
+              {!isPreviewMode && (
+                <div className="text-sm text-gray-600">
+                  <p className="flex items-center">
+                    <GripVertical className="h-4 w-4 mr-2" />
+                    Arrastra las secciones por el ícono de líneas para reordenarlas según tus preferencias de impresión.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Contenedor de secciones con DragDropContext */}
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="prescription-sections" isDropDisabled={isPreviewMode}>
+                {(provided, snapshot) => (
+                  <div 
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={`print-container space-y-4 ${
+                      isPreviewMode ? 'bg-white shadow-lg rounded-lg p-6' : ''
+                    } ${snapshot.isDraggingOver ? 'bg-blue-50' : ''}`}
+                  >
+                    {sectionOrder.map((sectionId, index) => {
+                      const sectionData = getSectionData().find(s => s.id === sectionId);
+                      if (!sectionData) return null;
+                      
+                      const IconComponent = sectionData.icon;
+                      
+                      return (
+                        <Draggable 
+                          key={sectionId} 
+                          draggableId={sectionId} 
+                          index={index}
+                          isDragDisabled={isPreviewMode}
+                        >
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              data-section-id={sectionId}
+                              className={`seccion bg-white border rounded-lg ${
+                                isPreviewMode ? 'border-transparent' : 'border-gray-200 shadow-sm'
+                              } ${snapshot.isDragging ? 'shadow-2xl rotate-2 scale-105' : ''}`}
+                              style={{
+                                ...provided.draggableProps.style,
+                                transition: snapshot.isDragging ? 'none' : 'all 0.2s ease'
+                              }}
+                            >
+                              {!isPreviewMode && (
+                                <div className="no-print flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                                  <div className="flex items-center space-x-3">
+                                    <div 
+                                      {...provided.dragHandleProps}
+                                      className="drag-handle cursor-grab text-gray-400 hover:text-gray-600 active:cursor-grabbing"
+                                    >
+                                      <GripVertical className="h-5 w-5" />
+                                    </div>
+                                    <IconComponent className="h-5 w-5 text-gray-600" />
+                                    <span className="font-medium text-gray-900">{sectionData.title}</span>
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    Orden: {index + 1}
+                                  </div>
+                                </div>
+                              )}
+                              <div className={isPreviewMode ? 'p-0' : 'p-4'}>
+                                {sectionData.content}
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+
+            {/* Estilos CSS para drag and drop */}
+            <style>{`
+              .drag-handle:hover {
+                background-color: #f3f4f6;
+                border-radius: 4px;
+                padding: 2px;
+              }
+              
+              .seccion {
+                transition: all 0.2s ease;
+              }
+              
+              .seccion:hover {
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+              }
+              
+              @media print {
+                .no-print { display: none !important; }
+                .print-container { 
+                  display: flex; 
+                  flex-direction: column; 
+                  width: 100%; 
+                  height: 100vh;
+                  overflow: hidden;
+                  background: white !important;
+                  box-shadow: none !important;
+                  border-radius: 0 !important;
+                  padding: 0 !important;
+                }
+                .seccion { 
+                  page-break-inside: avoid;
+                  margin-bottom: 1rem;
+                  border: none !important;
+                  box-shadow: none !important;
+                  border-radius: 0 !important;
+                }
+              }
+            `}</style>
           </div>
         )}
       </div>
