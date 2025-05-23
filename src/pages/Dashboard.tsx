@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment, ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Dialog } from '@headlessui/react';
+import { Dialog, Menu, Transition } from '@headlessui/react';
 import { 
   Users, Search, UserPlus, Eye, Edit, 
   FileText, Calendar, AlertCircle, LogOut,
@@ -11,8 +11,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SettingsModal from '../components/SettingsModal';
-import { Menu, Transition } from '@headlessui/react';
-import { Fragment } from 'react';
 
 type Patient = {
   id: string;
@@ -225,7 +223,7 @@ export default function Dashboard() {
     console.log('Imprimir receta para paciente:', patientId);
   };
 
-  const filteredPatients = patients.filter(patient =>
+  const filteredPatients = patients.filter((patient: Patient) =>
     patient.full_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -361,7 +359,7 @@ export default function Dashboard() {
                   placeholder="Buscar pacientes..."
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                 />
               </div>
             </div>
@@ -394,7 +392,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredPatients.map((patient) => (
+                    {filteredPatients.map((patient: Patient) => (
                       <tr key={patient.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
