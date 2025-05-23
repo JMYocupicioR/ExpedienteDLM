@@ -56,6 +56,7 @@ export default function Dashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors }, reset } = useForm<NewPatientForm>();
@@ -193,6 +194,7 @@ export default function Dashboard() {
     try {
       setIsLoading(true);
       setError(null);
+      setSuccessMessage(null);
 
       // Realizar eliminación real de la base de datos
       const { error: deleteError } = await supabase
@@ -214,7 +216,10 @@ export default function Dashboard() {
       setPatientToDelete(null);
       
       // Mostrar mensaje de éxito
-      setError(null);
+      setSuccessMessage('Paciente eliminado correctamente');
+      
+      // Limpiar mensaje de éxito después de 3 segundos
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError('Error al eliminar el paciente');
       console.error('Error:', err);
@@ -295,6 +300,13 @@ export default function Dashboard() {
           <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg flex items-center">
             <AlertCircle className="h-5 w-5 mr-2" />
             {error}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-4 bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg flex items-center">
+            <FileText className="h-5 w-5 mr-2" />
+            {successMessage}
           </div>
         )}
 
