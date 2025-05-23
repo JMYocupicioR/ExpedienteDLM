@@ -5,6 +5,8 @@ import LandingPage from './pages/LandingPage';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import PatientRecord from './pages/PatientRecord';
+import PrescriptionDashboard from './pages/PrescriptionDashboard';
+import './App.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -47,6 +49,10 @@ function App() {
         <Route 
           path="/expediente/:id" 
           element={isAuthenticated ? <PatientRecord /> : <Navigate to="/auth" />} 
+        />
+        <Route 
+          path="/recetas" 
+          element={isAuthenticated ? <PrescriptionDashboard /> : <Navigate to="/auth" />} 
         />
       </Routes>
     </Router>
