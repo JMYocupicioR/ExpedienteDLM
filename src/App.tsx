@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import LandingPage from './pages/LandingPage';
+import AboutPage from './pages/AboutPage';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import PatientRecord from './pages/PatientRecord';
@@ -38,6 +39,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route 
           path="/auth" 
           element={isAuthenticated ? <Navigate to="/dashboard" /> : <Auth />} 
