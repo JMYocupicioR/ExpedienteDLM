@@ -7,10 +7,12 @@ import { Dialog } from '@headlessui/react';
 import { 
   Users, Search, UserPlus, Eye, Edit, 
   FileText, Calendar, AlertCircle, LogOut,
-  Settings
+  Settings, Printer, Trash2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SettingsModal from '../components/SettingsModal';
+import { Menu, Transition } from '@headlessui/react';
+import { Fragment } from 'react';
 
 type Patient = {
   id: string;
@@ -59,6 +61,8 @@ export default function Dashboard() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors }, reset } = useForm<NewPatientForm>();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     checkSession();
@@ -185,6 +189,40 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDeletePatient = async (patientId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const { error: deleteError } = await supabase
+        .from('patients')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', patientId);
+
+      if (deleteError) {
+        if (deleteError.code === '42501') {
+          setError('No tienes permisos para eliminar pacientes');
+        } else {
+          setError('Error al eliminar el paciente');
+        }
+        return;
+      }
+
+      await fetchPatients();
+      setPatientToDelete(null);
+    } catch (err) {
+      setError('Error al eliminar el paciente');
+      console.error('Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePrintPrescription = (patientId: string) => {
+    // Implementar la lógica de impresión de receta
+    console.log('Imprimir receta para paciente:', patientId);
   };
 
   const filteredPatients = patients.filter(patient =>
@@ -385,12 +423,51 @@ export default function Dashboard() {
                             >
                               <Eye className="h-5 w-5" />
                             </button>
-                            <button
-                              onClick={() => navigate(`/expediente/${patient.id}/editar`)}
-                              className="text-gray-600 hover:text-gray-900"
-                            >
-                              <Edit className="h-5 w-5" />
-                            </button>
+                            <Menu as="div" className="relative inline-block text-left">
+                              <Menu.Button className="text-gray-600 hover:text-gray-900">
+                                <Edit className="h-5 w-5" />
+                              </Menu.Button>
+                              <Transition
+                                as={Fragment}
+                                enter="transition ease-out duration-100"
+                                enterFrom="transform opacity-0 scale-95"
+                                enterTo="transform opacity-100 scale-100"
+                                leave="transition ease-in duration-75"
+                                leaveFrom="transform opacity-100 scale-100"
+                                leaveTo="transform opacity-0 scale-95"
+                              >
+                                <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right divide-y divide-gray-100 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                                  <div className="px-1 py-1">
+                                    <Menu.Item>
+                                      {({ active }) => (
+                                        <button
+                                          onClick={() => handlePrintPrescription(patient.id)}
+                                          className={`${
+                                            active ? 'bg-blue-500 text-white' : 'text-gray-900'
+                                          } group flex w-full items-center rounded-md px-2 py-2 text-sm`}
+                                        >
+                                          <Printer className="mr-2 h-5 w-5" />
+                                          Imprimir Receta
+                                        </button>
+                                      )}
+                                    </Menu.Item>
+                                    <Menu.Item>
+                                      {({ active }) => (
+                                        <button
+                                          onClick={() => setPatientToDelete(patient.id)}
+                                          className={`${
+                                            active ? 'bg-red-500 text-white' : 'text-red-600'
+                                          } group flex w-full items-center rounded-md px-2 py-2 text-sm`}
+                                        >
+                                          <Trash2 className="mr-2 h-5 w-5" />
+                                          Eliminar Paciente
+                                        </button>
+                                      )}
+                                    </Menu.Item>
+                                  </div>
+                                </Menu.Items>
+                              </Transition>
+                            </Menu>
                           </div>
                         </td>
                       </tr>
@@ -522,6 +599,32 @@ export default function Dashboard() {
             </div>
           </div>
         </Dialog>
+
+        {/* Modal de confirmación de eliminación */}
+        {patientToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 max-w-sm w-full">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Confirmar eliminación</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                ¿Estás seguro de que deseas eliminar este paciente? Esta acción no se puede deshacer.
+              </p>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setPatientToDelete(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeletePatient(patientToDelete)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
