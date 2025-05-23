@@ -6,18 +6,23 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-black">
       {/* Navigation */}
-      <nav className="bg-gray-900/90 backdrop-blur-sm border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
+      <nav className="bg-gray-900/90 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-50">
+        <div className="responsive-container">
+          <div className="flex justify-between items-center h-16 lg:h-20">
             <div className="flex items-center">
-              <Stethoscope className="h-8 w-8 text-cyan-400" />
-              <span className="ml-2 text-xl font-bold text-white">Expediente DLM</span>
+              <Stethoscope className="h-7 w-7 sm:h-8 sm:w-8 text-cyan-400" />
+              <span className="ml-2 text-lg sm:text-xl font-bold text-white">Expediente DLM</span>
             </div>
-            <div className="flex items-center space-x-4">
-              <Link to="/auth" className="text-gray-300 hover:text-white transition-colors">Iniciar Sesión</Link>
+            <div className="flex items-center space-x-2 sm:space-x-4">
               <Link 
                 to="/auth" 
-                className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 shadow-lg"
+                className="text-gray-300 hover:text-white transition-colors text-sm sm:text-base touch-target"
+              >
+                Iniciar Sesión
+              </Link>
+              <Link 
+                to="/auth" 
+                className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-3 py-2 sm:px-6 sm:py-2 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 shadow-lg text-sm sm:text-base touch-target"
               >
                 Comenzar
               </Link>
