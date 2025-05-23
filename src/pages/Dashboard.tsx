@@ -194,9 +194,10 @@ export default function Dashboard() {
       setIsLoading(true);
       setError(null);
 
+      // Realizar eliminación real de la base de datos
       const { error: deleteError } = await supabase
         .from('patients')
-        .update({ deleted_at: new Date().toISOString() })
+        .delete()
         .eq('id', patientId);
 
       if (deleteError) {
@@ -208,8 +209,12 @@ export default function Dashboard() {
         return;
       }
 
+      // Actualizar la lista de pacientes
       await fetchPatients();
       setPatientToDelete(null);
+      
+      // Mostrar mensaje de éxito
+      setError(null);
     } catch (err) {
       setError('Error al eliminar el paciente');
       console.error('Error:', err);
@@ -219,8 +224,8 @@ export default function Dashboard() {
   };
 
   const handlePrintPrescription = (patientId: string) => {
-    // Implementar la lógica de impresión de receta
-    console.log('Imprimir receta para paciente:', patientId);
+    // Navegar al dashboard de recetas con el paciente seleccionado
+    navigate(`/recetas?paciente=${patientId}`);
   };
 
   const filteredPatients = patients.filter((patient: Patient) =>
