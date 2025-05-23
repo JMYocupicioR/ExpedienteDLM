@@ -1,5 +1,5 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
@@ -67,6 +67,7 @@ export default function PrescriptionDashboard() {
   const [selectedPatient, setSelectedPatient] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired' | 'dispensed'>('all');
+  const [patients, setPatients] = useState<{id: string, full_name: string}[]>([]);
   
   // Nueva receta
   const [newPrescription, setNewPrescription] = useState<NewPrescriptionData>({
@@ -84,11 +85,34 @@ export default function PrescriptionDashboard() {
   });
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     fetchPrescriptions();
     fetchPredefinedPrescriptions();
-  }, []);
+    fetchPatients();
+    
+    // Verificar si hay un paciente preseleccionado en la URL
+    const pacienteId = searchParams.get('paciente');
+    if (pacienteId) {
+      setNewPrescription(prev => ({ ...prev, patient_id: pacienteId }));
+      setActiveTab('new'); // Cambiar a la pestaña de nueva receta
+    }
+  }, [searchParams]);
+
+  const fetchPatients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('id, full_name')
+        .order('full_name');
+
+      if (error) throw error;
+      setPatients(data || []);
+    } catch (err) {
+      console.error('Error fetching patients:', err);
+    }
+  };
 
   const fetchPrescriptions = async () => {
     try {
@@ -271,13 +295,21 @@ export default function PrescriptionDashboard() {
               <Stethoscope className="h-8 w-8 text-blue-600" />
               <h1 className="text-2xl font-bold text-gray-900">Dashboard de Recetas Médicas</h1>
             </div>
-            <button
-              onClick={() => setActiveTab('new')}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              Nueva Receta
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Volver al Dashboard
+              </button>
+              <button
+                onClick={() => setActiveTab('new')}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Nueva Receta
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -532,8 +564,11 @@ export default function PrescriptionDashboard() {
                       required
                     >
                       <option value="">Seleccionar paciente</option>
-                      <option value="1">Juan Pérez</option>
-                      <option value="2">María García</option>
+                      {patients.map(patient => (
+                        <option key={patient.id} value={patient.id}>
+                          {patient.full_name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   
