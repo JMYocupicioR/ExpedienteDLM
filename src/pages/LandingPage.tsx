@@ -51,7 +51,7 @@ const LandingPage = () => {
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
             <Link 
-              to="#features" 
+              to="/about" 
               className="inline-flex items-center px-8 py-4 bg-transparent border-2 border-cyan-400 text-cyan-400 rounded-lg hover:bg-cyan-400 hover:text-gray-900 transition-all duration-300 text-lg font-medium"
             >
               Conocer Más
