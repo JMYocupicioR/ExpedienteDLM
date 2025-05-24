@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
-  ArrowLeft, Clock, Heart, Brain, Dna, Trash2
+  ArrowLeft, Clock, Heart, Brain, Dna, Trash2, Eye, ChevronDown, ChevronUp,
+  Search, Filter, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
@@ -30,10 +31,14 @@ export default function PatientRecord() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [consultationSearch, setConsultationSearch] = useState('');
+  const [expandedConsultation, setExpandedConsultation] = useState<string | null>(null);
 
   useEffect(() => {
-    checkSession();
-  }, []);
+    if (id) {
+      checkSession();
+    }
+  }, [id]);
 
   const checkSession = async () => {
     try {
@@ -54,7 +59,7 @@ export default function PatientRecord() {
       if (profileError) throw profileError;
       setUserProfile(profile);
 
-      fetchPatientData();
+      await fetchPatientData();
     } catch (err) {
       console.error('Session check error:', err);
       navigate('/auth');
@@ -62,6 +67,8 @@ export default function PatientRecord() {
   };
 
   const fetchPatientData = async () => {
+    if (!id) return;
+    
     try {
       setLoading(true);
       setError(null);
@@ -147,11 +154,11 @@ export default function PatientRecord() {
   };
 
   const handleSave = async () => {
+    if (!patient || !id) return;
+    
     try {
       setLoading(true);
       setError(null);
-
-      if (!patient) return;
 
       // Update patient info
       const { error: updateError } = await supabase
@@ -194,7 +201,7 @@ export default function PatientRecord() {
       }
 
       setModoEdicion(false);
-      fetchPatientData();
+      await fetchPatientData();
     } catch (error: any) {
       console.error('Error saving changes:', error);
       setError(error.message);
@@ -204,6 +211,8 @@ export default function PatientRecord() {
   };
 
   const handleAddHereditaryBackground = async (background: Omit<HereditaryBackground, 'id' | 'created_at' | 'updated_at'>) => {
+    if (!id) return;
+    
     try {
       const { error } = await supabase
         .from('hereditary_backgrounds')
@@ -213,29 +222,34 @@ export default function PatientRecord() {
         });
 
       if (error) throw error;
-      fetchPatientData();
+      await fetchPatientData();
     } catch (error: any) {
       console.error('Error adding hereditary background:', error);
       setError(error.message);
     }
   };
 
+  const filteredConsultations = consultations.filter(consultation =>
+    consultation.diagnosis?.toLowerCase().includes(consultationSearch.toLowerCase()) ||
+    consultation.current_condition?.toLowerCase().includes(consultationSearch.toLowerCase())
+  );
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
       </div>
     );
   }
 
   if (error || !patient) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-600 mb-4">{error || 'Paciente no encontrado'}</p>
+          <p className="text-red-400 mb-4">{error || 'Paciente no encontrado'}</p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="text-blue-600 hover:underline"
+            className="text-blue-400 hover:underline"
           >
             Volver al Dashboard
           </button>
@@ -245,13 +259,13 @@ export default function PatientRecord() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-900">
       {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
+      <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+        <div className="p-4 border-b border-gray-700">
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center text-gray-600 hover:text-gray-900"
+            className="flex items-center text-gray-300 hover:text-white transition-colors"
           >
             <ArrowLeft className="h-5 w-5 mr-2" />
             <span>Volver</span>
@@ -260,16 +274,18 @@ export default function PatientRecord() {
         
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">{patient.full_name}</h2>
-            <p className="text-sm text-gray-500">Expediente #{patient.id.slice(0, 8)}</p>
+            <h2 className="text-lg font-semibold text-white">{patient.full_name}</h2>
+            <p className="text-sm text-gray-400">Expediente #{patient.id.slice(0, 8)}</p>
           </div>
 
           <ul className="space-y-2">
             <li>
               <button 
                 onClick={() => setSeccionActiva('paciente')}
-                className={`flex items-center w-full p-3 rounded-lg ${
-                  seccionActiva === 'paciente' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'paciente' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
                 <User className="h-5 w-5 mr-3" />
@@ -279,8 +295,10 @@ export default function PatientRecord() {
             <li>
               <button 
                 onClick={() => setSeccionActiva('patologicos')}
-                className={`flex items-center w-full p-3 rounded-lg ${
-                  seccionActiva === 'patologicos' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'patologicos' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
                 <Heart className="h-5 w-5 mr-3" />
@@ -290,8 +308,10 @@ export default function PatientRecord() {
             <li>
               <button 
                 onClick={() => setSeccionActiva('no-patologicos')}
-                className={`flex items-center w-full p-3 rounded-lg ${
-                  seccionActiva === 'no-patologicos' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'no-patologicos' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
                 <Brain className="h-5 w-5 mr-3" />
@@ -301,8 +321,10 @@ export default function PatientRecord() {
             <li>
               <button 
                 onClick={() => setSeccionActiva('heredofamiliares')}
-                className={`flex items-center w-full p-3 rounded-lg ${
-                  seccionActiva === 'heredofamiliares' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'heredofamiliares' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
                 <Dna className="h-5 w-5 mr-3" />
@@ -312,12 +334,17 @@ export default function PatientRecord() {
             <li>
               <button 
                 onClick={() => setSeccionActiva('consultas')}
-                className={`flex items-center w-full p-3 rounded-lg ${
-                  seccionActiva === 'consultas' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-100'
+                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'consultas' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
                 <Clock className="h-5 w-5 mr-3" />
                 <span>Consultas</span>
+                <span className="ml-auto bg-gray-600 text-gray-200 text-xs rounded-full px-2 py-1">
+                  {consultations.length}
+                </span>
               </button>
             </li>
           </ul>
@@ -326,12 +353,12 @@ export default function PatientRecord() {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto">
-        <header className="bg-white p-4 border-b border-gray-200 flex justify-between items-center">
+        <header className="bg-gray-800 p-4 border-b border-gray-700 flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-white">
               Expediente Médico
             </h1>
-            <p className="text-gray-500">
+            <p className="text-gray-400">
               Última actualización: {format(new Date(patient.updated_at || patient.created_at), "d 'de' MMMM, yyyy", { locale: es })}
             </p>
           </div>
@@ -340,7 +367,7 @@ export default function PatientRecord() {
             {seccionActiva === 'consultas' ? (
               <button
                 onClick={() => setShowConsultationForm(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors shadow-lg"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva Consulta
@@ -349,24 +376,24 @@ export default function PatientRecord() {
               <>
                 <button
                   onClick={() => setModoEdicion(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900"
+                  className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
                   disabled={loading}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSave}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center hover:bg-green-700 transition-colors disabled:opacity-50"
                   disabled={loading}
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  Guardar Cambios
+                  {loading ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               </>
             ) : (
               <button
                 onClick={() => setModoEdicion(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors"
               >
                 <Edit className="h-4 w-4 mr-2" />
                 Editar
@@ -377,40 +404,40 @@ export default function PatientRecord() {
 
         <main className="p-6">
           {seccionActiva === 'paciente' && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-6">Información Personal</h2>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+              <h2 className="text-xl font-bold mb-6 text-white">Información Personal</h2>
               
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Nombre completo</label>
+                    <label className="block text-sm font-medium text-gray-300">Nombre completo</label>
                     <input
                       type="text"
                       value={patient.full_name}
                       onChange={(e) => setPatient({ ...patient, full_name: e.target.value })}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Fecha de nacimiento</label>
+                    <label className="block text-sm font-medium text-gray-300">Fecha de nacimiento</label>
                     <input
                       type="date"
                       value={patient.birth_date}
                       onChange={(e) => setPatient({ ...patient, birth_date: e.target.value })}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Género</label>
+                    <label className="block text-sm font-medium text-gray-300">Género</label>
                     <select
                       value={patient.gender}
                       onChange={(e) => setPatient({ ...patient, gender: e.target.value })}
                       disabled={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     >
                       <option value="masculino">Masculino</option>
                       <option value="femenino">Femenino</option>
@@ -419,70 +446,70 @@ export default function PatientRecord() {
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Ciudad de Nacimiento</label>
+                    <label className="block text-sm font-medium text-gray-300">Ciudad de Nacimiento</label>
                     <input
                       type="text"
                       value={patient.city_of_birth || ''}
                       onChange={(e) => setPatient({ ...patient, city_of_birth: e.target.value })}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
                 </div>
 
                 <div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <label className="block text-sm font-medium text-gray-300">Email</label>
                     <input
                       type="email"
                       value={patient.email || ''}
                       onChange={(e) => setPatient({ ...patient, email: e.target.value })}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Teléfono</label>
+                    <label className="block text-sm font-medium text-gray-300">Teléfono</label>
                     <input
                       type="tel"
                       value={patient.phone || ''}
                       onChange={(e) => setPatient({ ...patient, phone: e.target.value })}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Ciudad de Residencia</label>
+                    <label className="block text-sm font-medium text-gray-300">Ciudad de Residencia</label>
                     <input
                       type="text"
                       value={patient.city_of_residence || ''}
                       onChange={(e) => setPatient({ ...patient, city_of_residence: e.target.value })}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Número de Seguro Social</label>
+                    <label className="block text-sm font-medium text-gray-300">Número de Seguro Social</label>
                     <input
                       type="text"
                       value={patient.social_security_number || ''}
                       onChange={(e) => setPatient({ ...patient, social_security_number: e.target.value })}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Dirección</label>
+                    <label className="block text-sm font-medium text-gray-300">Dirección</label>
                     <textarea
                       value={patient.address || ''}
                       onChange={(e) => setPatient({ ...patient, address: e.target.value })}
                       readOnly={!modoEdicion}
                       rows={3}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
                 </div>
@@ -491,12 +518,12 @@ export default function PatientRecord() {
           )}
 
           {seccionActiva === 'patologicos' && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-6">Antecedentes Patológicos</h2>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+              <h2 className="text-xl font-bold mb-6 text-white">Antecedentes Patológicos</h2>
               
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Enfermedades Crónicas
                   </label>
                   <input
@@ -504,16 +531,16 @@ export default function PatientRecord() {
                     value={pathologicalHistory?.chronic_diseases?.join(', ') || ''}
                     onChange={(e) => setPathologicalHistory(prev => ({
                       ...prev!,
-                      chronic_diseases: e.target.value.split(',').map(s => s.trim())
+                      chronic_diseases: e.target.value.split(',').map(s => s.trim()).filter(s => s)
                     }))}
                     readOnly={!modoEdicion}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     placeholder="Separar con comas"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Tratamientos Actuales
                   </label>
                   <input
@@ -521,16 +548,16 @@ export default function PatientRecord() {
                     value={pathologicalHistory?.current_treatments?.join(', ') || ''}
                     onChange={(e) => setPathologicalHistory(prev => ({
                       ...prev!,
-                      current_treatments: e.target.value.split(',').map(s => s.trim())
+                      current_treatments: e.target.value.split(',').map(s => s.trim()).filter(s => s)
                     }))}
                     readOnly={!modoEdicion}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     placeholder="Separar con comas"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Cirugías
                   </label>
                   <input
@@ -538,16 +565,16 @@ export default function PatientRecord() {
                     value={pathologicalHistory?.surgeries?.join(', ') || ''}
                     onChange={(e) => setPathologicalHistory(prev => ({
                       ...prev!,
-                      surgeries: e.target.value.split(',').map(s => s.trim())
+                      surgeries: e.target.value.split(',').map(s => s.trim()).filter(s => s)
                     }))}
                     readOnly={!modoEdicion}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     placeholder="Separar con comas"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Fracturas
                   </label>
                   <input
@@ -555,16 +582,16 @@ export default function PatientRecord() {
                     value={pathologicalHistory?.fractures?.join(', ') || ''}
                     onChange={(e) => setPathologicalHistory(prev => ({
                       ...prev!,
-                      fractures: e.target.value.split(',').map(s => s.trim())
+                      fractures: e.target.value.split(',').map(s => s.trim()).filter(s => s)
                     }))}
                     readOnly={!modoEdicion}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     placeholder="Separar con comas"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Hospitalizaciones Previas
                   </label>
                   <input
@@ -572,22 +599,22 @@ export default function PatientRecord() {
                     value={pathologicalHistory?.previous_hospitalizations?.join(', ') || ''}
                     onChange={(e) => setPathologicalHistory(prev => ({
                       ...prev!,
-                      previous_hospitalizations: e.target.value.split(',').map(s => s.trim())
+                      previous_hospitalizations: e.target.value.split(',').map(s => s.trim()).filter(s => s)
                     }))}
                     readOnly={!modoEdicion}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     placeholder="Separar con comas"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Uso de Sustancias
                   </label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     {['alcohol', 'tabaco', 'drogas'].map(substance => (
                       <div key={substance}>
-                        <label className="block text-sm font-medium text-gray-700 capitalize">
+                        <label className="block text-sm font-medium text-gray-400 capitalize">
                           {substance}
                         </label>
                         <select
@@ -600,7 +627,7 @@ export default function PatientRecord() {
                             }
                           }))}
                           disabled={!modoEdicion}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                         >
                           <option value="no">No</option>
                           <option value="ocasional">Ocasional</option>
@@ -616,13 +643,13 @@ export default function PatientRecord() {
           )}
 
           {seccionActiva === 'no-patologicos' && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-6">Antecedentes No Patológicos</h2>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+              <h2 className="text-xl font-bold mb-6 text-white">Antecedentes No Patológicos</h2>
               
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Lateralidad</label>
+                    <label className="block text-sm font-medium text-gray-300">Lateralidad</label>
                     <select
                       value={nonPathologicalHistory?.handedness || ''}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
@@ -630,7 +657,7 @@ export default function PatientRecord() {
                         handedness: e.target.value
                       }))}
                       disabled={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     >
                       <option value="">Seleccionar</option>
                       <option value="diestro">Diestro</option>
@@ -640,7 +667,7 @@ export default function PatientRecord() {
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Religión</label>
+                    <label className="block text-sm font-medium text-gray-300">Religión</label>
                     <input
                       type="text"
                       value={nonPathologicalHistory?.religion || ''}
@@ -649,12 +676,12 @@ export default function PatientRecord() {
                         religion: e.target.value
                       }))}
                       readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Estado Civil</label>
+                    <label className="block text-sm font-medium text-gray-300">Estado Civil</label>
                     <select
                       value={nonPathologicalHistory?.marital_status || ''}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
@@ -662,7 +689,7 @@ export default function PatientRecord() {
                         marital_status: e.target.value
                       }))}
                       disabled={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     >
                       <option value="">Seleccionar</option>
                       <option value="soltero">Soltero(a)</option>
@@ -676,7 +703,7 @@ export default function PatientRecord() {
 
                 <div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Escolaridad</label>
+                    <label className="block text-sm font-medium text-gray-300">Escolaridad</label>
                     <select
                       value={nonPathologicalHistory?.education_level || ''}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
@@ -684,7 +711,7 @@ export default function PatientRecord() {
                         education_level: e.target.value
                       }))}
                       disabled={!modoEdicion}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     >
                       <option value="">Seleccionar</option>
                       <option value="ninguna">Ninguna</option>
@@ -697,7 +724,7 @@ export default function PatientRecord() {
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Dieta</label>
+                    <label className="block text-sm font-medium text-gray-300">Dieta</label>
                     <textarea
                       value={nonPathologicalHistory?.diet || ''}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
@@ -706,12 +733,12 @@ export default function PatientRecord() {
                       }))}
                       readOnly={!modoEdicion}
                       rows={3}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Higiene Personal</label>
+                    <label className="block text-sm font-medium text-gray-300">Higiene Personal</label>
                     <textarea
                       value={nonPathologicalHistory?.personal_hygiene || ''}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
@@ -720,13 +747,13 @@ export default function PatientRecord() {
                       }))}
                       readOnly={!modoEdicion}
                       rows={3}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Historial de Vacunación
                   </label>
                   <input
@@ -734,10 +761,10 @@ export default function PatientRecord() {
                     value={nonPathologicalHistory?.vaccination_history?.join(',') || ''}
                     onChange={(e) => setNonPathologicalHistory(prev => ({
                       ...prev!,
-                      vaccination_history: e.target.value.split(',').map(s => s.trim())
+                      vaccination_history: e.target.value.split(',').map(s => s.trim()).filter(s => s)
                     }))}
                     readOnly={!modoEdicion}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     placeholder="Separar con comas"
                   />
                 </div>
@@ -746,14 +773,14 @@ export default function PatientRecord() {
           )}
 
           {seccionActiva === 'heredofamiliares' && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-6">Antecedentes Heredofamiliares</h2>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+              <h2 className="text-xl font-bold mb-6 text-white">Antecedentes Heredofamiliares</h2>
               
               <div className="space-y-6">
                 {hereditaryBackgrounds.map((background, index) => (
-                  <div key={background.id} className="border-b pb-4">
+                  <div key={background.id} className="border-b border-gray-600 pb-4">
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-medium text-gray-900">
+                      <h3 className="font-medium text-white">
                         {background.relationship}
                       </h3>
                       {modoEdicion && (
@@ -764,56 +791,56 @@ export default function PatientRecord() {
                                 .from('hereditary_backgrounds')
                                 .delete()
                                 .eq('id', background.id);
-                              fetchPatientData();
+                              await fetchPatientData();
                             } catch (error) {
                               console.error('Error deleting background:', error);
                             }
                           }}
-                          className="text-red-600 hover:text-red-800"
+                          className="text-red-400 hover:text-red-300 transition-colors"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       )}
                     </div>
-                    <p className="text-gray-600">{background.condition}</p>
+                    <p className="text-gray-300">{background.condition}</p>
                     {background.notes && (
-                      <p className="text-sm text-gray-500 mt-1">{background.notes}</p>
+                      <p className="text-sm text-gray-400 mt-1">{background.notes}</p>
                     )}
                   </div>
                 ))}
 
                 {modoEdicion && (
-                  <div className="border-t pt-6">
-                    <h3 className="font-medium text-gray-900 mb-4">Agregar Antecedente</h3>
+                  <div className="border-t border-gray-600 pt-6">
+                    <h3 className="font-medium text-white mb-4">Agregar Antecedente</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-gray-300">
                           Parentesco
                         </label>
                         <input
                           type="text"
                           id="new-relationship"
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-gray-300">
                           Condición
                         </label>
                         <input
                           type="text"
                           id="new-condition"
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                         />
                       </div>
                       <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-gray-300">
                           Notas
                         </label>
                         <textarea
                           id="new-notes"
                           rows={2}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                         />
                       </div>
                       <div className="col-span-2">
@@ -823,9 +850,9 @@ export default function PatientRecord() {
                             const condition = (document.getElementById('new-condition') as HTMLInputElement).value;
                             const notes = (document.getElementById('new-notes') as HTMLTextAreaElement).value;
                             
-                            if (relationship && condition) {
+                            if (relationship && condition && id) {
                               handleAddHereditaryBackground({
-                                patient_id: id!,
+                                patient_id: id,
                                 relationship,
                                 condition,
                                 notes: notes || null
@@ -837,7 +864,7 @@ export default function PatientRecord() {
                               (document.getElementById('new-notes') as HTMLTextAreaElement).value = '';
                             }
                           }}
-                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                         >
                           Agregar
                         </button>
@@ -851,76 +878,153 @@ export default function PatientRecord() {
 
           {seccionActiva === 'consultas' && (
             <div className="space-y-6">
-              {consultations.map((consultation) => (
-                <div key={consultation.id} className="bg-white rounded-lg shadow p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">
-                        Consulta del {format(new Date(consultation.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {format(new Date(consultation.created_at), "HH:mm", { locale: es })} hrs
-                      </p>
+              {/* Header with search and filters */}
+              <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-white">Historial de Consultas</h2>
+                  <div className="flex items-center space-x-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por diagnóstico..."
+                        value={consultationSearch}
+                        onChange={(e) => setConsultationSearch(e.target.value)}
+                        className="pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
                     </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900">Padecimiento Actual</h4>
-                      <p className="mt-1 text-gray-600">{consultation.current_condition}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium text-gray-900">Signos Vitales</h4>
-                      <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {Object.entries(consultation.vital_signs as any).map(([key, value]) => (
-                          <div key={key}>
-                            <dt className="text-sm text-gray-500">{key}</dt>
-                            <dd className="text-sm font-medium text-gray-900">{value}</dd>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium text-gray-900">Exploración Física</h4>
-                      <div className="mt-2">
-                        {Object.entries((consultation.physical_examination as any).values || {}).map(([key, value]) => (
-                          <div key={key} className="mb-2">
-                            <dt className="text-sm font-medium text-gray-700">{key}</dt>
-                            <dd className="mt-1 text-sm text-gray-600">{value as string}</dd>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium text-gray-900">Diagnóstico</h4>
-                      <p className="mt-1 text-gray-600">{consultation.diagnosis}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium text-gray-900">Pronóstico</h4>
-                      <p className="mt-1 text-gray-600">{consultation.prognosis}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="font-medium text-gray-900">Tratamiento</h4>
-                      <p className="mt-1 text-gray-600">{consultation.treatment}</p>
-                    </div>
+                    <button
+                      onClick={() => fetchPatientData()}
+                      className="p-2 text-gray-400 hover:text-white transition-colors"
+                      title="Actualizar"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
-              ))}
 
-              {consultations.length === 0 && (
-                <div className="text-center py-12 bg-white rounded-lg shadow">
-                  <Clock className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No hay consultas</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Comienza creando una nueva consulta para este paciente.
-                  </p>
-                </div>
-              )}
+                {/* Consultas Table */}
+                {filteredConsultations.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-600">
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Fecha</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Hora</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Diagnóstico</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Estado</th>
+                          <th className="text-center py-3 px-4 text-gray-300 font-medium">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredConsultations.map((consultation) => (
+                          <React.Fragment key={consultation.id}>
+                            <tr className="border-b border-gray-700 hover:bg-gray-750 transition-colors">
+                              <td className="py-3 px-4 text-white">
+                                {format(new Date(consultation.created_at), "dd/MM/yyyy", { locale: es })}
+                              </td>
+                              <td className="py-3 px-4 text-gray-300">
+                                {format(new Date(consultation.created_at), "HH:mm", { locale: es })}
+                              </td>
+                              <td className="py-3 px-4 text-white">
+                                <div className="max-w-xs truncate">
+                                  {consultation.diagnosis}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  Completada
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <button
+                                  onClick={() => setExpandedConsultation(
+                                    expandedConsultation === consultation.id ? null : consultation.id
+                                  )}
+                                  className="p-1 text-gray-400 hover:text-white transition-colors"
+                                  title="Ver detalles"
+                                >
+                                  {expandedConsultation === consultation.id ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                            {expandedConsultation === consultation.id && (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-6 bg-gray-750">
+                                  <div className="space-y-4">
+                                    <div>
+                                      <h4 className="font-medium text-white mb-2">Padecimiento Actual</h4>
+                                      <p className="text-gray-300 text-sm">{consultation.current_condition}</p>
+                                    </div>
+
+                                    <div>
+                                      <h4 className="font-medium text-white mb-2">Signos Vitales</h4>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        {Object.entries(consultation.vital_signs as any || {}).map(([key, value]) => (
+                                          <div key={key} className="bg-gray-700 rounded p-3">
+                                            <dt className="text-xs text-gray-400 uppercase tracking-wide">{key.replace('_', ' ')}</dt>
+                                            <dd className="text-sm font-medium text-white mt-1">{value as string}</dd>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {consultation.physical_examination && (
+                                      <div>
+                                        <h4 className="font-medium text-white mb-2">Exploración Física</h4>
+                                        <div className="bg-gray-700 rounded p-4">
+                                          <p className="text-gray-300 text-sm">Examen físico realizado</p>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div>
+                                        <h4 className="font-medium text-white mb-2">Pronóstico</h4>
+                                        <p className="text-gray-300 text-sm bg-gray-700 rounded p-3">{consultation.prognosis}</p>
+                                      </div>
+                                      <div>
+                                        <h4 className="font-medium text-white mb-2">Tratamiento</h4>
+                                        <p className="text-gray-300 text-sm bg-gray-700 rounded p-3">{consultation.treatment}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Clock className="mx-auto h-12 w-12 text-gray-500" />
+                    <h3 className="mt-2 text-sm font-medium text-white">No hay consultas</h3>
+                    <p className="mt-1 text-sm text-gray-400">
+                      {consultationSearch ? 
+                        'No se encontraron consultas que coincidan con tu búsqueda.' :
+                        'Comienza creando una nueva consulta para este paciente.'
+                      }
+                    </p>
+                    {!consultationSearch && (
+                      <div className="mt-6">
+                        <button
+                          onClick={() => setShowConsultationForm(true)}
+                          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Nueva Consulta
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </main>
@@ -928,13 +1032,16 @@ export default function PatientRecord() {
 
       {/* Consultation Form Modal */}
       {showConsultationForm && userProfile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-6xl max-h-[95vh] overflow-y-auto">
             <ConsultationForm
               patientId={id!}
               doctorId={userProfile.id}
               onClose={() => setShowConsultationForm(false)}
-              onSave={fetchPatientData}
+              onSave={() => {
+                setShowConsultationForm(false);
+                fetchPatientData();
+              }}
             />
           </div>
         </div>
