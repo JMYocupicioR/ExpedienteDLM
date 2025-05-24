@@ -32,7 +32,6 @@ type Consultation = {
   patient_id: string;
   created_at: string;
   diagnosis: string;
-  status: 'pending' | 'completed' | 'cancelled';
 };
 
 type NewPatientForm = {
@@ -75,8 +74,7 @@ type SearchFilters = {
 
 type DashboardStats = {
   totalPatients: number;
-  pendingConsultations: number;
-  completedConsultations: number;
+  totalConsultations: number;
   activeRecords: number;
   todayConsultations: number;
   monthlyGrowth: number;
@@ -102,8 +100,7 @@ export default function Dashboard() {
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalPatients: 0,
-    pendingConsultations: 0,
-    completedConsultations: 0,
+    totalConsultations: 0,
     activeRecords: 0,
     todayConsultations: 0,
     monthlyGrowth: 0
@@ -217,8 +214,7 @@ export default function Dashboard() {
 
     return {
       totalPatients: patients.length,
-      pendingConsultations: consultations.filter(c => c.status === 'pending').length,
-      completedConsultations: consultations.filter(c => c.status === 'completed').length,
+      totalConsultations: consultations.length,
       activeRecords: patients.length,
       todayConsultations,
       monthlyGrowth: Math.round(monthlyGrowth * 10) / 10
@@ -319,7 +315,7 @@ export default function Dashboard() {
       // Fetch patients and consultations in parallel
       const [patientsResult, consultationsResult] = await Promise.all([
         supabase.from('patients').select('*').order('created_at', { ascending: false }),
-        supabase.from('consultations').select('id, patient_id, created_at, diagnosis, status').order('created_at', { ascending: false })
+        supabase.from('consultations').select('id, patient_id, created_at, diagnosis').order('created_at', { ascending: false })
       ]);
 
       if (patientsResult.error) {
@@ -704,10 +700,10 @@ export default function Dashboard() {
               </div>
               <div className="ml-3 sm:ml-4 min-w-0">
                 <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                  Consultas Pendientes
+                  Total Consultas
                 </dt>
                 <dd className="text-xl sm:text-2xl font-bold text-white">
-                  {stats.pendingConsultations}
+                  {stats.totalConsultations}
                 </dd>
                 <p className="text-xs text-gray-400">
                   Hoy: {stats.todayConsultations}
@@ -725,10 +721,10 @@ export default function Dashboard() {
               </div>
               <div className="ml-3 sm:ml-4 min-w-0">
                 <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                  Consultas Completadas
+                  Expedientes Activos
                 </dt>
                 <dd className="text-xl sm:text-2xl font-bold text-white">
-                  {stats.completedConsultations}
+                  {stats.activeRecords}
                 </dd>
               </div>
             </div>
