@@ -166,7 +166,7 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
   if (loading) {
     return (
       <div className="flex items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
       </div>
     );
   }
@@ -174,7 +174,7 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
   return (
     <div className="space-y-6">
       {error && (
-        <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
+        <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm">
           {error}
         </div>
       )}
@@ -182,26 +182,26 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
       {/* Template Selection */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {templates.map(template => (
-          <div key={template.id} className="border rounded-lg p-4 bg-white shadow-sm">
+          <div key={template.id} className="border border-gray-600 rounded-lg p-4 bg-gray-700 shadow-sm">
             <div className="flex justify-between items-start mb-4">
-              <h3 className="font-medium text-gray-900">{template.name}</h3>
+              <h3 className="font-medium text-white">{template.name}</h3>
               <div className="flex space-x-2">
                 <button
                   onClick={() => onSelectTemplate(template)}
-                  className="text-blue-600 hover:text-blue-800"
+                  className="text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   <Edit className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handleDeleteTemplate(template.id)}
-                  className="text-red-600 hover:text-red-800"
+                  className="text-red-400 hover:text-red-300 transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
-            <div className="text-sm text-gray-600">
-              {Object.entries(template.fields as Record<string, { label: string }>).map(([key, value]) => (
+            <div className="text-sm text-gray-300">
+              {Object.entries(template.fields as Record<string, { label: string; type?: string }>).map(([key, value]) => (
                 <div key={key} className="mb-1">• {value.label}</div>
               ))}
             </div>
@@ -210,33 +210,33 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
       </div>
 
       {/* Default Templates */}
-      <div className="border-t pt-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Plantillas Predefinidas</h3>
+      <div className="border-t border-gray-600 pt-6">
+        <h3 className="text-lg font-medium text-white mb-4">Plantillas Predefinidas</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
             onClick={() => handleCreateDefaultTemplate('general')}
-            className="p-4 border rounded-lg hover:bg-gray-50 text-left"
+            className="p-4 border border-gray-600 rounded-lg hover:bg-gray-600 transition-colors text-left bg-gray-700"
           >
-            <h4 className="font-medium text-gray-900">Exploración Física General</h4>
-            <p className="text-sm text-gray-600 mt-1">
+            <h4 className="font-medium text-white">Exploración Física General</h4>
+            <p className="text-sm text-gray-300 mt-1">
               Incluye evaluación de cabeza, cuello, tórax, abdomen y extremidades
             </p>
           </button>
           <button
             onClick={() => handleCreateDefaultTemplate('musculoskeletal')}
-            className="p-4 border rounded-lg hover:bg-gray-50 text-left"
+            className="p-4 border border-gray-600 rounded-lg hover:bg-gray-600 transition-colors text-left bg-gray-700"
           >
-            <h4 className="font-medium text-gray-900">Exploración Musculoesquelética</h4>
-            <p className="text-sm text-gray-600 mt-1">
+            <h4 className="font-medium text-white">Exploración Musculoesquelética</h4>
+            <p className="text-sm text-gray-300 mt-1">
               Evaluación completa del sistema musculoesquelético
             </p>
           </button>
           <button
             onClick={() => handleCreateDefaultTemplate('neurological')}
-            className="p-4 border rounded-lg hover:bg-gray-50 text-left"
+            className="p-4 border border-gray-600 rounded-lg hover:bg-gray-600 transition-colors text-left bg-gray-700"
           >
-            <h4 className="font-medium text-gray-900">Exploración Neurológica</h4>
-            <p className="text-sm text-gray-600 mt-1">
+            <h4 className="font-medium text-white">Exploración Neurológica</h4>
+            <p className="text-sm text-gray-300 mt-1">
               Evaluación neurológica detallada
             </p>
           </button>
@@ -248,19 +248,19 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
         <div className="flex justify-center pt-6">
           <button
             onClick={() => setIsCreating(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
           >
             <Plus className="h-5 w-5 mr-2" />
             Crear Plantilla Personalizada
           </button>
         </div>
       ) : (
-        <div className="border rounded-lg p-6 bg-white mt-6">
+        <div className="border border-gray-600 rounded-lg p-6 bg-gray-700 mt-6">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-medium text-gray-900">Nueva Plantilla Personalizada</h3>
+            <h3 className="text-lg font-medium text-white">Nueva Plantilla Personalizada</h3>
             <button
               onClick={() => setIsCreating(false)}
-              className="text-gray-400 hover:text-gray-500"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -268,29 +268,29 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
 
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-300">
                 Nombre de la Plantilla
               </label>
               <input
                 type="text"
                 value={newTemplate.name}
                 onChange={(e) => setNewTemplate(prev => ({ ...prev, name: e.target.value }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md bg-gray-600 border-gray-500 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 Campos de la Exploración
               </label>
               
               <div className="space-y-4">
                 {Object.entries(newTemplate.fields).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
-                    <span className="text-sm text-gray-900">{value.label}</span>
+                  <div key={key} className="flex items-center justify-between bg-gray-600 p-3 rounded-lg">
+                    <span className="text-sm text-white">{value.label}</span>
                     <button
                       onClick={() => handleRemoveField(key)}
-                      className="text-red-600 hover:text-red-800"
+                      className="text-red-400 hover:text-red-300 transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -304,7 +304,7 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
                       placeholder="ID del campo"
                       value={newField.name}
                       onChange={(e) => setNewField(prev => ({ ...prev, name: e.target.value }))}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="block w-full rounded-md bg-gray-600 border-gray-500 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
                   <div className="flex-1">
@@ -313,12 +313,12 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
                       placeholder="Etiqueta del campo"
                       value={newField.label}
                       onChange={(e) => setNewField(prev => ({ ...prev, label: e.target.value }))}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="block w-full rounded-md bg-gray-600 border-gray-500 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     />
                   </div>
                   <button
                     onClick={handleAddField}
-                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
+                    className="px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors"
                   >
                     Agregar Campo
                   </button>
@@ -329,7 +329,7 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
             <div className="flex justify-end">
               <button
                 onClick={handleSaveTemplate}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
               >
                 <Save className="h-5 w-5 mr-2" />
                 Guardar Plantilla
