@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, User, Lock, Bell, Shield, Clock, Trash2, Eye, EyeOff, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { X, Save, User, Lock, Bell, Shield, Clock, Trash2, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, FileText, Stethoscope, Plus, Edit as EditIcon, Palette, Layout, Type } from 'lucide-react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { supabase } from '../lib/supabase';
+import PhysicalExamTemplates from './PhysicalExamTemplates';
+import PhysicalExamTemplateEditor from './PhysicalExamTemplateEditor';
 
 interface UserProfile {
   id: string;
@@ -38,7 +40,7 @@ interface PasswordChangeForm {
 }
 
 export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications' | 'schedule'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications' | 'schedule' | 'prescription' | 'examTemplates'>('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -82,6 +84,25 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
     systemUpdates: false,
     marketingEmails: false
   });
+
+  // Prescription style settings
+  const [prescriptionStyle, setPrescriptionStyle] = useState({
+    headerStyle: 'modern',
+    fontSize: 'medium',
+    spacing: 'normal',
+    includeQR: true,
+    includeWatermark: false,
+    primaryColor: '#2563eb',
+    secondaryColor: '#64748b',
+    showLogo: true,
+    logoPosition: 'left',
+    paperSize: 'letter',
+    margins: 'normal'
+  });
+
+  // Physical exam template management state
+  const [selectedTemplateToEdit, setSelectedTemplateToEdit] = useState<any>(null);
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
 
   // Update form when userProfile changes
   useEffect(() => {
@@ -164,35 +185,31 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
       setError(null);
 
       // Validate passwords
-      if (!passwordForm.currentPassword) {
-        throw new Error('La contraseña actual es requerida');
+      if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+        throw new Error('Todos los campos de contraseña son requeridos');
       }
-      if (!passwordForm.newPassword) {
-        throw new Error('La nueva contraseña es requerida');
-      }
-      if (passwordForm.newPassword.length < 6) {
-        throw new Error('La nueva contraseña debe tener al menos 6 caracteres');
-      }
+
       if (passwordForm.newPassword !== passwordForm.confirmPassword) {
         throw new Error('Las contraseñas no coinciden');
       }
 
+      if (passwordForm.newPassword.length < 6) {
+        throw new Error('La nueva contraseña debe tener al menos 6 caracteres');
+      }
+
+      // Update password
       const { error: updateError } = await supabase.auth.updateUser({
         password: passwordForm.newPassword
       });
 
-      if (updateError) {
-        throw new Error('Error al cambiar la contraseña: ' + updateError.message);
-      }
+      if (updateError) throw updateError;
 
-      // Clear form
+      setSuccessMessage('Contraseña actualizada correctamente');
       setPasswordForm({
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
       });
-
-      setSuccessMessage('Contraseña cambiada correctamente');
 
     } catch (err: any) {
       setError(err.message);
@@ -259,11 +276,50 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
     }
   };
 
+  // Handle prescription style update
+  const handlePrescriptionStyleUpdate = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (!userProfile) {
+        throw new Error('No se encontró el perfil del usuario');
+      }
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          prescription_style: prescriptionStyle
+        })
+        .eq('id', userProfile.id);
+
+      if (updateError) {
+        throw new Error('Error al actualizar el estilo de receta');
+      }
+
+      // Update local state
+      const updatedProfile = {
+        ...userProfile,
+        prescription_style: prescriptionStyle
+      };
+
+      onUpdate(updatedProfile);
+      setSuccessMessage('Estilo de receta actualizado correctamente');
+
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: 'Perfil', icon: User },
     { id: 'security', label: 'Seguridad', icon: Lock },
     { id: 'notifications', label: 'Notificaciones', icon: Bell },
-    { id: 'schedule', label: 'Horario', icon: Clock }
+    { id: 'schedule', label: 'Horario', icon: Clock },
+    { id: 'prescription', label: 'Estilo de Receta', icon: FileText },
+    { id: 'examTemplates', label: 'Plantillas de Exploración', icon: Stethoscope }
   ];
 
   const weekDays = [
@@ -659,6 +715,276 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                               Guardar Horario
                             </button>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Prescription Style Tab */}
+                    {activeTab === 'prescription' && (
+                      <div className="space-y-6">
+                        <div>
+                          <h3 className="text-lg font-medium text-white mb-4">Personalizar Estilo de Receta</h3>
+                          
+                          {/* Estilo de Encabezado */}
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Estilo de Encabezado
+                              </label>
+                              <select
+                                value={prescriptionStyle.headerStyle}
+                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, headerStyle: e.target.value }))}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="modern">Moderno</option>
+                                <option value="classic">Clásico</option>
+                                <option value="minimal">Minimalista</option>
+                                <option value="professional">Profesional</option>
+                              </select>
+                            </div>
+
+                            {/* Tamaño de Fuente */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <Type className="inline h-4 w-4 mr-1" />
+                                Tamaño de Fuente
+                              </label>
+                              <select
+                                value={prescriptionStyle.fontSize}
+                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, fontSize: e.target.value }))}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="small">Pequeño</option>
+                                <option value="medium">Mediano</option>
+                                <option value="large">Grande</option>
+                                <option value="extraLarge">Extra Grande</option>
+                              </select>
+                            </div>
+
+                            {/* Espaciado */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <Layout className="inline h-4 w-4 mr-1" />
+                                Espaciado
+                              </label>
+                              <select
+                                value={prescriptionStyle.spacing}
+                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, spacing: e.target.value }))}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="compact">Compacto</option>
+                                <option value="normal">Normal</option>
+                                <option value="relaxed">Amplio</option>
+                              </select>
+                            </div>
+
+                            {/* Colores */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                  <Palette className="inline h-4 w-4 mr-1" />
+                                  Color Principal
+                                </label>
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="color"
+                                    value={prescriptionStyle.primaryColor}
+                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, primaryColor: e.target.value }))}
+                                    className="h-10 w-20 rounded cursor-pointer"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={prescriptionStyle.primaryColor}
+                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, primaryColor: e.target.value }))}
+                                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                  Color Secundario
+                                </label>
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="color"
+                                    value={prescriptionStyle.secondaryColor}
+                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, secondaryColor: e.target.value }))}
+                                    className="h-10 w-20 rounded cursor-pointer"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={prescriptionStyle.secondaryColor}
+                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, secondaryColor: e.target.value }))}
+                                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Opciones adicionales */}
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-gray-300">
+                                  Incluir código QR
+                                </label>
+                                <button
+                                  onClick={() => setPrescriptionStyle(prev => ({ ...prev, includeQR: !prev.includeQR }))}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                    prescriptionStyle.includeQR ? 'bg-blue-600' : 'bg-gray-600'
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                      prescriptionStyle.includeQR ? 'translate-x-6' : 'translate-x-1'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-gray-300">
+                                  Mostrar marca de agua
+                                </label>
+                                <button
+                                  onClick={() => setPrescriptionStyle(prev => ({ ...prev, includeWatermark: !prev.includeWatermark }))}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                    prescriptionStyle.includeWatermark ? 'bg-blue-600' : 'bg-gray-600'
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                      prescriptionStyle.includeWatermark ? 'translate-x-6' : 'translate-x-1'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-gray-300">
+                                  Mostrar logotipo
+                                </label>
+                                <button
+                                  onClick={() => setPrescriptionStyle(prev => ({ ...prev, showLogo: !prev.showLogo }))}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                    prescriptionStyle.showLogo ? 'bg-blue-600' : 'bg-gray-600'
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                      prescriptionStyle.showLogo ? 'translate-x-6' : 'translate-x-1'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Tamaño de papel y márgenes */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                  Tamaño de Papel
+                                </label>
+                                <select
+                                  value={prescriptionStyle.paperSize}
+                                  onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, paperSize: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value="letter">Carta (Letter)</option>
+                                  <option value="a4">A4</option>
+                                  <option value="legal">Oficio (Legal)</option>
+                                  <option value="half">Media Carta</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                  Márgenes
+                                </label>
+                                <select
+                                  value={prescriptionStyle.margins}
+                                  onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, margins: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value="narrow">Estrechos</option>
+                                  <option value="normal">Normales</option>
+                                  <option value="wide">Amplios</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Vista previa */}
+                            <div className="mt-6 p-4 bg-gray-900 rounded-lg border border-gray-700">
+                              <p className="text-sm text-gray-400 mb-2">Vista Previa</p>
+                              <div className="bg-white p-4 rounded-lg" style={{ fontSize: prescriptionStyle.fontSize === 'small' ? '12px' : prescriptionStyle.fontSize === 'large' ? '18px' : prescriptionStyle.fontSize === 'extraLarge' ? '20px' : '14px' }}>
+                                <div style={{ borderBottom: `2px solid ${prescriptionStyle.primaryColor}`, paddingBottom: '10px', marginBottom: prescriptionStyle.spacing === 'compact' ? '10px' : prescriptionStyle.spacing === 'relaxed' ? '20px' : '15px' }}>
+                                  <h3 style={{ color: prescriptionStyle.primaryColor, margin: 0 }}>RECETA MÉDICA</h3>
+                                  <p style={{ color: prescriptionStyle.secondaryColor, margin: '5px 0 0 0' }}>Dr. Juan Médico - CED: 12345678</p>
+                                </div>
+                                <div style={{ lineHeight: prescriptionStyle.spacing === 'compact' ? '1.4' : prescriptionStyle.spacing === 'relaxed' ? '1.8' : '1.6' }}>
+                                  <p style={{ color: '#374151', margin: '5px 0' }}>Paciente: Ejemplo</p>
+                                  <p style={{ color: '#374151', margin: '5px 0' }}>Medicamento: Ejemplo 500mg</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-6">
+                              <button
+                                onClick={handlePrescriptionStyleUpdate}
+                                disabled={isLoading}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
+                              >
+                                {isLoading ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Save className="h-4 w-4 mr-2" />
+                                )}
+                                Guardar Estilo
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Physical Exam Templates Tab */}
+                    {activeTab === 'examTemplates' && (
+                      <div className="space-y-6">
+                        <div>
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-medium text-white">Plantillas de Exploración Física</h3>
+                            <button
+                              onClick={() => setShowTemplateEditor(true)}
+                              className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Nueva Plantilla
+                            </button>
+                          </div>
+
+                          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+                            <PhysicalExamTemplates
+                              onSelectTemplate={(template) => {
+                                setSelectedTemplateToEdit(template);
+                                setShowTemplateEditor(true);
+                              }}
+                              doctorId={userProfile?.id || ''}
+                            />
+                          </div>
+
+                          {showTemplateEditor && (
+                            <PhysicalExamTemplateEditor
+                              template={selectedTemplateToEdit}
+                              doctorId={userProfile?.id || ''}
+                              onSave={(template) => {
+                                setShowTemplateEditor(false);
+                                setSelectedTemplateToEdit(null);
+                                // Refresh templates component
+                              }}
+                              onClose={() => {
+                                setShowTemplateEditor(false);
+                                setSelectedTemplateToEdit(null);
+                              }}
+                            />
+                          )}
                         </div>
                       </div>
                     )}
