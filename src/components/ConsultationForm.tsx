@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Save, X, FileText } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Save, X, FileText, AlertCircle, Clock, CheckCircle, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { supabase } from '../lib/supabase';
 import PhysicalExamForm from './PhysicalExamForm';
@@ -50,16 +50,21 @@ interface PhysicalExamFormData {
   generalObservations: string;
 }
 
+type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
 export default function ConsultationForm({ patientId, doctorId, onClose, onSave }: ConsultationFormProps) {
   const [selectedTemplate, setSelectedTemplate] = useState<PhysicalExamTemplate | null>(null);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
   const [physicalExamData, setPhysicalExamData] = useState<PhysicalExamFormData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<string>('');
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ConsultationFormData>({
+  const { register, handleSubmit, setValue, watch, formState: { errors }, reset } = useForm<ConsultationFormData>({
     defaultValues: {
+      current_condition: '',
       vital_signs: {
         temperature: '',
         heart_rate: '',
@@ -70,14 +75,106 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         height: ''
       },
       physical_examination: {},
+      diagnosis: '',
+      prognosis: '',
+      treatment: ''
     }
   });
 
+  const watchedData = watch();
+
+  // ✅ NUEVO: Auto-save universal con cleanup apropiado
+  const performAutoSave = useCallback(async (data: ConsultationFormData) => {
+    try {
+      setSaveState('saving');
+      
+      // Save to localStorage as backup
+      localStorage.setItem(`consultation_draft_${patientId}`, JSON.stringify({
+        ...data,
+        lastSaved: new Date().toISOString(),
+        physicalExamData
+      }));
+      
+      setLastAutoSave(new Date());
+      setSaveState('saved');
+      setHasUnsavedChanges(false);
+      
+      // Clear saved state after 3 seconds
+      setTimeout(() => setSaveState('idle'), 3000);
+      
+    } catch (error) {
+      console.error('Auto-save error:', error);
+      setSaveState('error');
+    }
+  }, [patientId, physicalExamData]);
+
+  // ✅ NUEVO: Auto-save effect with debounce
+  useEffect(() => {
+    // Skip if form is empty
+    if (!watchedData.current_condition && !watchedData.diagnosis && !watchedData.treatment) {
+      return;
+    }
+
+    setHasUnsavedChanges(true);
+
+    const timer = setTimeout(() => {
+      performAutoSave(watchedData);
+    }, 3000); // 3 second debounce
+
+    return () => clearTimeout(timer);
+  }, [watchedData, performAutoSave]);
+
+  // ✅ NUEVO: Load draft on mount
+  useEffect(() => {
+    const loadDraft = () => {
+      try {
+        const draft = localStorage.getItem(`consultation_draft_${patientId}`);
+        if (draft) {
+          const parsedDraft = JSON.parse(draft);
+          
+          // Check if draft is recent (within 24 hours)
+          const draftAge = new Date().getTime() - new Date(parsedDraft.lastSaved).getTime();
+          const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+          
+          if (draftAge < maxAge) {
+            reset(parsedDraft);
+            if (parsedDraft.physicalExamData) {
+              setPhysicalExamData(parsedDraft.physicalExamData);
+            }
+            setLastAutoSave(new Date(parsedDraft.lastSaved));
+          } else {
+            // Remove old draft
+            localStorage.removeItem(`consultation_draft_${patientId}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading draft:', error);
+      }
+    };
+
+    loadDraft();
+  }, [patientId, reset]);
+
+  // ✅ NUEVO: Warn before closing with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  // ✅ MEJORADO: Handle template selection
   const handleTemplateSelect = (template: PhysicalExamTemplate) => {
     setSelectedTemplate(template);
     setShowPhysicalExam(true);
   };
 
+  // ✅ MEJORADO: Handle physical exam save
   const handlePhysicalExamSave = async (data: PhysicalExamFormData) => {
     try {
       setPhysicalExamData(data);
@@ -111,25 +208,44 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
     }
   };
 
+  // ✅ MEJORADO: Handle physical exam auto-save
   const handlePhysicalExamAutoSave = async (data: PhysicalExamFormData) => {
     try {
-      setAutoSaveStatus('Guardando...');
+      // Store physical exam data for auto-save
+      setPhysicalExamData(data);
       
-      // Auto-save to local storage or temporary database record
-      localStorage.setItem(`physical_exam_draft_${patientId}`, JSON.stringify(data));
+      // Update localStorage
+      const currentDraft = localStorage.getItem(`consultation_draft_${patientId}`);
+      const draft = currentDraft ? JSON.parse(currentDraft) : watchedData;
       
-      setAutoSaveStatus('Guardado automáticamente');
-      setTimeout(() => setAutoSaveStatus(''), 2000);
+      localStorage.setItem(`consultation_draft_${patientId}`, JSON.stringify({
+        ...draft,
+        physicalExamData: data,
+        lastSaved: new Date().toISOString()
+      }));
+      
     } catch (err) {
       console.error('Error in auto-save:', err);
-      setAutoSaveStatus('Error en guardado automático');
     }
   };
 
+  // ✅ MEJORADO: Submit with better validation
   const onSubmit = async (data: ConsultationFormData) => {
     try {
       setLoading(true);
       setError(null);
+      setSaveState('saving');
+
+      // Validation checks
+      if (!data.current_condition.trim()) {
+        throw new Error('El padecimiento actual es requerido');
+      }
+      if (!data.diagnosis.trim()) {
+        throw new Error('El diagnóstico es requerido');
+      }
+      if (!data.treatment.trim()) {
+        throw new Error('El tratamiento es requerido');
+      }
 
       const { error: insertError } = await supabase
         .from('consultations')
@@ -144,49 +260,115 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
           treatment: data.treatment
         });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        if (insertError.code === '42501') {
+          throw new Error('No tienes permisos para crear consultas');
+        } else {
+          throw new Error('Error al guardar la consulta');
+        }
+      }
 
       // Clear auto-save draft
-      localStorage.removeItem(`physical_exam_draft_${patientId}`);
-
+      localStorage.removeItem(`consultation_draft_${patientId}`);
+      
+      setSaveState('saved');
+      setHasUnsavedChanges(false);
       onSave();
       onClose();
-    } catch (err) {
+
+    } catch (err: any) {
       console.error('Error saving consultation:', err);
-      setError('Error al guardar la consulta');
+      setError(err.message);
+      setSaveState('error');
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ NUEVO: Clear draft
+  const clearDraft = () => {
+    localStorage.removeItem(`consultation_draft_${patientId}`);
+    reset();
+    setPhysicalExamData(null);
+    setSelectedTemplate(null);
+    setLastAutoSave(null);
+    setHasUnsavedChanges(false);
+  };
+
+  // ✅ NUEVO: Generate PDF
   const generatePDF = async () => {
     try {
       // This would integrate with a PDF generation library
       const consultationData = watch();
       
-      // Generate PDF with jsPDF or similar library
-      console.log('Generating PDF with data:', consultationData);
+      // Basic PDF generation simulation
+      const content = `
+        CONSULTA MÉDICA
+        ================
+        
+        Padecimiento Actual: ${consultationData.current_condition}
+        Diagnóstico: ${consultationData.diagnosis}
+        Pronóstico: ${consultationData.prognosis}
+        Tratamiento: ${consultationData.treatment}
+        
+        Generado el: ${new Date().toLocaleString('es-ES')}
+      `;
       
-      // For now, show success message
-      alert('PDF generado correctamente (funcionalidad en desarrollo)');
+      // Create and download file
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `consulta_${patientId}_${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
     } catch (err) {
       console.error('Error generating PDF:', err);
       setError('Error al generar el PDF');
     }
   };
 
-  // Load auto-save draft on component mount
-  useEffect(() => {
-    const draft = localStorage.getItem(`physical_exam_draft_${patientId}`);
-    if (draft) {
-      try {
-        const draftData = JSON.parse(draft);
-        setPhysicalExamData(draftData);
-      } catch (err) {
-        console.error('Error loading draft:', err);
-      }
+  // ✅ NUEVO: Render save status
+  const renderSaveStatus = () => {
+    switch (saveState) {
+      case 'saving':
+        return (
+          <div className="flex items-center text-sm text-blue-400">
+            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            Guardando...
+          </div>
+        );
+      case 'saved':
+        return (
+          <div className="flex items-center text-sm text-green-400">
+            <CheckCircle className="h-4 w-4 mr-1" />
+            Guardado: {lastAutoSave?.toLocaleTimeString()}
+          </div>
+        );
+      case 'error':
+        return (
+          <div className="flex items-center text-sm text-red-400">
+            <AlertCircle className="h-4 w-4 mr-1" />
+            Error al guardar
+          </div>
+        );
+      default:
+        return lastAutoSave ? (
+          <div className="flex items-center text-sm text-gray-400">
+            <Clock className="h-4 w-4 mr-1" />
+            Última copia: {lastAutoSave.toLocaleTimeString()}
+          </div>
+        ) : (
+          <div className="flex items-center text-sm text-gray-400">
+            <Clock className="h-4 w-4 mr-1" />
+            Auto-guardado activo
+          </div>
+        );
     }
-  }, [patientId]);
+  };
 
   if (showPhysicalExam && selectedTemplate) {
     return (
@@ -194,9 +376,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         <div className="p-4 border-b border-gray-700 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-white">Exploración Física - {selectedTemplate.name}</h2>
           <div className="flex items-center space-x-4">
-            {autoSaveStatus && (
-              <span className="text-sm text-gray-300">{autoSaveStatus}</span>
-            )}
+            {renderSaveStatus()}
             <button
               onClick={() => setShowPhysicalExam(false)}
               className="text-gray-400 hover:text-white transition-colors"
@@ -222,14 +402,28 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
   return (
     <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-auto max-h-[90vh] overflow-y-auto border border-gray-700">
       <div className="p-6 border-b border-gray-700 flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-white">Nueva Consulta</h2>
+        <div>
+          <h2 className="text-xl font-semibold text-white">Nueva Consulta</h2>
+          {hasUnsavedChanges && (
+            <p className="text-sm text-yellow-400 mt-1">• Hay cambios sin guardar</p>
+          )}
+        </div>
         <div className="flex items-center space-x-4">
+          {renderSaveStatus()}
           <button
             onClick={generatePDF}
             className="flex items-center px-3 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors"
+            disabled={loading}
           >
             <FileText className="h-4 w-4 mr-2" />
             Generar PDF
+          </button>
+          <button
+            onClick={clearDraft}
+            className="flex items-center px-3 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+            disabled={loading}
+          >
+            Limpiar
           </button>
           <button
             onClick={onClose}
@@ -242,29 +436,43 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
 
       <form onSubmit={handleSubmit(onSubmit)} className="p-6">
         {error && (
-          <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm">
-            {error}
+          <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm flex items-center">
+            <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="ml-auto text-red-400 hover:text-red-300"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
         <div className="space-y-6">
-          {/* Padecimiento Actual */}
+          {/* ✅ MEJORADO: Padecimiento Actual con validación */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Padecimiento Actual
+              Padecimiento Actual *
             </label>
             <textarea
-              {...register('current_condition', { required: true })}
+              {...register('current_condition', { 
+                required: 'El padecimiento actual es requerido',
+                minLength: { value: 10, message: 'Mínimo 10 caracteres' },
+                maxLength: { value: 1000, message: 'Máximo 1000 caracteres' }
+              })}
               rows={4}
               className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Describe el motivo de consulta y síntomas principales..."
             />
             {errors.current_condition && (
-              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">{errors.current_condition.message}</p>
             )}
+            <p className="mt-1 text-xs text-gray-400">
+              {watchedData.current_condition?.length || 0}/1000 caracteres
+            </p>
           </div>
 
-          {/* Exploración Física */}
+          {/* ✅ MEJORADO: Exploración Física */}
           <div>
             <h3 className="text-lg font-medium text-white mb-4">Exploración Física</h3>
             
@@ -311,7 +519,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
             )}
           </div>
 
-          {/* Signos Vitales (Read-only if physical exam completed) */}
+          {/* ✅ MEJORADO: Signos Vitales */}
           {physicalExamData ? (
             <div className="bg-blue-900/30 border border-blue-700 p-4 rounded-lg">
               <h3 className="text-lg font-medium text-white mb-4">Signos Vitales (del Examen Físico)</h3>
@@ -334,6 +542,30 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
                   <dt className="text-sm text-gray-400">Frecuencia Respiratoria</dt>
                   <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.respiratory_rate} rpm</dd>
                 </div>
+                {physicalExamData.vitalSigns.oxygen_saturation && (
+                  <div>
+                    <dt className="text-sm text-gray-400">Saturación O₂</dt>
+                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.oxygen_saturation}%</dd>
+                  </div>
+                )}
+                {physicalExamData.vitalSigns.weight && (
+                  <div>
+                    <dt className="text-sm text-gray-400">Peso</dt>
+                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.weight} kg</dd>
+                  </div>
+                )}
+                {physicalExamData.vitalSigns.height && (
+                  <div>
+                    <dt className="text-sm text-gray-400">Altura</dt>
+                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.height} cm</dd>
+                  </div>
+                )}
+                {physicalExamData.vitalSigns.bmi && (
+                  <div>
+                    <dt className="text-sm text-gray-400">IMC</dt>
+                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.bmi}</dd>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -345,20 +577,35 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
                     Temperatura (°C)
                   </label>
                   <input
-                    type="text"
-                    {...register('vital_signs.temperature')}
+                    type="number"
+                    step="0.1"
+                    {...register('vital_signs.temperature', {
+                      min: { value: 30, message: 'Temperatura muy baja' },
+                      max: { value: 45, message: 'Temperatura muy alta' }
+                    })}
                     className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                    placeholder="36.5"
                   />
+                  {errors.vital_signs?.temperature && (
+                    <p className="mt-1 text-xs text-red-400">{errors.vital_signs.temperature.message}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300">
                     Frecuencia Cardíaca (lpm)
                   </label>
                   <input
-                    type="text"
-                    {...register('vital_signs.heart_rate')}
+                    type="number"
+                    {...register('vital_signs.heart_rate', {
+                      min: { value: 30, message: 'Frecuencia muy baja' },
+                      max: { value: 220, message: 'Frecuencia muy alta' }
+                    })}
                     className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                    placeholder="70"
                   />
+                  {errors.vital_signs?.heart_rate && (
+                    <p className="mt-1 text-xs text-red-400">{errors.vital_signs.heart_rate.message}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300">
@@ -366,63 +613,94 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
                   </label>
                   <input
                     type="text"
-                    {...register('vital_signs.blood_pressure')}
+                    {...register('vital_signs.blood_pressure', {
+                      pattern: {
+                        value: /^\d{2,3}\/\d{2,3}$/,
+                        message: 'Formato: 120/80'
+                      }
+                    })}
                     className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                    placeholder="120/80"
                   />
+                  {errors.vital_signs?.blood_pressure && (
+                    <p className="mt-1 text-xs text-red-400">{errors.vital_signs.blood_pressure.message}</p>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Diagnóstico */}
+          {/* ✅ MEJORADO: Diagnóstico con validación */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Diagnóstico
+              Diagnóstico *
             </label>
             <textarea
-              {...register('diagnosis', { required: true })}
+              {...register('diagnosis', { 
+                required: 'El diagnóstico es requerido',
+                minLength: { value: 5, message: 'Mínimo 5 caracteres' },
+                maxLength: { value: 500, message: 'Máximo 500 caracteres' }
+              })}
               rows={3}
               className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Diagnóstico principal y diferenciales..."
             />
             {errors.diagnosis && (
-              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">{errors.diagnosis.message}</p>
             )}
+            <p className="mt-1 text-xs text-gray-400">
+              {watchedData.diagnosis?.length || 0}/500 caracteres
+            </p>
           </div>
 
-          {/* Pronóstico */}
+          {/* ✅ MEJORADO: Pronóstico con validación */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Pronóstico
+              Pronóstico *
             </label>
             <textarea
-              {...register('prognosis', { required: true })}
+              {...register('prognosis', { 
+                required: 'El pronóstico es requerido',
+                minLength: { value: 5, message: 'Mínimo 5 caracteres' },
+                maxLength: { value: 300, message: 'Máximo 300 caracteres' }
+              })}
               rows={2}
               className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Pronóstico esperado..."
             />
             {errors.prognosis && (
-              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">{errors.prognosis.message}</p>
             )}
+            <p className="mt-1 text-xs text-gray-400">
+              {watchedData.prognosis?.length || 0}/300 caracteres
+            </p>
           </div>
 
-          {/* Tratamiento */}
+          {/* ✅ MEJORADO: Tratamiento con validación */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Tratamiento
+              Tratamiento *
             </label>
             <textarea
-              {...register('treatment', { required: true })}
+              {...register('treatment', { 
+                required: 'El tratamiento es requerido',
+                minLength: { value: 10, message: 'Mínimo 10 caracteres' },
+                maxLength: { value: 1000, message: 'Máximo 1000 caracteres' }
+              })}
               rows={4}
               className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Plan de tratamiento, medicamentos, recomendaciones..."
             />
             {errors.treatment && (
-              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">{errors.treatment.message}</p>
             )}
+            <p className="mt-1 text-xs text-gray-400">
+              {watchedData.treatment?.length || 0}/1000 caracteres
+            </p>
           </div>
         </div>
 
+        {/* ✅ MEJORADO: Submit buttons */}
         <div className="mt-6 flex justify-end space-x-3">
           <button
             type="button"
@@ -434,11 +712,20 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading || !selectedTemplate || !physicalExamData}
           >
-            <Save className="h-4 w-4 mr-2" />
-            {loading ? 'Guardando...' : 'Guardar Consulta'}
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Guardar Consulta
+              </>
+            )}
           </button>
         </div>
       </form>
