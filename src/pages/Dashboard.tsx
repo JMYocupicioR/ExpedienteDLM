@@ -242,70 +242,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  // ✅ MEJORADO: Session check with retry logic
-  const checkSession = useCallback(async () => {
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) throw sessionError;
-      if (!session) {
-        navigate('/auth');
-        return;
-      }
-
-      // Get profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
-      if (profileError) throw profileError;
-
-      // If profile exists, use it
-      if (profile) {
-        setUserProfile(profile);
-      } else {
-        // Only create profile if it doesn't exist
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            id: session.user.id,
-            email: session.user.email,
-            role: 'doctor',
-            full_name: session.user.email?.split('@')[0] || 'Usuario'
-          })
-          .select('*')
-          .single();
-
-        if (createError) throw createError;
-        setUserProfile(newProfile);
-      }
-
-      // Check role permissions
-      const currentProfile = profile || userProfile;
-      if (currentProfile && !['administrator', 'doctor'].includes(currentProfile.role)) {
-        throw new Error('No tienes permisos para acceder a esta sección');
-      }
-
-      await fetchData();
-      setRetryCount(0); // Reset retry count on success
-      
-    } catch (error: any) {
-      console.error('Session check error:', error);
-      setError(error.message);
-      
-      if (retryCount < 3 && !error.message.includes('permisos')) {
-        setTimeout(() => {
-          setRetryCount(prev => prev + 1);
-          checkSession();
-        }, 2000 * (retryCount + 1)); // Exponential backoff
-      } else {
-        setTimeout(() => navigate('/auth'), 3000);
-      }
-    }
-  }, [navigate, retryCount, userProfile]);
-
   // ✅ NUEVO: Fetch all data with better error handling
   const fetchData = useCallback(async () => {
     try {
@@ -352,7 +288,71 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [calculateStats, currentPage, addNotification]);
+  }, [calculateStats, addNotification]);
+
+  // ✅ MEJORADO: Session check with retry logic
+  const checkSession = useCallback(async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) throw sessionError;
+      if (!session) {
+        navigate('/auth');
+        return;
+      }
+
+      // Get profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      // If profile exists, use it
+      if (profile) {
+        setUserProfile(profile);
+      } else {
+        // Only create profile if it doesn't exist
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            id: session.user.id,
+            email: session.user.email,
+            role: 'doctor',
+            full_name: session.user.email?.split('@')[0] || 'Usuario'
+          })
+          .select('*')
+          .single();
+
+        if (createError) throw createError;
+        setUserProfile(newProfile);
+      }
+
+      // Check role permissions - Fixed: Use profile or newProfile (which exists in the else branch)
+      const currentProfile = profile || userProfile;
+      if (currentProfile && !['administrator', 'doctor'].includes(currentProfile.role)) {
+        throw new Error('No tienes permisos para acceder a esta sección');
+      }
+
+      await fetchData();
+      setRetryCount(0); // Reset retry count on success
+      
+    } catch (error: any) {
+      console.error('Session check error:', error);
+      setError(error.message);
+      
+      if (retryCount < 3 && !error.message.includes('permisos')) {
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          checkSession();
+        }, 2000 * (retryCount + 1)); // Exponential backoff
+      } else {
+        setTimeout(() => navigate('/auth'), 3000);
+      }
+    }
+  }, [navigate, retryCount, fetchData]);
 
   // ✅ MEJORADO: Manual refresh with notification
   const handleRefresh = useCallback(() => {
