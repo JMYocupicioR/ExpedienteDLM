@@ -9,6 +9,8 @@ import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import ConsultationForm from '../components/ConsultationForm';
+import ConsultationDetails from '../components/ConsultationDetails';
+import ConsultationModal from '../components/ConsultationModal';
 import type { Database } from '../lib/database.types';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
@@ -777,101 +779,120 @@ export default function PatientRecord() {
               <h2 className="text-xl font-bold mb-6 text-white">Antecedentes Heredofamiliares</h2>
               
               <div className="space-y-6">
-                {hereditaryBackgrounds.map((background, index) => (
-                  <div key={background.id} className="border-b border-gray-600 pb-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-medium text-white">
-                        {background.relationship}
-                      </h3>
-                      {modoEdicion && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await supabase
-                                .from('hereditary_backgrounds')
-                                .delete()
-                                .eq('id', background.id);
-                              await fetchPatientData();
-                            } catch (error) {
-                              console.error('Error deleting background:', error);
-                            }
-                          }}
-                          className="text-red-400 hover:text-red-300 transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-gray-300">{background.condition}</p>
-                    {background.notes && (
-                      <p className="text-sm text-gray-400 mt-1">{background.notes}</p>
-                    )}
+                {hereditaryBackgrounds.length > 0 ? (
+                  <div className="space-y-4">
+                    {hereditaryBackgrounds.map((background, index) => (
+                      <div key={background.id} className="border border-gray-600 rounded-lg p-4 bg-gray-750">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-medium text-white">
+                            {background.relationship}
+                          </h3>
+                          {modoEdicion && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await supabase
+                                    .from('hereditary_backgrounds')
+                                    .delete()
+                                    .eq('id', background.id);
+                                  await fetchPatientData();
+                                } catch (error) {
+                                  console.error('Error deleting background:', error);
+                                }
+                              }}
+                              className="text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-gray-300">{background.condition}</p>
+                        {background.notes && (
+                          <p className="text-sm text-gray-400 mt-1">{background.notes}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-
-                {modoEdicion && (
-                  <div className="border-t border-gray-600 pt-6">
-                    <h3 className="font-medium text-white mb-4">Agregar Antecedente</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300">
-                          Parentesco
-                        </label>
-                        <input
-                          type="text"
-                          id="new-relationship"
-                          className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300">
-                          Condición
-                        </label>
-                        <input
-                          type="text"
-                          id="new-condition"
-                          className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-300">
-                          Notas
-                        </label>
-                        <textarea
-                          id="new-notes"
-                          rows={2}
-                          className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <button
-                          onClick={() => {
-                            const relationship = (document.getElementById('new-relationship') as HTMLInputElement).value;
-                            const condition = (document.getElementById('new-condition') as HTMLInputElement).value;
-                            const notes = (document.getElementById('new-notes') as HTMLTextAreaElement).value;
-                            
-                            if (relationship && condition && id) {
-                              handleAddHereditaryBackground({
-                                patient_id: id,
-                                relationship,
-                                condition,
-                                notes: notes || null
-                              });
-                              
-                              // Clear inputs
-                              (document.getElementById('new-relationship') as HTMLInputElement).value = '';
-                              (document.getElementById('new-condition') as HTMLInputElement).value = '';
-                              (document.getElementById('new-notes') as HTMLTextAreaElement).value = '';
-                            }
-                          }}
-                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                        >
-                          Agregar
-                        </button>
-                      </div>
-                    </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-750 rounded-lg border border-gray-600">
+                    <Dna className="mx-auto h-12 w-12 text-gray-500 mb-3" />
+                    <p className="text-gray-400">No hay antecedentes heredofamiliares registrados</p>
                   </div>
                 )}
+
+                {/* Formulario siempre visible */}
+                <div className="border-t border-gray-600 pt-6">
+                  <h3 className="font-medium text-white mb-4">Agregar Nuevo Antecedente</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Parentesco *
+                      </label>
+                      <input
+                        type="text"
+                        id="new-relationship"
+                        placeholder="Ej: Madre, Padre, Hermano..."
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600 placeholder-gray-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Condición o Enfermedad *
+                      </label>
+                      <input
+                        type="text"
+                        id="new-condition"
+                        placeholder="Ej: Diabetes, Hipertensión..."
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600 placeholder-gray-400"
+                      />
+                    </div>
+                    <div className="col-span-1 md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Notas Adicionales (Opcional)
+                      </label>
+                      <textarea
+                        id="new-notes"
+                        rows={3}
+                        placeholder="Información adicional relevante..."
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600 placeholder-gray-400"
+                      />
+                    </div>
+                    <div className="col-span-1 md:col-span-2">
+                      <button
+                        onClick={() => {
+                          const relationship = (document.getElementById('new-relationship') as HTMLInputElement).value.trim();
+                          const condition = (document.getElementById('new-condition') as HTMLInputElement).value.trim();
+                          const notes = (document.getElementById('new-notes') as HTMLTextAreaElement).value.trim();
+                          
+                          if (!relationship || !condition) {
+                            setError('Por favor completa los campos obligatorios (Parentesco y Condición)');
+                            setTimeout(() => setError(null), 3000);
+                            return;
+                          }
+                          
+                          if (relationship && condition && id) {
+                            handleAddHereditaryBackground({
+                              patient_id: id,
+                              relationship,
+                              condition,
+                              notes: notes || null
+                            });
+                            
+                            // Clear inputs
+                            (document.getElementById('new-relationship') as HTMLInputElement).value = '';
+                            (document.getElementById('new-condition') as HTMLInputElement).value = '';
+                            (document.getElementById('new-notes') as HTMLTextAreaElement).value = '';
+                          }
+                        }}
+                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Agregar Antecedente
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">* Campos obligatorios</p>
+                </div>
               </div>
             </div>
           )}
@@ -955,44 +976,7 @@ export default function PatientRecord() {
                             {expandedConsultation === consultation.id && (
                               <tr>
                                 <td colSpan={5} className="px-4 py-6 bg-gray-750">
-                                  <div className="space-y-4">
-                                    <div>
-                                      <h4 className="font-medium text-white mb-2">Padecimiento Actual</h4>
-                                      <p className="text-gray-300 text-sm">{consultation.current_condition}</p>
-                                    </div>
-
-                                    <div>
-                                      <h4 className="font-medium text-white mb-2">Signos Vitales</h4>
-                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        {Object.entries(consultation.vital_signs as any || {}).map(([key, value]) => (
-                                          <div key={key} className="bg-gray-700 rounded p-3">
-                                            <dt className="text-xs text-gray-400 uppercase tracking-wide">{key.replace('_', ' ')}</dt>
-                                            <dd className="text-sm font-medium text-white mt-1">{value as string}</dd>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-
-                                    {consultation.physical_examination && (
-                                      <div>
-                                        <h4 className="font-medium text-white mb-2">Exploración Física</h4>
-                                        <div className="bg-gray-700 rounded p-4">
-                                          <p className="text-gray-300 text-sm">Examen físico realizado</p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      <div>
-                                        <h4 className="font-medium text-white mb-2">Pronóstico</h4>
-                                        <p className="text-gray-300 text-sm bg-gray-700 rounded p-3">{consultation.prognosis}</p>
-                                      </div>
-                                      <div>
-                                        <h4 className="font-medium text-white mb-2">Tratamiento</h4>
-                                        <p className="text-gray-300 text-sm bg-gray-700 rounded p-3">{consultation.treatment}</p>
-                                      </div>
-                                    </div>
-                                  </div>
+                                  <ConsultationDetails consultation={consultation} />
                                 </td>
                               </tr>
                             )}
