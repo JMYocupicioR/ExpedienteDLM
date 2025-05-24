@@ -190,16 +190,16 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
 
   if (showPhysicalExam && selectedTemplate) {
     return (
-      <div className="bg-white rounded-lg shadow-lg max-w-6xl w-full mx-auto max-h-[90vh] overflow-y-auto">
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900">Exploración Física - {selectedTemplate.name}</h2>
+      <div className="bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-auto max-h-[90vh] overflow-y-auto border border-gray-700">
+        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-white">Exploración Física - {selectedTemplate.name}</h2>
           <div className="flex items-center space-x-4">
             {autoSaveStatus && (
-              <span className="text-sm text-gray-600">{autoSaveStatus}</span>
+              <span className="text-sm text-gray-300">{autoSaveStatus}</span>
             )}
             <button
               onClick={() => setShowPhysicalExam(false)}
-              className="text-gray-400 hover:text-gray-500"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -220,20 +220,20 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full mx-auto max-h-[90vh] overflow-y-auto">
-      <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-gray-900">Nueva Consulta</h2>
+    <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-auto max-h-[90vh] overflow-y-auto border border-gray-700">
+      <div className="p-6 border-b border-gray-700 flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-white">Nueva Consulta</h2>
         <div className="flex items-center space-x-4">
           <button
             onClick={generatePDF}
-            className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            className="flex items-center px-3 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors"
           >
             <FileText className="h-4 w-4 mr-2" />
             Generar PDF
           </button>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -242,7 +242,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
 
       <form onSubmit={handleSubmit(onSubmit)} className="p-6">
         {error && (
-          <div className="mb-6 bg-red-50 text-red-600 p-3 rounded-lg text-sm">
+          <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm">
             {error}
           </div>
         )}
@@ -250,39 +250,39 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         <div className="space-y-6">
           {/* Padecimiento Actual */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Padecimiento Actual
             </label>
             <textarea
               {...register('current_condition', { required: true })}
               rows={4}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Describe el motivo de consulta y síntomas principales..."
             />
             {errors.current_condition && (
-              <p className="mt-1 text-sm text-red-600">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
             )}
           </div>
 
           {/* Exploración Física */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Exploración Física</h3>
+            <h3 className="text-lg font-medium text-white mb-4">Exploración Física</h3>
             
             {!selectedTemplate ? (
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+              <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 bg-gray-750">
                 <PhysicalExamTemplates
                   onSelectTemplate={handleTemplateSelect}
                   doctorId={doctorId}
                 />
               </div>
             ) : (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h4 className="font-medium text-green-800">Plantilla Seleccionada:</h4>
-                    <p className="text-green-700">{selectedTemplate.name}</p>
+                    <h4 className="font-medium text-green-300">Plantilla Seleccionada:</h4>
+                    <p className="text-green-200">{selectedTemplate.name}</p>
                     {physicalExamData && (
-                      <p className="text-sm text-green-600 mt-1">
+                      <p className="text-sm text-green-400 mt-1">
                         ✓ Examen físico completado - {physicalExamData.examDate} {physicalExamData.examTime}
                       </p>
                     )}
@@ -291,7 +291,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
                     <button
                       type="button"
                       onClick={() => setShowPhysicalExam(true)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
                     >
                       {physicalExamData ? 'Editar Examen' : 'Realizar Examen'}
                     </button>
@@ -301,7 +301,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
                         setSelectedTemplate(null);
                         setPhysicalExamData(null);
                       }}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
+                      className="px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors text-sm"
                     >
                       Cambiar Plantilla
                     </button>
@@ -313,61 +313,61 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
 
           {/* Signos Vitales (Read-only if physical exam completed) */}
           {physicalExamData ? (
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Signos Vitales (del Examen Físico)</h3>
+            <div className="bg-blue-900/30 border border-blue-700 p-4 rounded-lg">
+              <h3 className="text-lg font-medium text-white mb-4">Signos Vitales (del Examen Físico)</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <dt className="text-sm text-gray-600">Presión Arterial</dt>
-                  <dd className="text-sm font-medium text-gray-900">
+                  <dt className="text-sm text-gray-400">Presión Arterial</dt>
+                  <dd className="text-sm font-medium text-white">
                     {physicalExamData.vitalSigns.systolic_pressure}/{physicalExamData.vitalSigns.diastolic_pressure} mmHg
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-600">Frecuencia Cardíaca</dt>
-                  <dd className="text-sm font-medium text-gray-900">{physicalExamData.vitalSigns.heart_rate} lpm</dd>
+                  <dt className="text-sm text-gray-400">Frecuencia Cardíaca</dt>
+                  <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.heart_rate} lpm</dd>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-600">Temperatura</dt>
-                  <dd className="text-sm font-medium text-gray-900">{physicalExamData.vitalSigns.temperature} °C</dd>
+                  <dt className="text-sm text-gray-400">Temperatura</dt>
+                  <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.temperature} °C</dd>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-600">Frecuencia Respiratoria</dt>
-                  <dd className="text-sm font-medium text-gray-900">{physicalExamData.vitalSigns.respiratory_rate} rpm</dd>
+                  <dt className="text-sm text-gray-400">Frecuencia Respiratoria</dt>
+                  <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.respiratory_rate} rpm</dd>
                 </div>
               </div>
             </div>
           ) : (
             <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Signos Vitales Básicos</h3>
+              <h3 className="text-lg font-medium text-white mb-4">Signos Vitales Básicos</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-300">
                     Temperatura (°C)
                   </label>
                   <input
                     type="text"
                     {...register('vital_signs.temperature')}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-300">
                     Frecuencia Cardíaca (lpm)
                   </label>
                   <input
                     type="text"
                     {...register('vital_signs.heart_rate')}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-300">
                     Presión Arterial (mmHg)
                   </label>
                   <input
                     type="text"
                     {...register('vital_signs.blood_pressure')}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                   />
                 </div>
               </div>
@@ -376,49 +376,49 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
 
           {/* Diagnóstico */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Diagnóstico
             </label>
             <textarea
               {...register('diagnosis', { required: true })}
               rows={3}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Diagnóstico principal y diferenciales..."
             />
             {errors.diagnosis && (
-              <p className="mt-1 text-sm text-red-600">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
             )}
           </div>
 
           {/* Pronóstico */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Pronóstico
             </label>
             <textarea
               {...register('prognosis', { required: true })}
               rows={2}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Pronóstico esperado..."
             />
             {errors.prognosis && (
-              <p className="mt-1 text-sm text-red-600">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
             )}
           </div>
 
           {/* Tratamiento */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Tratamiento
             </label>
             <textarea
               {...register('treatment', { required: true })}
               rows={4}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
               placeholder="Plan de tratamiento, medicamentos, recomendaciones..."
             />
             {errors.treatment && (
-              <p className="mt-1 text-sm text-red-600">Este campo es requerido</p>
+              <p className="mt-1 text-sm text-red-400">Este campo es requerido</p>
             )}
           </div>
         </div>
@@ -427,14 +427,14 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-500"
+            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
             disabled={loading}
           >
             Cancelar
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center disabled:opacity-50"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50"
             disabled={loading || !selectedTemplate || !physicalExamData}
           >
             <Save className="h-4 w-4 mr-2" />
