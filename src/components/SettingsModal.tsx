@@ -37,6 +37,7 @@ interface PrescriptionStyleSettings {
   titleNotes: string;
   titleSignature: string;
   titleValidity: string;
+  logoUrl?: string;
 }
 
 interface UserProfile {
@@ -81,6 +82,8 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -148,6 +151,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
     titleNotes: 'Indicaciones Adicionales',
     titleSignature: 'Firma del Médico',
     titleValidity: 'Validez de la Receta',
+    logoUrl: undefined,
   };
   
   const [prescriptionStyle, setPrescriptionStyle] = useState<PrescriptionStyleSettings>(initialPrescriptionStyle);
@@ -373,6 +377,62 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    setLogoUploadError(null);
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!userProfile) {
+      setLogoUploadError('Perfil de usuario no encontrado.');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        setLogoUploadError('El archivo del logo no debe exceder los 2MB.');
+        return;
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userProfile.id}-${Date.now()}.${fileExt}`;
+    const bucketName = 'logos'; // <<< IMPORTANT: Change if your bucket name is different
+
+    setIsUploadingLogo(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: true, // Overwrite if file with same name exists for this user
+        });
+
+      if (error) {
+        console.error('Error uploading logo:', error);
+        setLogoUploadError(`Error al subir el logo: ${error.message}`);
+        throw error;
+      }
+
+      // Get public URL
+      const { data: publicURLData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+      
+      if (!publicURLData.publicUrl) {
+        setLogoUploadError('No se pudo obtener la URL pública del logo.');
+        throw new Error('No se pudo obtener la URL pública del logo.');
+      }
+
+      setPrescriptionStyle(prev => ({ ...prev, logoUrl: publicURLData.publicUrl }));
+      setSuccessMessage('Logo actualizado correctamente.');
+
+    } catch (err: any) {
+      // Error state already set or will be set by specific checks
+    } finally {
+      setIsUploadingLogo(false);
+       // Clear the file input so the same file can be re-selected if needed after an error
+      event.target.value = '';
     }
   };
 
@@ -1076,6 +1136,27 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                               </div>
                             </div>
                             
+                            {/* Logo Upload */}
+                            <div className="mt-6 pt-6 border-t border-gray-700">
+                              <h4 className="text-md font-medium text-white mb-3">Logotipo de la Clínica</h4>
+                              <input 
+                                type="file"
+                                accept="image/png, image/jpeg, image/svg+xml, image/webp"
+                                onChange={handleLogoUpload}
+                                disabled={isUploadingLogo}
+                                className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50"
+                              />
+                              {isUploadingLogo && <p className="text-sm text-blue-400 mt-2 flex items-center"><Loader2 className="h-4 w-4 mr-2 animate-spin"/> Subiendo logo...</p>}
+                              {logoUploadError && <p className="text-sm text-red-400 mt-2">{logoUploadError}</p>}
+                              {prescriptionStyle.logoUrl && !isUploadingLogo && !logoUploadError && (
+                                <div className="mt-3">
+                                  <p className="text-xs text-gray-400 mb-1">Logo actual:</p>
+                                  <img src={prescriptionStyle.logoUrl} alt="Logo de la clínica" className="max-h-20 rounded border border-gray-600 bg-gray-700 p-1" />
+                                </div>
+                              )}
+                               <p className="text-xs text-gray-500 mt-2">Recomendado: PNG, JPG, SVG o WEBP. Máximo 2MB. Fondo transparente ideal.</p>
+                            </div>
+
                             {/* Vista previa */}
                             <div className="mt-8 p-4 bg-gray-900 rounded-lg border border-gray-700 relative">
                                {prescriptionStyle.includeWatermark && (
@@ -1118,9 +1199,13 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                                   {prescriptionStyle.showLogo && (
                                     <div style={{ textAlign: prescriptionStyle.logoPosition === 'center' ? 'center' : prescriptionStyle.logoPosition, width: prescriptionStyle.logoPosition === 'center' ? '100%' : 'auto', marginTop: prescriptionStyle.logoPosition === 'center' ? '10px' : '0'}}>
                                       {/* Placeholder for logo */}
-                                      <div style={{ width: '80px', height: '80px', background: prescriptionStyle.secondaryColor + '22', color: prescriptionStyle.secondaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5em', borderRadius: '4px', fontWeight: 'bold' }}>
-                                        LOGO
-                                      </div>
+                                      {prescriptionStyle.logoUrl ? (
+                                        <img src={prescriptionStyle.logoUrl} alt="Logo" style={{ maxHeight: '80px', maxWidth: '150px', height: 'auto', borderRadius: '4px' }} />
+                                      ) : (
+                                        <div style={{ width: '80px', height: '80px', background: prescriptionStyle.secondaryColor + '22', color: prescriptionStyle.secondaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5em', borderRadius: '4px', fontWeight: 'bold' }}>
+                                          LOGO
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
