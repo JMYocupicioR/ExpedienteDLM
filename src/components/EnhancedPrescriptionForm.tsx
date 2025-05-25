@@ -3,6 +3,7 @@ import { QrCode, AlertCircle, CheckCircle, Printer, Save, Eye, Shield, History, 
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import QRCode from 'qrcode';
+import { useNavigate } from 'react-router-dom';
 
 interface Medication {
   name: string;
@@ -17,6 +18,8 @@ interface EnhancedPrescriptionFormProps {
   patientName: string;
   onSave: (prescription: any) => void;
   previousPrescriptions?: any[];
+  patients?: { id: string; full_name: string }[];
+  onPatientChange?: (patientId: string) => void;
 }
 
 // Base de datos de medicamentos comunes para autocompletado
@@ -45,8 +48,11 @@ export default function EnhancedPrescriptionForm({
   patientId, 
   patientName, 
   onSave,
-  previousPrescriptions = []
+  previousPrescriptions = [],
+  patients = [],
+  onPatientChange
 }: EnhancedPrescriptionFormProps) {
+  const navigate = useNavigate();
   const [medications, setMedications] = useState<Medication[]>([{
     name: '',
     dosage: '',
@@ -119,7 +125,7 @@ export default function EnhancedPrescriptionForm({
         });
       }
     });
-    setDrugAlerts([...new Set(alerts)]);
+    setDrugAlerts(Array.from(new Set(alerts)));
   }, [medications]);
 
   // Autocompletado de medicamentos
@@ -265,6 +271,39 @@ export default function EnhancedPrescriptionForm({
           <span className="text-yellow-300 text-sm">Modo offline: Las recetas se guardarán localmente</span>
         </div>
       )}
+
+      {/* Selector de paciente */}
+      <div className="dark-card p-4">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Paciente <span className="text-red-400">*</span>
+        </label>
+        <div className="flex gap-3">
+          <select
+            value={patientId}
+            onChange={(e) => onPatientChange && onPatientChange(e.target.value)}
+            className="flex-1 dark-input"
+            required
+          >
+            <option value="">Seleccione un paciente</option>
+            {patients.map((patient) => (
+              <option key={patient.id} value={patient.id}>
+                {patient.full_name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => navigate('/patients?action=new')}
+            className="px-4 py-2 dark-button-secondary text-sm"
+            title="Registrar nuevo paciente"
+          >
+            + Nuevo
+          </button>
+        </div>
+        {!patientId && (
+          <p className="mt-1 text-xs text-yellow-400">Debe seleccionar un paciente para continuar</p>
+        )}
+      </div>
 
       {/* Alertas de interacciones medicamentosas */}
       {drugAlerts.length > 0 && (
@@ -526,7 +565,18 @@ export default function EnhancedPrescriptionForm({
           <div className="mt-4 flex space-x-3">
             <button
               onClick={handleSave}
-              className="flex-1 dark-button-primary flex items-center justify-center"
+              disabled={!patientId || !diagnosis || medications.filter(m => m.name).length === 0}
+              className={`flex-1 flex items-center justify-center ${
+                !patientId || !diagnosis || medications.filter(m => m.name).length === 0
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : 'dark-button-primary'
+              }`}
+              title={
+                !patientId ? 'Seleccione un paciente' :
+                !diagnosis ? 'Ingrese un diagnóstico' :
+                medications.filter(m => m.name).length === 0 ? 'Agregue al menos un medicamento' :
+                'Guardar receta'
+              }
             >
               <Save className="h-4 w-4 mr-2" />
               Guardar
@@ -534,7 +584,12 @@ export default function EnhancedPrescriptionForm({
             
             <button
               onClick={handlePrint}
-              className="flex-1 dark-button-secondary flex items-center justify-center"
+              disabled={!patientId || !diagnosis || medications.filter(m => m.name).length === 0}
+              className={`flex-1 flex items-center justify-center ${
+                !patientId || !diagnosis || medications.filter(m => m.name).length === 0
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : 'dark-button-secondary'
+              }`}
             >
               <Printer className="h-4 w-4 mr-2" />
               Imprimir
