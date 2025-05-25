@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, FileText, Search, User, Printer, Download, Eye, Clock, AlertTriangle,
-  Activity, QrCode, Save, Shield, History, Wifi, WifiOff, CheckCircle, AlertCircle
+  Activity, QrCode, Save, Shield, History, Wifi, WifiOff, CheckCircle, AlertCircle, Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -52,6 +52,8 @@ export default function PrescriptionDashboard() {
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedPatientName, setSelectedPatientName] = useState('');
   const [prescriptionHistory, setPrescriptionHistory] = useState<Prescription[]>([]);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
 
   useEffect(() => {
     fetchPrescriptions();
@@ -144,37 +146,104 @@ export default function PrescriptionDashboard() {
     }
   };
 
+  const validatePrescription = (prescriptionData: any) => {
+    if (!prescriptionData.patient_id) {
+      throw new Error('Debe seleccionar un paciente');
+    }
+    if (!prescriptionData.diagnosis) {
+      throw new Error('Debe ingresar un diagnóstico');
+    }
+    if (!prescriptionData.medications?.length || prescriptionData.medications.every((m: any) => !m.name)) {
+      throw new Error('Debe agregar al menos un medicamento con nombre');
+    }
+    if (!prescriptionData.medications.every((m: any) => m.name && m.dosage && m.frequency && m.duration)) {
+      throw new Error('Todos los medicamentos deben tener nombre, dosis, frecuencia y duración');
+    }
+  };
+  
+  const checkPermissions = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('Usuario no autenticado.');
+    }
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+  
+    if (profileError) {
+      console.error('Error fetching profile:', profileError);
+      throw new Error('Error al verificar permisos.');
+    }
+      
+    if (!profile || (profile.role !== 'doctor' && profile.role !== 'administrator')) {
+      throw new Error('No tiene permisos para crear recetas');
+    }
+    return user.id; // Return user_id to be used as doctor_id
+  };
+
   const handleNewPrescription = async (prescriptionData: any) => {
+    setSaveStatus('saving');
+    setSaveMessage('Guardando receta...');
+    setError(null);
+
     try {
       setIsLoading(true);
       
-      const { data, error } = await supabase
+      const doctorId = await checkPermissions();
+      validatePrescription(prescriptionData);
+
+      // Verificar que el paciente existe
+      const { data: patient, error: patientError } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('id', prescriptionData.patient_id)
+        .single();
+        
+      if (patientError || !patient) {
+        console.error('Patient fetch error:', patientError);
+        throw new Error('Paciente no encontrado o error al verificar paciente.');
+      }
+      
+      const { data, error: insertError } = await supabase
         .from('prescriptions')
         .insert({
           ...prescriptionData,
+          doctor_id: doctorId, 
           status: 'active'
         })
         .select();
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
       // Si hay consulta activa, asociar la receta
       const consultationId = searchParams.get('consulta');
       if (consultationId && data?.[0]?.id) {
-        await supabase
+        const { error: consultationPrescriptionError } = await supabase
           .from('consultation_prescriptions')
           .insert({
             consultation_id: consultationId,
             prescription_id: data[0].id
           });
+        if (consultationPrescriptionError) {
+          console.error('Error al asociar receta con consulta:', consultationPrescriptionError.message);
+          // Decide if this should be a critical error or just a warning
+          setSaveMessage('Receta creada, pero hubo un problema al asociarla con la consulta.');
+        }
       }
 
       await fetchPrescriptions();
       setActiveTab('dashboard');
       
-      alert('Receta creada exitosamente');
+      setSaveStatus('success');
+      setSaveMessage('Receta creada exitosamente');
+      // alert('Receta creada exitosamente'); // Replaced with saveMessage
     } catch (err: any) {
+      console.error('Error detallado al crear la receta:', err);
       setError(err.message || 'Error al crear la receta');
+      setSaveStatus('error');
+      setSaveMessage(err.message || 'Error al crear la receta');
     } finally {
       setIsLoading(false);
     }
@@ -699,6 +768,8 @@ export default function PrescriptionDashboard() {
             previousPrescriptions={prescriptionHistory}
             patients={patients}
             onPatientChange={setSelectedPatientId}
+            saveStatus={saveStatus}
+            saveMessage={saveMessage}
           />
         )}
 
@@ -862,6 +933,8 @@ interface EnhancedPrescriptionFormProps {
   previousPrescriptions?: any[];
   patients?: Patient[];
   onPatientChange?: (patientId: string) => void;
+  saveStatus?: 'idle' | 'saving' | 'success' | 'error';
+  saveMessage?: string;
 }
 
 // Base de datos de medicamentos comunes para autocompletado
@@ -892,7 +965,9 @@ function EnhancedPrescriptionForm({
   onSave,
   previousPrescriptions = [],
   patients = [],
-  onPatientChange
+  onPatientChange,
+  saveStatus = 'idle',
+  saveMessage = ''
 }: EnhancedPrescriptionFormProps) {
   const navigate = useNavigate();
   const [medications, setMedications] = useState<Medication[]>([{
@@ -1109,6 +1184,19 @@ function EnhancedPrescriptionForm({
         <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-3 flex items-center">
           <WifiOff className="h-5 w-5 text-yellow-400 mr-2" />
           <span className="text-yellow-300 text-sm">Modo offline: Las recetas se guardarán localmente</span>
+        </div>
+      )}
+
+      {/* Save status message */}
+      {saveMessage && (
+        <div 
+          className={`p-3 rounded-md text-sm 
+            ${saveStatus === 'success' ? 'bg-green-900/30 border border-green-500 text-green-300' : ''}
+            ${saveStatus === 'error' ? 'bg-red-900/30 border border-red-500 text-red-300' : ''}
+            ${saveStatus === 'saving' ? 'bg-blue-900/30 border border-blue-500 text-blue-300' : ''}
+          `}
+        >
+          {saveMessage}
         </div>
       )}
 
@@ -1409,9 +1497,9 @@ function EnhancedPrescriptionForm({
           <div className="mt-4 flex space-x-3">
             <button
               onClick={handleSave}
-              disabled={!patientId || !diagnosis || medications.filter(m => m.name).length === 0}
+              disabled={!patientId || !diagnosis || medications.filter(m => m.name).length === 0 || saveStatus === 'saving'}
               className={`flex-1 flex items-center justify-center ${
-                !patientId || !diagnosis || medications.filter(m => m.name).length === 0
+                !patientId || !diagnosis || medications.filter(m => m.name).length === 0 || saveStatus === 'saving'
                   ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                   : 'dark-button-primary'
               }`}
@@ -1422,8 +1510,11 @@ function EnhancedPrescriptionForm({
                 'Guardar receta'
               }
             >
-              <Save className="h-4 w-4 mr-2" />
-              Guardar
+              {saveStatus === 'saving' ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Guardando...</>
+              ) : (
+                <><Save className="h-4 w-4 mr-2" /> Guardar</>
+              )}
             </button>
             
             <button
