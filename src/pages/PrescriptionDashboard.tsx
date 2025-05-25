@@ -397,7 +397,7 @@ export default function PrescriptionDashboard() {
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     
-    const items = Array.from(sectionOrder);
+    const items = Array.from(sectionOrder) as string[];
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
     
@@ -929,6 +929,11 @@ export default function PrescriptionDashboard() {
             patientName={patients.find(p => p.id === (newPrescription.patient_id || searchParams.get('paciente')))?.full_name || ''}
             onSave={handleNewPrescription}
             previousPrescriptions={prescriptionHistory}
+            patients={patients}
+            onPatientChange={(patientId: string) => {
+              setNewPrescription(prev => ({ ...prev, patient_id: patientId }));
+              fetchPrescriptionHistory(patientId);
+            }}
           />
         )}
 
