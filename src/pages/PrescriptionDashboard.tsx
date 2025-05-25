@@ -8,9 +8,13 @@ import {
   Printer, Download, Edit, Eye, Clock, AlertTriangle,
   Pill, Stethoscope, Activity, BookOpen, Save, Copy,
   GripVertical, RotateCcw, Settings, Shield, QrCode,
-  History, Wifi, WifiOff, CheckCircle, AlertCircle
+  History, Wifi, WifiOff, CheckCircle, AlertCircle,
+  BarChart, TrendingUp, Package, Send, Building
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import EnhancedPrescriptionForm from '../components/EnhancedPrescriptionForm';
+import PrescriptionAnalytics from '../components/PrescriptionAnalytics';
+import PharmacyIntegration from '../components/PharmacyIntegration';
 
 interface SectionData {
   id: string;
@@ -72,13 +76,14 @@ export default function PrescriptionDashboard() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [predefinedPrescriptions, setPredefinedPrescriptions] = useState<PredefinedPrescription[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new' | 'history' | 'templates' | 'layout'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new' | 'history' | 'templates' | 'layout' | 'analytics' | 'pharmacy'>('dashboard');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired' | 'dispensed'>('all');
   const [patients, setPatients] = useState<{id: string, full_name: string}[]>([]);
+  const [prescriptionHistory, setPrescriptionHistory] = useState<Prescription[]>([]);
   
   // Nueva receta
   const [newPrescription, setNewPrescription] = useState<NewPrescriptionData>({
@@ -137,7 +142,27 @@ export default function PrescriptionDashboard() {
   const fetchPrescriptions = async () => {
     try {
       setIsLoading(true);
-      // Simulando datos de recetas
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select(`
+          *,
+          patients (
+            full_name
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedPrescriptions = data?.map(p => ({
+        ...p,
+        patient_name: p.patients?.full_name || 'Desconocido'
+      })) || [];
+
+      setPrescriptions(formattedPrescriptions);
+    } catch (err) {
+      console.error('Error fetching prescriptions:', err);
+      // Usar datos mock si hay error
       const mockPrescriptions: Prescription[] = [
         {
           id: '1',
@@ -157,30 +182,9 @@ export default function PrescriptionDashboard() {
           created_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           status: 'active'
-        },
-        {
-          id: '2',
-          patient_id: '2',
-          patient_name: 'María García',
-          medications: [
-            {
-              name: 'Ibuprofeno',
-              dosage: '400mg',
-              frequency: 'Cada 6 horas',
-              duration: '5 días',
-              instructions: 'Después de las comidas'
-            }
-          ],
-          diagnosis: 'Dolor lumbar',
-          notes: '',
-          created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-          expires_at: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString(),
-          status: 'active'
         }
       ];
       setPrescriptions(mockPrescriptions);
-    } catch (err) {
-      setError('Error al cargar las recetas');
     } finally {
       setIsLoading(false);
     }
@@ -228,29 +232,59 @@ export default function PrescriptionDashboard() {
     }
   };
 
-  const handleNewPrescription = async () => {
+  const fetchPrescriptionHistory = async (patientId: string) => {
+    if (!patientId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('*')
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setPrescriptionHistory(data || []);
+    } catch (err) {
+      console.error('Error fetching prescription history:', err);
+      setPrescriptionHistory([]);
+    }
+  };
+
+  const handleNewPrescription = async (prescriptionData: any) => {
     try {
       setIsLoading(true);
-      // Aquí iría la lógica para guardar la nueva receta
-      console.log('Nueva receta:', newPrescription);
+      
+      // Guardar en la base de datos
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .insert({
+          ...prescriptionData,
+          status: 'active'
+        })
+        .select();
+
+      if (error) throw error;
+
+      // Si hay consulta activa, asociar la receta
+      const consultationId = searchParams.get('consulta');
+      if (consultationId && data?.[0]?.id) {
+        await supabase
+          .from('consultation_prescriptions')
+          .insert({
+            consultation_id: consultationId,
+            prescription_id: data[0].id
+          });
+      }
+
       await fetchPrescriptions();
       setActiveTab('dashboard');
-      // Reset form
-      setNewPrescription({
-        patient_id: '',
-        medications: [{
-          name: '',
-          dosage: '',
-          frequency: '',
-          duration: '',
-          instructions: ''
-        }],
-        diagnosis: '',
-        notes: '',
-        expires_at: ''
-      });
-    } catch (err) {
-      setError('Error al crear la receta');
+      
+      // Mostrar notificación de éxito
+      setError(null);
+      alert('Receta creada exitosamente');
+    } catch (err: any) {
+      setError(err.message || 'Error al crear la receta');
     } finally {
       setIsLoading(false);
     }
@@ -499,6 +533,126 @@ export default function PrescriptionDashboard() {
     }
   }, []);
 
+  // Funciones para manejar acciones de prescripciones
+  const handleViewPrescription = (prescription: Prescription) => {
+    // Abrir modal o navegador para ver detalles
+    console.log('Ver prescripción:', prescription);
+    // Aquí podrías abrir un modal con los detalles completos
+  };
+
+  const handlePrintPrescription = async (prescription: Prescription) => {
+    // Preparar la prescripción para impresión
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Receta Médica - ${prescription.patient_name}</title>
+        <style>
+          body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+          .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
+          .patient-info { margin-bottom: 20px; }
+          .medications { margin-bottom: 30px; }
+          .medication-item { margin-bottom: 15px; padding: 10px; border-left: 3px solid #0066cc; padding-left: 15px; }
+          .footer { margin-top: 50px; text-align: center; }
+          .signature-line { border-top: 1px solid #333; width: 200px; margin: 40px auto 10px; }
+          @media print { body { margin: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>RECETA MÉDICA</h1>
+          <p>Dr. Juan Médico<br>Cédula Profesional: 12345678</p>
+        </div>
+        <div class="patient-info">
+          <p><strong>Paciente:</strong> ${prescription.patient_name}</p>
+          <p><strong>Fecha:</strong> ${format(new Date(prescription.created_at), 'dd/MM/yyyy')}</p>
+          <p><strong>Diagnóstico:</strong> ${prescription.diagnosis}</p>
+        </div>
+        <div class="medications">
+          <h3>Prescripción:</h3>
+          ${prescription.medications.map(med => `
+            <div class="medication-item">
+              <strong>${med.name}</strong> - ${med.dosage}<br>
+              Frecuencia: ${med.frequency} por ${med.duration}<br>
+              ${med.instructions ? `Instrucciones: ${med.instructions}` : ''}
+            </div>
+          `).join('')}
+        </div>
+        ${prescription.notes ? `<p><strong>Notas:</strong> ${prescription.notes}</p>` : ''}
+        <div class="footer">
+          <div class="signature-line"></div>
+          <p>Firma del Médico</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const handleDownloadPrescription = async (prescription: Prescription) => {
+    // Generar PDF o archivo de la prescripción
+    // Por ahora, descargamos como JSON
+    const dataStr = JSON.stringify(prescription, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `receta_${prescription.patient_name}_${format(new Date(), 'yyyyMMdd')}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  // Función para gestionar plantillas
+  const handleUseTemplate = (template: PredefinedPrescription) => {
+    setNewPrescription(prev => ({
+      ...prev,
+      medications: template.medications,
+      diagnosis: template.diagnosis,
+      notes: template.notes
+    }));
+    setActiveTab('new');
+  };
+
+  const handleEditTemplate = (template: PredefinedPrescription) => {
+    // Abrir editor de plantilla
+    console.log('Editar plantilla:', template);
+  };
+
+  // Función para cargar historial cuando cambia el paciente
+  useEffect(() => {
+    if (newPrescription.patient_id) {
+      fetchPrescriptionHistory(newPrescription.patient_id);
+    }
+  }, [newPrescription.patient_id]);
+
+  // Atajos de teclado
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ctrl+Enter para guardar
+      if (e.ctrlKey && e.key === 'Enter' && activeTab === 'new') {
+        e.preventDefault();
+        // Trigger save
+        document.querySelector('form')?.requestSubmit();
+      }
+      
+      // Ctrl+P para imprimir
+      if (e.ctrlKey && e.key === 'p' && activeTab === 'layout') {
+        e.preventDefault();
+        handlePrint();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [activeTab]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950">
       {/* Header */}
@@ -531,20 +685,22 @@ export default function PrescriptionDashboard() {
       {/* Navigation Tabs */}
       <div className="dark-card border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-8">
+          <nav className="flex space-x-8 overflow-x-auto">
             {[
               { id: 'dashboard', label: 'Panel Principal', icon: Activity },
               { id: 'new', label: 'Nueva Receta', icon: Plus },
               { id: 'history', label: 'Historial', icon: FileText },
               { id: 'templates', label: 'Plantillas', icon: BookOpen },
-              { id: 'layout', label: 'Editor de Layout', icon: Settings }
+              { id: 'analytics', label: 'Análisis', icon: BarChart },
+              { id: 'pharmacy', label: 'Farmacias', icon: Building },
+              { id: 'layout', label: 'Configuración', icon: Settings }
             ].map(tab => {
               const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-all ${
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-all whitespace-nowrap ${
                     activeTab === tab.id
                       ? 'border-cyan-400 text-cyan-400'
                       : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-600'
@@ -719,13 +875,22 @@ export default function PrescriptionDashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex space-x-2">
-                              <button className="text-cyan-400 hover:text-cyan-300 transition-colors">
+                              <button 
+                                onClick={() => handleViewPrescription(prescription)}
+                                className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                              >
                                 <Eye className="h-4 w-4" />
                               </button>
-                              <button className="text-gray-400 hover:text-gray-300 transition-colors">
+                              <button 
+                                onClick={() => handlePrintPrescription(prescription)}
+                                className="text-gray-400 hover:text-gray-300 transition-colors"
+                              >
                                 <Printer className="h-4 w-4" />
                               </button>
-                              <button className="text-green-400 hover:text-green-300 transition-colors">
+                              <button 
+                                onClick={() => handleDownloadPrescription(prescription)}
+                                className="text-green-400 hover:text-green-300 transition-colors"
+                              >
                                 <Download className="h-4 w-4" />
                               </button>
                             </div>
@@ -757,204 +922,14 @@ export default function PrescriptionDashboard() {
           </div>
         )}
 
-        {/* Nueva Receta */}
+        {/* Nueva Receta con componente mejorado */}
         {activeTab === 'new' && (
-          <div className="dark-card">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-100 mb-6">
-                Crear Nueva Receta
-              </h3>
-              
-              <form onSubmit={(e) => { e.preventDefault(); handleNewPrescription(); }} className="space-y-6">
-                {/* Información del Paciente */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300">
-                      Paciente
-                    </label>
-                    <select
-                      value={newPrescription.patient_id}
-                      onChange={(e) => setNewPrescription(prev => ({ ...prev, patient_id: e.target.value }))}
-                      className="mt-1 block w-full dark-input"
-                      required
-                    >
-                      <option value="">Seleccionar paciente</option>
-                      {patients.map(patient => (
-                        <option key={patient.id} value={patient.id}>
-                          {patient.full_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300">
-                      Fecha de Vencimiento
-                    </label>
-                    <input
-                      type="date"
-                      value={newPrescription.expires_at.split('T')[0]}
-                      onChange={(e) => setNewPrescription(prev => ({ ...prev, expires_at: e.target.value }))}
-                      className="mt-1 block w-full dark-input"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Diagnóstico */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300">
-                    Diagnóstico
-                  </label>
-                  <input
-                    type="text"
-                    value={newPrescription.diagnosis}
-                    onChange={(e) => setNewPrescription(prev => ({ ...prev, diagnosis: e.target.value }))}
-                    className="mt-1 block w-full dark-input"
-                    placeholder="Ingrese el diagnóstico"
-                    required
-                  />
-                </div>
-
-                {/* Medicamentos */}
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <label className="block text-sm font-medium text-gray-300">
-                      Medicamentos
-                    </label>
-                    <button
-                      type="button"
-                      onClick={addMedication}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-cyan-300 bg-cyan-900/30 hover:bg-cyan-900/50 transition-colors"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Agregar Medicamento
-                    </button>
-                  </div>
-                  
-                  {newPrescription.medications.map((medication, index) => (
-                    <div key={index} className="border border-gray-700 rounded-lg p-4 mb-4 bg-gray-800/30">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300">
-                            Medicamento
-                          </label>
-                          <input
-                            type="text"
-                            value={medication.name}
-                            onChange={(e) => updateMedication(index, 'name', e.target.value)}
-                            className="mt-1 block w-full dark-input"
-                            placeholder="Nombre del medicamento"
-                            required
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300">
-                            Dosis
-                          </label>
-                          <input
-                            type="text"
-                            value={medication.dosage}
-                            onChange={(e) => updateMedication(index, 'dosage', e.target.value)}
-                            className="mt-1 block w-full dark-input"
-                            placeholder="ej. 500mg"
-                            required
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300">
-                            Frecuencia
-                          </label>
-                          <input
-                            type="text"
-                            value={medication.frequency}
-                            onChange={(e) => updateMedication(index, 'frequency', e.target.value)}
-                            className="mt-1 block w-full dark-input"
-                            placeholder="ej. Cada 8 horas"
-                            required
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300">
-                            Duración
-                          </label>
-                          <input
-                            type="text"
-                            value={medication.duration}
-                            onChange={(e) => updateMedication(index, 'duration', e.target.value)}
-                            className="mt-1 block w-full dark-input"
-                            placeholder="ej. 7 días"
-                            required
-                          />
-                        </div>
-                        
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-300">
-                            Instrucciones
-                          </label>
-                          <input
-                            type="text"
-                            value={medication.instructions}
-                            onChange={(e) => updateMedication(index, 'instructions', e.target.value)}
-                            className="mt-1 block w-full dark-input"
-                            placeholder="ej. Con alimentos"
-                          />
-                        </div>
-                      </div>
-                      
-                      {newPrescription.medications.length > 1 && (
-                        <div className="mt-4 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => removeMedication(index)}
-                            className="text-red-400 hover:text-red-300 text-sm transition-colors"
-                          >
-                            Eliminar medicamento
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Notas */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300">
-                    Notas Adicionales
-                  </label>
-                  <textarea
-                    value={newPrescription.notes}
-                    onChange={(e) => setNewPrescription(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={3}
-                    className="mt-1 block w-full dark-input"
-                    placeholder="Notas adicionales para el paciente o farmacéutico"
-                  />
-                </div>
-
-                {/* Botones */}
-                <div className="flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('dashboard')}
-                    className="px-4 py-2 text-sm font-medium dark-button-secondary"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-medium dark-button-primary"
-                    disabled={isLoading}
-                  >
-                    <Save className="h-4 w-4 mr-2 inline" />
-                    {isLoading ? 'Guardando...' : 'Crear Receta'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          <EnhancedPrescriptionForm
+            patientId={newPrescription.patient_id || searchParams.get('paciente') || ''}
+            patientName={patients.find(p => p.id === (newPrescription.patient_id || searchParams.get('paciente')))?.full_name || ''}
+            onSave={handleNewPrescription}
+            previousPrescriptions={prescriptionHistory}
+          />
         )}
 
         {/* Historial */}
@@ -1067,19 +1042,31 @@ export default function PrescriptionDashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex space-x-2">
-                            <button className="text-cyan-400 hover:text-cyan-300 transition-colors">
+                            <button 
+                              onClick={() => handleViewPrescription(prescription)}
+                              className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                              title="Ver detalles"
+                            >
                               <Eye className="h-4 w-4" />
                             </button>
-                            <button className="text-gray-400 hover:text-gray-300 transition-colors">
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            <button className="text-gray-400 hover:text-gray-300 transition-colors">
+                            <button 
+                              onClick={() => handlePrintPrescription(prescription)}
+                              className="text-gray-400 hover:text-gray-300 transition-colors"
+                              title="Imprimir"
+                            >
                               <Printer className="h-4 w-4" />
                             </button>
-                            <button className="text-green-400 hover:text-green-300 transition-colors">
+                            <button 
+                              onClick={() => handleDownloadPrescription(prescription)}
+                              className="text-green-400 hover:text-green-300 transition-colors"
+                              title="Descargar"
+                            >
                               <Download className="h-4 w-4" />
                             </button>
-                            <button className="text-cyan-400 hover:text-cyan-300 transition-colors">
+                            <button 
+                              className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                              title="Duplicar receta"
+                            >
                               <Copy className="h-4 w-4" />
                             </button>
                           </div>
@@ -1126,11 +1113,17 @@ export default function PrescriptionDashboard() {
                       </ul>
                     </div>
                     <div className="mt-4 flex space-x-2">
-                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2 dark-button-secondary text-sm">
+                      <button 
+                        onClick={() => handleEditTemplate(template)}
+                        className="flex-1 inline-flex justify-center items-center px-3 py-2 dark-button-secondary text-sm"
+                      >
                         <Edit className="h-4 w-4 mr-2" />
                         Editar
                       </button>
-                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2 dark-button-primary text-sm">
+                      <button 
+                        onClick={() => handleUseTemplate(template)}
+                        className="flex-1 inline-flex justify-center items-center px-3 py-2 dark-button-primary text-sm"
+                      >
                         <Copy className="h-4 w-4 mr-2" />
                         Usar
                       </button>
@@ -1309,6 +1302,12 @@ export default function PrescriptionDashboard() {
             `}</style>
           </div>
         )}
+
+        {/* Análisis */}
+        {activeTab === 'analytics' && <PrescriptionAnalytics />}
+
+        {/* Integración con Farmacias */}
+        {activeTab === 'pharmacy' && <PharmacyIntegration />}
       </div>
     </div>
   );
