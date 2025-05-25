@@ -31,6 +31,7 @@ interface Prescription {
   patients?: {
     full_name: string;
   };
+  prescription_style?: any;
 }
 
 interface Patient {
@@ -98,7 +99,8 @@ export default function PrescriptionDashboard() {
           expires_at,
           patients (
             full_name
-          )
+          ),
+          prescription_style
         `)
         .order('created_at', { ascending: false });
 
@@ -276,6 +278,48 @@ export default function PrescriptionDashboard() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    const { data: { user } } = await supabase.auth.getUser();
+    let prescriptionStyle = {} as any;
+    if (user) {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('prescription_style')
+        .eq('id', user.id)
+        .single();
+      if (profileError) {
+        console.error("Error fetching prescription_style:", profileError);
+      } else {
+        prescriptionStyle = profileData?.prescription_style || {};
+      }
+    }
+
+    const style = {
+      fontFamily: prescriptionStyle.fontFamily || 'Arial, sans-serif',
+      primaryColor: prescriptionStyle.primaryColor || '#0066cc',
+      secondaryColor: prescriptionStyle.secondaryColor || '#333',
+      fontSize: prescriptionStyle.fontSize === 'small' ? '12px' : prescriptionStyle.fontSize === 'large' ? '16px' : prescriptionStyle.fontSize === 'extraLarge' ? '18px' : '14px',
+      lineHeight: prescriptionStyle.spacing === 'compact' ? '1.3' : prescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5',
+      headerStyle: prescriptionStyle.headerStyle || 'modern',
+      clinicName: prescriptionStyle.clinicName || 'Nombre de su Clínica',
+      clinicAddress: prescriptionStyle.clinicAddress || 'Dirección de la Clínica, Ciudad',
+      clinicPhone: prescriptionStyle.clinicPhone || '(000) 000-0000',
+      clinicEmail: prescriptionStyle.clinicEmail || 'email@clinica.com',
+      doctorFullName: prescriptionStyle.doctorFullName || 'Dr. Nombre Apellido',
+      doctorLicense: prescriptionStyle.doctorLicense || 'Céd. Prof. XXXXXXX',
+      doctorSpecialty: prescriptionStyle.doctorSpecialty || 'Medicina General',
+      doctorContact: prescriptionStyle.doctorContact || '(000) 000-0000',
+      titlePrescription: prescriptionStyle.titlePrescription || 'RECETA MÉDICA',
+      titlePatientInfo: prescriptionStyle.titlePatientInfo || 'Información del Paciente',
+      titleDiagnosis: prescriptionStyle.titleDiagnosis || 'Diagnóstico',
+      titleMedications: prescriptionStyle.titleMedications || 'Prescripción Médica',
+      titleNotes: prescriptionStyle.titleNotes || 'Indicaciones Adicionales',
+      titleSignature: prescriptionStyle.titleSignature || 'Firma del Médico',
+      titleValidity: prescriptionStyle.titleValidity || 'Validez de la Receta',
+      showLogo: prescriptionStyle.showLogo !== undefined ? prescriptionStyle.showLogo : true,
+      logoPosition: prescriptionStyle.logoPosition || 'left',
+      includeQR: prescriptionStyle.includeQR !== undefined ? prescriptionStyle.includeQR : true,
+    };
+
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -283,25 +327,36 @@ export default function PrescriptionDashboard() {
         <title>Receta Médica - ${prescription.patient_name}</title>
         <style>
           body { 
-            font-family: Arial, sans-serif; 
+            font-family: ${style.fontFamily}; 
             max-width: 800px; 
             margin: 0 auto; 
             padding: 20px;
-            color: #333;
+            color: ${style.secondaryColor};
+            font-size: ${style.fontSize};
+            line-height: ${style.lineHeight};
           }
           .header { 
-            text-align: center; 
-            border-bottom: 2px solid #333; 
+            text-align: ${style.headerStyle === 'classic' ? 'center' : 'left'}; 
+            border-bottom: 2px solid ${style.primaryColor}; 
             padding-bottom: 20px; 
             margin-bottom: 20px; 
           }
           .header h1 {
-            color: #0066cc;
+            color: ${style.primaryColor};
             margin-bottom: 10px;
+            font-size: 1.8em;
           }
           .doctor-info {
-            font-size: 14px;
-            color: #666;
+            font-size: 0.9em;
+            color: ${style.secondaryColor};
+          }
+          .clinic-info {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            font-size: 0.9em;
           }
           .patient-info { 
             margin-bottom: 20px;
@@ -315,75 +370,97 @@ export default function PrescriptionDashboard() {
           .medication-item { 
             margin-bottom: 15px; 
             padding: 15px; 
-            border-left: 4px solid #0066cc; 
+            border-left: 4px solid ${style.primaryColor}; 
             background: #f9f9f9;
             border-radius: 0 5px 5px 0;
           }
           .medication-name {
             font-weight: bold;
-            color: #0066cc;
-            font-size: 16px;
+            color: ${style.primaryColor};
+            font-size: 1.1em;
           }
           .medication-details {
             margin-top: 5px;
             color: #555;
           }
-          .diagnosis-section {
-            background: #e8f4f8;
+          .diagnosis-section,
+          .notes-section {
+            background: #eef7ff; /* Lighter blue for sections */
             padding: 15px;
             border-radius: 5px;
             margin-bottom: 20px;
           }
-          .notes-section {
-            background: #fff9e6;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
+          .section-title {
+            color: ${style.primaryColor};
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 1.2em;
           }
           .footer { 
             margin-top: 50px; 
             text-align: center; 
           }
           .signature-line { 
-            border-top: 1px solid #333; 
+            border-top: 1px solid ${style.secondaryColor}; 
             width: 200px; 
             margin: 40px auto 10px; 
           }
           .validity {
             margin-top: 30px;
             text-align: center;
-            font-size: 12px;
+            font-size: 0.8em;
             color: #666;
+          }
+          .logo-container {
+            ${style.logoPosition === 'left' ? 'float: left; margin-right: 15px;' : 'float: right; margin-left: 15px;'}
+            /* Basic logo placeholder */
+            width: 60px; height: 60px; background: ${style.secondaryColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; border-radius: 4px;
+          }
+          .qr-code-container {
+            text-align: center; margin-top: 20px;
+          }
+          .qr-code-container img {
+            width: 100px; height: 100px;
           }
           @media print { 
             body { margin: 0; }
+            .no-print { display: none; }
           }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>RECETA MÉDICA</h1>
+          ${style.showLogo ? '<div class="logo-container">LOGO</div>' : ''}
+          <h1>${style.titlePrescription}</h1>
           <div class="doctor-info">
-            <p><strong>Dr. Juan Médico</strong></p>
-            <p>Medicina General</p>
-            <p>Cédula Profesional: 12345678</p>
-            <p>Tel: (555) 123-4567</p>
+            <p><strong>${style.doctorFullName}</strong></p>
+            <p>${style.doctorSpecialty}</p>
+            <p>Cédula Profesional: ${style.doctorLicense}</p>
+            <p>Contacto: ${style.doctorContact}</p>
           </div>
+          <div style="clear: both;"></div>
+        </div>
+
+        <div class="clinic-info">
+          <p><strong>${style.clinicName}</strong></p>
+          <p>${style.clinicAddress}</p>
+          <p>Tel: ${style.clinicPhone} | Email: ${style.clinicEmail}</p>
         </div>
         
         <div class="patient-info">
+          <h3 class="section-title">${style.titlePatientInfo}</h3>
           <p><strong>Paciente:</strong> ${prescription.patient_name}</p>
           <p><strong>Fecha:</strong> ${format(new Date(prescription.created_at), 'dd/MM/yyyy', { locale: es })}</p>
           <p><strong>Hora:</strong> ${format(new Date(prescription.created_at), 'HH:mm')}</p>
         </div>
         
         <div class="diagnosis-section">
-          <h3>Diagnóstico</h3>
+          <h3 class="section-title">${style.titleDiagnosis}</h3>
           <p>${prescription.diagnosis}</p>
         </div>
         
         <div class="medications">
-          <h3>Prescripción Médica</h3>
+          <h3 class="section-title">${style.titleMedications}</h3>
           ${prescription.medications.map((med, index) => `
             <div class="medication-item">
               <div class="medication-name">${index + 1}. ${med.name} - ${med.dosage}</div>
@@ -398,18 +475,24 @@ export default function PrescriptionDashboard() {
         
         ${prescription.notes ? `
           <div class="notes-section">
-            <h3>Indicaciones Adicionales</h3>
+            <h3 class="section-title">${style.titleNotes}</h3>
             <p>${prescription.notes}</p>
           </div>
         ` : ''}
         
         <div class="footer">
           <div class="signature-line"></div>
-          <p>Firma del Médico</p>
+          <p>${style.titleSignature}</p>
         </div>
         
+        ${style.includeQR ? `
+          <div class="qr-code-container">
+            <img src="${await QRCode.toDataURL(JSON.stringify({ id: prescription.id, patient: prescription.patient_name }), { width: 100, margin: 1 })}" alt="QR Code" />
+          </div>
+        ` : ''}
+
         <div class="validity">
-          <p>Esta receta tiene una validez de 30 días a partir de su emisión.</p>
+          <p>${style.titleValidity}: Esta receta tiene una validez de 30 días a partir de su emisión.</p>
           <p>Válida hasta: ${format(new Date(prescription.expires_at), 'dd/MM/yyyy')}</p>
           <p>ID: ${prescription.id}</p>
         </div>
