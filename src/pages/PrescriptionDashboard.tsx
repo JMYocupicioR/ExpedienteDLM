@@ -279,7 +279,7 @@ export default function PrescriptionDashboard() {
     if (!printWindow) return;
 
     const { data: { user } } = await supabase.auth.getUser();
-    let prescriptionStyle = {} as any;
+    let userPrescriptionStyle = {} as any; // Default to an empty object
     if (user) {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -289,35 +289,55 @@ export default function PrescriptionDashboard() {
       if (profileError) {
         console.error("Error fetching prescription_style:", profileError);
       } else {
-        prescriptionStyle = profileData?.prescription_style || {};
+        userPrescriptionStyle = profileData?.prescription_style || {};
       }
     }
 
+    // Combine with prescription-specific style if available, then fallback to defaults
     const style = {
-      fontFamily: prescriptionStyle.fontFamily || 'Arial, sans-serif',
-      primaryColor: prescriptionStyle.primaryColor || '#0066cc',
-      secondaryColor: prescriptionStyle.secondaryColor || '#333',
-      fontSize: prescriptionStyle.fontSize === 'small' ? '12px' : prescriptionStyle.fontSize === 'large' ? '16px' : prescriptionStyle.fontSize === 'extraLarge' ? '18px' : '14px',
-      lineHeight: prescriptionStyle.spacing === 'compact' ? '1.3' : prescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5',
-      headerStyle: prescriptionStyle.headerStyle || 'modern',
-      clinicName: prescriptionStyle.clinicName || 'Nombre de su Clínica',
-      clinicAddress: prescriptionStyle.clinicAddress || 'Dirección de la Clínica, Ciudad',
-      clinicPhone: prescriptionStyle.clinicPhone || '(000) 000-0000',
-      clinicEmail: prescriptionStyle.clinicEmail || 'email@clinica.com',
-      doctorFullName: prescriptionStyle.doctorFullName || 'Dr. Nombre Apellido',
-      doctorLicense: prescriptionStyle.doctorLicense || 'Céd. Prof. XXXXXXX',
-      doctorSpecialty: prescriptionStyle.doctorSpecialty || 'Medicina General',
-      doctorContact: prescriptionStyle.doctorContact || '(000) 000-0000',
-      titlePrescription: prescriptionStyle.titlePrescription || 'RECETA MÉDICA',
-      titlePatientInfo: prescriptionStyle.titlePatientInfo || 'Información del Paciente',
-      titleDiagnosis: prescriptionStyle.titleDiagnosis || 'Diagnóstico',
-      titleMedications: prescriptionStyle.titleMedications || 'Prescripción Médica',
-      titleNotes: prescriptionStyle.titleNotes || 'Indicaciones Adicionales',
-      titleSignature: prescriptionStyle.titleSignature || 'Firma del Médico',
-      titleValidity: prescriptionStyle.titleValidity || 'Validez de la Receta',
-      showLogo: prescriptionStyle.showLogo !== undefined ? prescriptionStyle.showLogo : true,
-      logoPosition: prescriptionStyle.logoPosition || 'left',
-      includeQR: prescriptionStyle.includeQR !== undefined ? prescriptionStyle.includeQR : true,
+      fontFamily: prescription.prescription_style?.fontFamily || userPrescriptionStyle.fontFamily || 'Arial, sans-serif',
+      primaryColor: prescription.prescription_style?.primaryColor || userPrescriptionStyle.primaryColor || '#0066cc',
+      secondaryColor: prescription.prescription_style?.secondaryColor || userPrescriptionStyle.secondaryColor || '#333',
+      fontSize: prescription.prescription_style?.fontSize === 'small' ? '12px' :
+                prescription.prescription_style?.fontSize === 'large' ? '16px' :
+                prescription.prescription_style?.fontSize === 'extraLarge' ? '18px' :
+                (userPrescriptionStyle.fontSize === 'small' ? '12px' :
+                 userPrescriptionStyle.fontSize === 'large' ? '16px' :
+                 userPrescriptionStyle.fontSize === 'extraLarge' ? '18px' : '14px'),
+      lineHeight: prescription.prescription_style?.spacing === 'compact' ? '1.3' :
+                  prescription.prescription_style?.spacing === 'relaxed' ? '1.7' :
+                  (userPrescriptionStyle.spacing === 'compact' ? '1.3' :
+                   userPrescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5'),
+      headerStyle: prescription.prescription_style?.headerStyle || userPrescriptionStyle.headerStyle || 'modern',
+      
+      clinicName: prescription.prescription_style?.clinicName || userPrescriptionStyle.clinicName || 'Nombre de su Clínica',
+      clinicAddress: prescription.prescription_style?.clinicAddress || userPrescriptionStyle.clinicAddress || 'Dirección de la Clínica, Ciudad',
+      clinicPhone: prescription.prescription_style?.clinicPhone || userPrescriptionStyle.clinicPhone || '(000) 000-0000',
+      clinicEmail: prescription.prescription_style?.clinicEmail || userPrescriptionStyle.clinicEmail || 'email@clinica.com',
+      
+      doctorFullName: prescription.prescription_style?.doctorFullName || userPrescriptionStyle.doctorFullName || 'Dr. Nombre Apellido',
+      doctorLicense: prescription.prescription_style?.doctorLicense || userPrescriptionStyle.doctorLicense || 'Céd. Prof. XXXXXXX',
+      doctorSpecialty: prescription.prescription_style?.doctorSpecialty || userPrescriptionStyle.doctorSpecialty || 'Medicina General',
+      doctorContact: prescription.prescription_style?.doctorContact || userPrescriptionStyle.doctorContact || '(000) 000-0000',
+      
+      titlePrescription: prescription.prescription_style?.titlePrescription || userPrescriptionStyle.titlePrescription || 'RECETA MÉDICA',
+      titlePatientInfo: prescription.prescription_style?.titlePatientInfo || userPrescriptionStyle.titlePatientInfo || 'Información del Paciente',
+      titleDiagnosis: prescription.prescription_style?.titleDiagnosis || userPrescriptionStyle.titleDiagnosis || 'Diagnóstico',
+      titleMedications: prescription.prescription_style?.titleMedications || userPrescriptionStyle.titleMedications || 'Prescripción Médica',
+      titleNotes: prescription.prescription_style?.titleNotes || userPrescriptionStyle.titleNotes || 'Indicaciones Adicionales',
+      titleSignature: prescription.prescription_style?.titleSignature || userPrescriptionStyle.titleSignature || 'Firma del Médico',
+      titleValidity: prescription.prescription_style?.titleValidity || userPrescriptionStyle.titleValidity || 'Validez de la Receta',
+      
+      showLogo: prescription.prescription_style?.showLogo !== undefined ? prescription.prescription_style.showLogo :
+                (userPrescriptionStyle.showLogo !== undefined ? userPrescriptionStyle.showLogo : true),
+      logoPosition: prescription.prescription_style?.logoPosition || userPrescriptionStyle.logoPosition || 'left',
+      includeQR: prescription.prescription_style?.includeQR !== undefined ? prescription.prescription_style.includeQR :
+                 (userPrescriptionStyle.includeQR !== undefined ? userPrescriptionStyle.includeQR : true),
+      // Add new fields like paperSize, margins, includeWatermark with similar fallback logic
+      paperSize: prescription.prescription_style?.paperSize || userPrescriptionStyle.paperSize || 'letter',
+      margins: prescription.prescription_style?.margins || userPrescriptionStyle.margins || 'normal',
+      includeWatermark: prescription.prescription_style?.includeWatermark !== undefined ? prescription.prescription_style.includeWatermark :
+                        (userPrescriptionStyle.includeWatermark !== undefined ? userPrescriptionStyle.includeWatermark : false),
     };
 
     const printContent = `
@@ -334,6 +354,10 @@ export default function PrescriptionDashboard() {
             color: ${style.secondaryColor};
             font-size: ${style.fontSize};
             line-height: ${style.lineHeight};
+            /* Basic styling for margins based on selection */
+            ${style.margins === 'narrow' ? 'padding: 10px;' : style.margins === 'wide' ? 'padding: 30px;' : 'padding: 20px;'}
+            /* Basic styling for paper size - actual control is via @page CSS */
+            ${style.paperSize === 'a4' ? 'width: 210mm; min-height: 297mm;' : style.paperSize === 'legal' ? 'width: 216mm; min-height: 356mm;' : 'width: 216mm; min-height: 279mm;' /* Letter as default */}
           }
           .header { 
             text-align: ${style.headerStyle === 'classic' ? 'center' : 'left'}; 
@@ -394,7 +418,7 @@ export default function PrescriptionDashboard() {
             color: ${style.primaryColor};
             font-weight: bold;
             margin-bottom: 8px;
-            font-size: 1.2em;
+            font-size: 1.2em; /* Slightly larger section titles */
           }
           .footer { 
             margin-top: 50px; 
@@ -422,7 +446,11 @@ export default function PrescriptionDashboard() {
           .qr-code-container img {
             width: 100px; height: 100px;
           }
-          @media print { 
+          @media print {
+            @page {
+              size: ${style.paperSize === 'a4' ? 'A4' : style.paperSize === 'legal' ? 'Legal' : 'Letter'};
+              margin: ${style.margins === 'narrow' ? '0.5in' : style.margins === 'wide' ? '1.5in' : '1in'};
+            }
             body { margin: 0; }
             .no-print { display: none; }
           }
@@ -430,7 +458,7 @@ export default function PrescriptionDashboard() {
       </head>
       <body>
         <div class="header">
-          ${style.showLogo ? '<div class="logo-container">LOGO</div>' : ''}
+          ${style.showLogo ? `<div class="logo-container" style="${style.logoPosition === 'center' ? 'text-align: center; float: none; margin-bottom: 10px;' : (style.logoPosition === 'left' ? 'float: left; margin-right: 15px;' : 'float: right; margin-left: 15px;')}">LOGO</div>` : ''}
           <h1>${style.titlePrescription}</h1>
           <div class="doctor-info">
             <p><strong>${style.doctorFullName}</strong></p>
@@ -496,6 +524,11 @@ export default function PrescriptionDashboard() {
           <p>Válida hasta: ${format(new Date(prescription.expires_at), 'dd/MM/yyyy')}</p>
           <p>ID: ${prescription.id}</p>
         </div>
+        ${style.includeWatermark ? `
+          <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.1; font-size: 5em; color: ${style.primaryColor}; font-weight: bold; pointer-events: none; z-index: -1; text-align: center; width: 100%;">
+            ${style.clinicName || "CLÍNICA"}
+          </div>
+        ` : ''}
       </body>
       </html>
     `;
