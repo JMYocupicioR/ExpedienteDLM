@@ -6,6 +6,39 @@ import { supabase } from '../lib/supabase';
 import PhysicalExamTemplates from './PhysicalExamTemplates';
 import PhysicalExamTemplateEditor from './PhysicalExamTemplateEditor';
 
+interface PrescriptionStyleSettings {
+  headerStyle: string;
+  fontSize: string;
+  spacing: string;
+  includeQR: boolean;
+  includeWatermark: boolean;
+  primaryColor: string;
+  secondaryColor: string;
+  showLogo: boolean;
+  logoPosition: 'left' | 'right' | 'center';
+  paperSize: string;
+  margins: string;
+  fontFamily: string;
+  
+  clinicName: string;
+  clinicAddress: string;
+  clinicPhone: string;
+  clinicEmail: string;
+  
+  doctorFullName: string;
+  doctorLicense: string;
+  doctorSpecialty: string;
+  doctorContact: string;
+  
+  titlePrescription: string;
+  titlePatientInfo: string;
+  titleDiagnosis: string;
+  titleMedications: string;
+  titleNotes: string;
+  titleSignature: string;
+  titleValidity: string;
+}
+
 interface UserProfile {
   id: string;
   role: string;
@@ -24,6 +57,7 @@ interface UserProfile {
     start_time: string;
     end_time: string;
   };
+  prescription_style?: Partial<PrescriptionStyleSettings>; // Make it partial to allow gradual saving
 }
 
 interface SettingsModalProps {
@@ -86,7 +120,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
   });
 
   // Prescription style settings
-  const [prescriptionStyle, setPrescriptionStyle] = useState({
+  const initialPrescriptionStyle: PrescriptionStyleSettings = {
     headerStyle: 'modern',
     fontSize: 'medium',
     spacing: 'normal',
@@ -97,8 +131,26 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
     showLogo: true,
     logoPosition: 'left',
     paperSize: 'letter',
-    margins: 'normal'
-  });
+    margins: 'normal',
+    fontFamily: 'Arial',
+    clinicName: 'Nombre de la Clínica',
+    clinicAddress: 'Dirección de la Clínica, Ciudad, País',
+    clinicPhone: '(555) 123-4567',
+    clinicEmail: 'email@clinicaclinica.com',
+    doctorFullName: 'Dr. Nombre Apellido',
+    doctorLicense: 'Cédula Profesional',
+    doctorSpecialty: 'Especialidad Médica',
+    doctorContact: 'Teléfono de Contacto',
+    titlePrescription: 'RECETA MÉDICA',
+    titlePatientInfo: 'Información del Paciente',
+    titleDiagnosis: 'Diagnóstico',
+    titleMedications: 'Prescripción Médica',
+    titleNotes: 'Indicaciones Adicionales',
+    titleSignature: 'Firma del Médico',
+    titleValidity: 'Validez de la Receta',
+  };
+  
+  const [prescriptionStyle, setPrescriptionStyle] = useState<PrescriptionStyleSettings>(initialPrescriptionStyle);
 
   // Physical exam template management state
   const [selectedTemplateToEdit, setSelectedTemplateToEdit] = useState<any>(null);
@@ -117,6 +169,17 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
       if (userProfile.schedule) {
         setScheduleForm(userProfile.schedule);
       }
+
+      // Initialize prescriptionStyle with saved settings, then defaults, then profile info for doctor fields
+      setPrescriptionStyle(prev => ({
+        ...initialPrescriptionStyle, // Start with base defaults
+        ...(userProfile.prescription_style || {}), // Overlay saved styles
+        // Ensure doctor specific fields take from profile if not explicitly set in prescription_style
+        doctorFullName: userProfile.prescription_style?.doctorFullName || userProfile.full_name || initialPrescriptionStyle.doctorFullName,
+        doctorLicense: userProfile.prescription_style?.doctorLicense || userProfile.license_number || initialPrescriptionStyle.doctorLicense,
+        doctorSpecialty: userProfile.prescription_style?.doctorSpecialty || initialPrescriptionStyle.doctorSpecialty, // Specialty not directly on profile
+        doctorContact: userProfile.prescription_style?.doctorContact || userProfile.phone || initialPrescriptionStyle.doctorContact,
+      }));
     }
   }, [userProfile]);
 
@@ -725,8 +788,8 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                         <div>
                           <h3 className="text-lg font-medium text-white mb-4">Personalizar Estilo de Receta</h3>
                           
-                          {/* Estilo de Encabezado */}
                           <div className="space-y-4">
+                            {/* Estilo de Encabezado */}
                             <div>
                               <label className="block text-sm font-medium text-gray-300 mb-2">
                                 Estilo de Encabezado
@@ -740,6 +803,27 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                                 <option value="classic">Clásico</option>
                                 <option value="minimal">Minimalista</option>
                                 <option value="professional">Profesional</option>
+                              </select>
+                            </div>
+
+                            {/* Font Family */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <Type className="inline h-4 w-4 mr-1" />
+                                Familia de Fuente
+                              </label>
+                              <select
+                                value={prescriptionStyle.fontFamily}
+                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, fontFamily: e.target.value }))}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="Arial">Arial</option>
+                                <option value="Verdana">Verdana</option>
+                                <option value="Times New Roman">Times New Roman</option>
+                                <option value="Helvetica">Helvetica</option>
+                                <option value="Georgia">Georgia</option>
+                                <option value="Courier New">Courier New</option>
+                                <option value="system-ui">System UI (Predeterminada)</option>
                               </select>
                             </div>
 
@@ -911,18 +995,185 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                               </div>
                             </div>
 
+                            {/* Información de la Clínica */}
+                            <div className="mt-6 pt-6 border-t border-gray-700">
+                              <h4 className="text-md font-medium text-white mb-3">Información de la Clínica</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Nombre</label>
+                                  <input type="text" value={prescriptionStyle.clinicName} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicName: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Nombre de la clínica" />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Teléfono</label>
+                                  <input type="text" value={prescriptionStyle.clinicPhone} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicPhone: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="(555) 123-4567" />
+                                </div>
+                                <div className="md:col-span-2">
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Dirección</label>
+                                  <input type="text" value={prescriptionStyle.clinicAddress} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicAddress: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Calle, Número, Ciudad" />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+                                  <input type="email" value={prescriptionStyle.clinicEmail} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicEmail: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="contacto@clinica.com" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Información del Médico (para la receta) */}
+                            <div className="mt-6 pt-6 border-t border-gray-700">
+                              <h4 className="text-md font-medium text-white mb-3">Información del Médico (visible en receta)</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Nombre Completo</label>
+                                  <input type="text" value={prescriptionStyle.doctorFullName} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorFullName: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Cédula Profesional</label>
+                                  <input type="text" value={prescriptionStyle.doctorLicense} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorLicense: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Especialidad</label>
+                                  <input type="text" value={prescriptionStyle.doctorSpecialty} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorSpecialty: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">Contacto (Tel/Email)</label>
+                                  <input type="text" value={prescriptionStyle.doctorContact} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorContact: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Títulos de Sección de la Receta */}
+                            <div className="mt-6 pt-6 border-t border-gray-700">
+                              <h4 className="text-md font-medium text-white mb-3">Títulos de Sección</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">Título Principal</label>
+                                  <input type="text" value={prescriptionStyle.titlePrescription} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titlePrescription: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                 <div>
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">Info. Paciente</label>
+                                  <input type="text" value={prescriptionStyle.titlePatientInfo} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titlePatientInfo: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">Diagnóstico</label>
+                                  <input type="text" value={prescriptionStyle.titleDiagnosis} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleDiagnosis: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">Medicamentos</label>
+                                  <input type="text" value={prescriptionStyle.titleMedications} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleMedications: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">Notas Adicionales</label>
+                                  <input type="text" value={prescriptionStyle.titleNotes} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleNotes: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                 <div>
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">Firma</label>
+                                  <input type="text" value={prescriptionStyle.titleSignature} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleSignature: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                                 <div>
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">Validez</label>
+                                  <input type="text" value={prescriptionStyle.titleValidity} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleValidity: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                              </div>
+                            </div>
+                            
                             {/* Vista previa */}
-                            <div className="mt-6 p-4 bg-gray-900 rounded-lg border border-gray-700">
+                            <div className="mt-8 p-4 bg-gray-900 rounded-lg border border-gray-700 relative">
+                               {prescriptionStyle.includeWatermark && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    left: '50%',
+                                    transform: 'translate(-50%, -50%) rotate(-30deg)',
+                                    opacity: 0.05,
+                                    fontSize: '4em',
+                                    color: prescriptionStyle.primaryColor,
+                                    fontWeight: 'bold',
+                                    pointerEvents: 'none',
+                                    zIndex: 1,
+                                    textAlign: 'center',
+                                    width: '100%'
+                                }}>
+                                    {prescriptionStyle.clinicName || "CLÍNICA"}
+                                </div>
+                              )}
                               <p className="text-sm text-gray-400 mb-2">Vista Previa</p>
-                              <div className="bg-white p-4 rounded-lg" style={{ fontSize: prescriptionStyle.fontSize === 'small' ? '12px' : prescriptionStyle.fontSize === 'large' ? '18px' : prescriptionStyle.fontSize === 'extraLarge' ? '20px' : '14px' }}>
-                                <div style={{ borderBottom: `2px solid ${prescriptionStyle.primaryColor}`, paddingBottom: '10px', marginBottom: prescriptionStyle.spacing === 'compact' ? '10px' : prescriptionStyle.spacing === 'relaxed' ? '20px' : '15px' }}>
-                                  <h3 style={{ color: prescriptionStyle.primaryColor, margin: 0 }}>RECETA MÉDICA</h3>
-                                  <p style={{ color: prescriptionStyle.secondaryColor, margin: '5px 0 0 0' }}>Dr. Juan Médico - CED: 12345678</p>
+                              <div 
+                                className="bg-white p-6 rounded-lg shadow-lg relative" 
+                                style={{ 
+                                  fontFamily: prescriptionStyle.fontFamily,
+                                  fontSize: prescriptionStyle.fontSize === 'small' ? '12px' : prescriptionStyle.fontSize === 'large' ? '17px' : prescriptionStyle.fontSize === 'extraLarge' ? '19px' : '15px', 
+                                  lineHeight: prescriptionStyle.spacing === 'compact' ? '1.3' : prescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5',
+                                  borderTop: `8px solid ${prescriptionStyle.primaryColor}`,
+                                  paddingTop: '20px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `1px solid ${prescriptionStyle.secondaryColor}33`, paddingBottom: '15px', marginBottom: '15px' }}>
+                                  <div>
+                                    <h3 style={{ color: prescriptionStyle.primaryColor, margin: 0, fontSize: '1.8em', fontWeight: 'bold' }}>{prescriptionStyle.titlePrescription}</h3>
+                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '5px 0 2px 0', fontSize: '1em', fontWeight: 'bold' }}>{prescriptionStyle.doctorFullName}</p>
+                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.85em' }}>{prescriptionStyle.doctorSpecialty}</p>
+                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.85em' }}>Cédula: {prescriptionStyle.doctorLicense}</p>
+                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.85em' }}>{prescriptionStyle.doctorContact}</p>
+                                  </div>
+                                  {prescriptionStyle.showLogo && (
+                                    <div style={{ textAlign: prescriptionStyle.logoPosition === 'center' ? 'center' : prescriptionStyle.logoPosition, width: prescriptionStyle.logoPosition === 'center' ? '100%' : 'auto', marginTop: prescriptionStyle.logoPosition === 'center' ? '10px' : '0'}}>
+                                      {/* Placeholder for logo */}
+                                      <div style={{ width: '80px', height: '80px', background: prescriptionStyle.secondaryColor + '22', color: prescriptionStyle.secondaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5em', borderRadius: '4px', fontWeight: 'bold' }}>
+                                        LOGO
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                                <div style={{ lineHeight: prescriptionStyle.spacing === 'compact' ? '1.4' : prescriptionStyle.spacing === 'relaxed' ? '1.8' : '1.6' }}>
-                                  <p style={{ color: '#374151', margin: '5px 0' }}>Paciente: Ejemplo</p>
-                                  <p style={{ color: '#374151', margin: '5px 0' }}>Medicamento: Ejemplo 500mg</p>
+
+                                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                                    <p style={{ color: prescriptionStyle.primaryColor, margin: '0', fontWeight: 'bold', fontSize: '1.1em' }}>{prescriptionStyle.clinicName}</p>
+                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '2px 0', fontSize: '0.9em' }}>{prescriptionStyle.clinicAddress}</p>
+                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '2px 0', fontSize: '0.9em' }}>Tel: {prescriptionStyle.clinicPhone} | Email: {prescriptionStyle.clinicEmail}</p>
                                 </div>
+                                
+                                <div style={{ marginBottom: '20px', borderBottom: `1px solid ${prescriptionStyle.secondaryColor}33`, paddingBottom: '15px' }}>
+                                  <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 8px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titlePatientInfo}</h4>
+                                  <p style={{ color: '#374151', margin: '4px 0' }}><b>Paciente:</b> Ejemplo Apellido Ejemplo</p>
+                                  <p style={{ color: '#374151', margin: '4px 0' }}><b>Fecha:</b> DD/MM/AAAA</p>
+                                </div>
+
+                                <div style={{ marginBottom: '20px', borderBottom: `1px solid ${prescriptionStyle.secondaryColor}33`, paddingBottom: '15px' }}>
+                                  <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 8px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titleDiagnosis}</h4>
+                                  <p style={{ color: '#374151', margin: '4px 0' }}>Diagnóstico de ejemplo que puede ser un poco más largo para probar el espaciado.</p>
+                                </div>
+                                  
+                                <div style={{ marginBottom: '20px' }}>
+                                  <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 10px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titleMedications}</h4>
+                                  <div style={{ paddingLeft: '15px', borderLeft: `3px solid ${prescriptionStyle.primaryColor}` }}>
+                                    <p style={{ color: '#374151', margin: '5px 0' }}><b>Medicamento Ejemplo 500mg</b> - Tomar 1 tableta cada 8 horas por 7 días. Vía oral. Con alimentos.</p>
+                                    <p style={{ color: '#374151', margin: '10px 0 5px 0' }}><b>Otro Medicamento 20mg</b> - Tomar 1 cápsula en ayunas por 30 días. Vía oral.</p>
+                                  </div>
+                                </div>
+
+                                {prescriptionStyle.titleNotes && (
+                                  <div style={{ marginBottom: '30px'}}>
+                                    <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 8px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titleNotes}</h4>
+                                    <p style={{ color: '#374151', margin: '4px 0', fontStyle:'italic' }}>Indicaciones adicionales: Reposo relativo, beber abundantes líquidos. Próxima cita en 2 semanas.</p>
+                                  </div>
+                                )}
+
+                                <div style={{ display: 'flex', justifyContent: prescriptionStyle.includeQR ? 'space-between' : 'center', alignItems: 'flex-end', marginTop: '30px', paddingTop: '20px', borderTop: `1px solid ${prescriptionStyle.secondaryColor}33` }}>
+                                   <div style={{ textAlign: 'center' }}>
+                                     <div style={{ display: 'inline-block', borderTop: `2px solid ${prescriptionStyle.secondaryColor}`, width: '220px', paddingTop: '8px' }}>
+                                       <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.95em' }}>{prescriptionStyle.titleSignature}</p>
+                                     </div>
+                                   </div>
+                                   {prescriptionStyle.includeQR && (
+                                      <div style={{ textAlign: 'center' }}>
+                                          <svg width="70" height="70" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee" /><text x="50" y="55" dominantBaseline="middle" textAnchor="middle" fill="#333" fontSize="28">QR</text></svg>
+                                          <p style={{fontSize: '0.7em', color: '#555', marginTop: '3px'}}>Verificar</p>
+                                      </div>
+                                   )}
+                                </div>
+                                <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.85em', color: '#555' }}>
+                                    <p>{prescriptionStyle.titleValidity}: Esta receta tiene una validez de 30 días a partir de la fecha de emisión.</p>
+                                </div>
+
                               </div>
                             </div>
 
