@@ -7,7 +7,8 @@ import {
   Plus, FileText, Search, Filter, Calendar, User, 
   Printer, Download, Edit, Eye, Clock, AlertTriangle,
   Pill, Stethoscope, Activity, BookOpen, Save, Copy,
-  GripVertical, RotateCcw, Settings
+  GripVertical, RotateCcw, Settings, Shield, QrCode,
+  History, Wifi, WifiOff, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -499,25 +500,25 @@ export default function PrescriptionDashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="dark-card border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <Stethoscope className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">Dashboard de Recetas Médicas</h1>
+              <Stethoscope className="h-8 w-8 text-cyan-400" />
+              <h1 className="text-2xl font-bold text-gray-100">Dashboard de Recetas Médicas</h1>
             </div>
             <div className="flex space-x-3">
               <button
                 onClick={() => navigate('/dashboard')}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="inline-flex items-center px-4 py-2 dark-button-secondary"
               >
                 Volver al Dashboard
               </button>
               <button
                 onClick={() => setActiveTab('new')}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                className="inline-flex items-center px-4 py-2 dark-button-primary"
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Nueva Receta
@@ -528,7 +529,7 @@ export default function PrescriptionDashboard() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="bg-white border-b">
+      <div className="dark-card border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
             {[
@@ -543,10 +544,10 @@ export default function PrescriptionDashboard() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-all ${
                     activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-cyan-400 text-cyan-400'
+                      : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-600'
                   }`}
                 >
                   <Icon className="h-5 w-5" />
@@ -560,7 +561,7 @@ export default function PrescriptionDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg flex items-center">
+          <div className="mb-4 bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg flex items-center">
             <AlertTriangle className="h-5 w-5 mr-2" />
             {error}
           </div>
@@ -571,18 +572,18 @@ export default function PrescriptionDashboard() {
           <div className="space-y-6">
             {/* Indicadores */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="dark-card overflow-hidden">
                 <div className="p-5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <FileText className="h-6 w-6 text-blue-600" />
+                      <FileText className="h-6 w-6 text-cyan-400" />
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">
+                        <dt className="text-sm font-medium text-gray-400 truncate">
                           Recetas Activas
                         </dt>
-                        <dd className="text-lg font-medium text-gray-900">
+                        <dd className="text-lg font-medium text-gray-100">
                           {activePrescriptions}
                         </dd>
                       </dl>
@@ -591,18 +592,18 @@ export default function PrescriptionDashboard() {
                 </div>
               </div>
 
-              <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="dark-card overflow-hidden">
                 <div className="p-5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <Clock className="h-6 w-6 text-yellow-600" />
+                      <Clock className="h-6 w-6 text-yellow-400" />
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">
+                        <dt className="text-sm font-medium text-gray-400 truncate">
                           Por Vencer
                         </dt>
-                        <dd className="text-lg font-medium text-gray-900">
+                        <dd className="text-lg font-medium text-gray-100">
                           {expiringSoon.length}
                         </dd>
                       </dl>
@@ -611,18 +612,18 @@ export default function PrescriptionDashboard() {
                 </div>
               </div>
 
-              <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="dark-card overflow-hidden">
                 <div className="p-5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <AlertTriangle className="h-6 w-6 text-red-600" />
+                      <AlertTriangle className="h-6 w-6 text-red-400" />
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">
+                        <dt className="text-sm font-medium text-gray-400 truncate">
                           Vencidas
                         </dt>
-                        <dd className="text-lg font-medium text-gray-900">
+                        <dd className="text-lg font-medium text-gray-100">
                           {expiredPrescriptions}
                         </dd>
                       </dl>
@@ -631,18 +632,18 @@ export default function PrescriptionDashboard() {
                 </div>
               </div>
 
-              <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="dark-card overflow-hidden">
                 <div className="p-5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <Pill className="h-6 w-6 text-green-600" />
+                      <Pill className="h-6 w-6 text-green-400" />
                     </div>
                     <div className="ml-5 w-0 flex-1">
                       <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">
+                        <dt className="text-sm font-medium text-gray-400 truncate">
                           Total Recetas
                         </dt>
-                        <dd className="text-lg font-medium text-gray-900">
+                        <dd className="text-lg font-medium text-gray-100">
                           {prescriptions.length}
                         </dd>
                       </dl>
@@ -653,64 +654,64 @@ export default function PrescriptionDashboard() {
             </div>
 
             {/* Recetas Recientes */}
-            <div className="bg-white shadow rounded-lg">
+            <div className="dark-card">
               <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                <h3 className="text-lg leading-6 font-medium text-gray-100 mb-4">
                   Últimas 5 Recetas Emitidas
                 </h3>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-700">
+                    <thead className="bg-gray-800/50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                           Paciente
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                           Diagnóstico
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                           Medicamentos
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                           Fecha
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                           Estado
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                           Acciones
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-700">
                       {recentPrescriptions.map((prescription: Prescription) => (
-                        <tr key={prescription.id}>
+                        <tr key={prescription.id} className="hover:bg-gray-800/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
                               <User className="h-5 w-5 text-gray-400 mr-2" />
-                              <div className="text-sm font-medium text-gray-900">
+                              <div className="text-sm font-medium text-gray-200">
                                 {prescription.patient_name}
                               </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{prescription.diagnosis}</div>
+                            <div className="text-sm text-gray-300">{prescription.diagnosis}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
+                            <div className="text-sm text-gray-300">
                               {prescription.medications.length} medicamento(s)
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
+                            <div className="text-sm text-gray-300">
                               {format(new Date(prescription.created_at), "dd/MM/yyyy")}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              prescription.status === 'active' ? 'bg-green-100 text-green-800' :
-                              prescription.status === 'expired' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
+                              prescription.status === 'active' ? 'bg-green-900 text-green-300' :
+                              prescription.status === 'expired' ? 'bg-red-900 text-red-300' :
+                              'bg-yellow-900 text-yellow-300'
                             }`}>
                               {prescription.status === 'active' ? 'Activa' :
                                prescription.status === 'expired' ? 'Vencida' : 'Dispensada'}
@@ -718,13 +719,13 @@ export default function PrescriptionDashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex space-x-2">
-                              <button className="text-blue-600 hover:text-blue-900">
+                              <button className="text-cyan-400 hover:text-cyan-300 transition-colors">
                                 <Eye className="h-4 w-4" />
                               </button>
-                              <button className="text-gray-600 hover:text-gray-900">
+                              <button className="text-gray-400 hover:text-gray-300 transition-colors">
                                 <Printer className="h-4 w-4" />
                               </button>
-                              <button className="text-green-600 hover:text-green-900">
+                              <button className="text-green-400 hover:text-green-300 transition-colors">
                                 <Download className="h-4 w-4" />
                               </button>
                             </div>
@@ -739,14 +740,14 @@ export default function PrescriptionDashboard() {
 
             {/* Recetas por Vencer */}
             {expiringSoon.length > 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-4">
                 <div className="flex">
                   <AlertTriangle className="h-5 w-5 text-yellow-400" />
                   <div className="ml-3">
-                    <h3 className="text-sm font-medium text-yellow-800">
+                    <h3 className="text-sm font-medium text-yellow-300">
                       Recetas por Vencer
                     </h3>
-                    <div className="mt-2 text-sm text-yellow-700">
+                    <div className="mt-2 text-sm text-yellow-200">
                       <p>Tienes {expiringSoon.length} receta(s) que vencen en los próximos 7 días.</p>
                     </div>
                   </div>
@@ -758,9 +759,9 @@ export default function PrescriptionDashboard() {
 
         {/* Nueva Receta */}
         {activeTab === 'new' && (
-          <div className="bg-white shadow rounded-lg">
+          <div className="dark-card">
             <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mb-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-100 mb-6">
                 Crear Nueva Receta
               </h3>
               
@@ -768,13 +769,13 @@ export default function PrescriptionDashboard() {
                 {/* Información del Paciente */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-300">
                       Paciente
                     </label>
                     <select
                       value={newPrescription.patient_id}
                       onChange={(e) => setNewPrescription(prev => ({ ...prev, patient_id: e.target.value }))}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full dark-input"
                       required
                     >
                       <option value="">Seleccionar paciente</option>
@@ -787,14 +788,14 @@ export default function PrescriptionDashboard() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-300">
                       Fecha de Vencimiento
                     </label>
                     <input
                       type="date"
                       value={newPrescription.expires_at.split('T')[0]}
                       onChange={(e) => setNewPrescription(prev => ({ ...prev, expires_at: e.target.value }))}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full dark-input"
                       required
                     />
                   </div>
@@ -802,14 +803,14 @@ export default function PrescriptionDashboard() {
 
                 {/* Diagnóstico */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-300">
                     Diagnóstico
                   </label>
                   <input
                     type="text"
                     value={newPrescription.diagnosis}
                     onChange={(e) => setNewPrescription(prev => ({ ...prev, diagnosis: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full dark-input"
                     placeholder="Ingrese el diagnóstico"
                     required
                   />
@@ -818,13 +819,13 @@ export default function PrescriptionDashboard() {
                 {/* Medicamentos */}
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-300">
                       Medicamentos
                     </label>
                     <button
                       type="button"
                       onClick={addMedication}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-cyan-300 bg-cyan-900/30 hover:bg-cyan-900/50 transition-colors"
                     >
                       <Plus className="h-4 w-4 mr-1" />
                       Agregar Medicamento
@@ -832,73 +833,73 @@ export default function PrescriptionDashboard() {
                   </div>
                   
                   {newPrescription.medications.map((medication, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4 mb-4">
+                    <div key={index} className="border border-gray-700 rounded-lg p-4 mb-4 bg-gray-800/30">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">
+                          <label className="block text-sm font-medium text-gray-300">
                             Medicamento
                           </label>
                           <input
                             type="text"
                             value={medication.name}
                             onChange={(e) => updateMedication(index, 'name', e.target.value)}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            className="mt-1 block w-full dark-input"
                             placeholder="Nombre del medicamento"
                             required
                           />
                         </div>
                         
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">
+                          <label className="block text-sm font-medium text-gray-300">
                             Dosis
                           </label>
                           <input
                             type="text"
                             value={medication.dosage}
                             onChange={(e) => updateMedication(index, 'dosage', e.target.value)}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            className="mt-1 block w-full dark-input"
                             placeholder="ej. 500mg"
                             required
                           />
                         </div>
                         
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">
+                          <label className="block text-sm font-medium text-gray-300">
                             Frecuencia
                           </label>
                           <input
                             type="text"
                             value={medication.frequency}
                             onChange={(e) => updateMedication(index, 'frequency', e.target.value)}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            className="mt-1 block w-full dark-input"
                             placeholder="ej. Cada 8 horas"
                             required
                           />
                         </div>
                         
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">
+                          <label className="block text-sm font-medium text-gray-300">
                             Duración
                           </label>
                           <input
                             type="text"
                             value={medication.duration}
                             onChange={(e) => updateMedication(index, 'duration', e.target.value)}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            className="mt-1 block w-full dark-input"
                             placeholder="ej. 7 días"
                             required
                           />
                         </div>
                         
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700">
+                          <label className="block text-sm font-medium text-gray-300">
                             Instrucciones
                           </label>
                           <input
                             type="text"
                             value={medication.instructions}
                             onChange={(e) => updateMedication(index, 'instructions', e.target.value)}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            className="mt-1 block w-full dark-input"
                             placeholder="ej. Con alimentos"
                           />
                         </div>
@@ -909,7 +910,7 @@ export default function PrescriptionDashboard() {
                           <button
                             type="button"
                             onClick={() => removeMedication(index)}
-                            className="text-red-600 hover:text-red-800 text-sm"
+                            className="text-red-400 hover:text-red-300 text-sm transition-colors"
                           >
                             Eliminar medicamento
                           </button>
@@ -921,14 +922,14 @@ export default function PrescriptionDashboard() {
 
                 {/* Notas */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-300">
                     Notas Adicionales
                   </label>
                   <textarea
                     value={newPrescription.notes}
                     onChange={(e) => setNewPrescription(prev => ({ ...prev, notes: e.target.value }))}
                     rows={3}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full dark-input"
                     placeholder="Notas adicionales para el paciente o farmacéutico"
                   />
                 </div>
@@ -938,13 +939,13 @@ export default function PrescriptionDashboard() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('dashboard')}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                    className="px-4 py-2 text-sm font-medium dark-button-secondary"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+                    className="px-4 py-2 text-sm font-medium dark-button-primary"
                     disabled={isLoading}
                   >
                     <Save className="h-4 w-4 mr-2 inline" />
@@ -958,10 +959,10 @@ export default function PrescriptionDashboard() {
 
         {/* Historial */}
         {activeTab === 'history' && (
-          <div className="bg-white shadow rounded-lg">
+          <div className="dark-card">
             <div className="px-4 py-5 sm:p-6">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                <h3 className="text-lg leading-6 font-medium text-gray-100">
                   Historial de Recetas
                 </h3>
                 
@@ -972,7 +973,7 @@ export default function PrescriptionDashboard() {
                     <input
                       type="text"
                       placeholder="Buscar paciente o diagnóstico..."
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      className="pl-10 pr-4 py-2 dark-input"
                       value={searchTerm}
                       onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                     />
@@ -981,7 +982,7 @@ export default function PrescriptionDashboard() {
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value as any)}
-                    className="border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="dark-input"
                   >
                     <option value="all">Todos los estados</option>
                     <option value="active">Activas</option>
@@ -993,72 +994,72 @@ export default function PrescriptionDashboard() {
                     type="date"
                     value={filterDate}
                     onChange={(e) => setFilterDate(e.target.value)}
-                    className="border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="dark-input"
                   />
                 </div>
               </div>
               
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead className="bg-gray-800/50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                         Paciente
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                         Diagnóstico
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                         Medicamentos
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                         Fecha
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                         Vence
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                         Estado
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                         Acciones
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-700">
                     {filteredPrescriptions.map((prescription: Prescription) => (
-                      <tr key={prescription.id}>
+                      <tr key={prescription.id} className="hover:bg-gray-800/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <User className="h-5 w-5 text-gray-400 mr-2" />
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-medium text-gray-200">
                               {prescription.patient_name}
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{prescription.diagnosis}</div>
+                          <div className="text-sm text-gray-300">{prescription.diagnosis}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-gray-300">
                             {prescription.medications.map(med => med.name).join(', ')}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-gray-300">
                             {format(new Date(prescription.created_at), "dd/MM/yyyy")}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-gray-300">
                             {format(new Date(prescription.expires_at), "dd/MM/yyyy")}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            prescription.status === 'active' ? 'bg-green-100 text-green-800' :
-                            prescription.status === 'expired' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
+                            prescription.status === 'active' ? 'bg-green-900 text-green-300' :
+                            prescription.status === 'expired' ? 'bg-red-900 text-red-300' :
+                            'bg-yellow-900 text-yellow-300'
                           }`}>
                             {prescription.status === 'active' ? 'Activa' :
                              prescription.status === 'expired' ? 'Vencida' : 'Dispensada'}
@@ -1066,19 +1067,19 @@ export default function PrescriptionDashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex space-x-2">
-                            <button className="text-blue-600 hover:text-blue-900">
+                            <button className="text-cyan-400 hover:text-cyan-300 transition-colors">
                               <Eye className="h-4 w-4" />
                             </button>
-                            <button className="text-gray-600 hover:text-gray-900">
+                            <button className="text-gray-400 hover:text-gray-300 transition-colors">
                               <Edit className="h-4 w-4" />
                             </button>
-                            <button className="text-gray-600 hover:text-gray-900">
+                            <button className="text-gray-400 hover:text-gray-300 transition-colors">
                               <Printer className="h-4 w-4" />
                             </button>
-                            <button className="text-green-600 hover:text-green-900">
+                            <button className="text-green-400 hover:text-green-300 transition-colors">
                               <Download className="h-4 w-4" />
                             </button>
-                            <button className="text-blue-600 hover:text-blue-900">
+                            <button className="text-cyan-400 hover:text-cyan-300 transition-colors">
                               <Copy className="h-4 w-4" />
                             </button>
                           </div>
@@ -1096,10 +1097,10 @@ export default function PrescriptionDashboard() {
         {activeTab === 'templates' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
+              <h3 className="text-lg leading-6 font-medium text-gray-100">
                 Prescripciones Predeterminadas
               </h3>
-              <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+              <button className="inline-flex items-center px-4 py-2 dark-button-primary">
                 <Plus className="h-5 w-5 mr-2" />
                 Nueva Plantilla
               </button>
@@ -1107,29 +1108,29 @@ export default function PrescriptionDashboard() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {predefinedPrescriptions.map((template: PredefinedPrescription) => (
-                <div key={template.id} className="bg-white overflow-hidden shadow rounded-lg">
+                <div key={template.id} className="dark-card overflow-hidden">
                   <div className="p-5">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-lg font-medium text-gray-900">{template.name}</h4>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <h4 className="text-lg font-medium text-gray-100">{template.name}</h4>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-900 text-cyan-300">
                         {template.category}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-gray-600">{template.diagnosis}</p>
+                    <p className="mt-2 text-sm text-gray-400">{template.diagnosis}</p>
                     <div className="mt-3">
-                      <h5 className="text-sm font-medium text-gray-700">Medicamentos:</h5>
-                      <ul className="mt-1 text-sm text-gray-600">
+                      <h5 className="text-sm font-medium text-gray-300">Medicamentos:</h5>
+                      <ul className="mt-1 text-sm text-gray-400">
                         {template.medications.map((med, index) => (
                           <li key={index}>• {med.name} - {med.dosage}</li>
                         ))}
                       </ul>
                     </div>
                     <div className="mt-4 flex space-x-2">
-                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2 dark-button-secondary text-sm">
                         <Edit className="h-4 w-4 mr-2" />
                         Editar
                       </button>
-                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2 dark-button-primary text-sm">
                         <Copy className="h-4 w-4 mr-2" />
                         Usar
                       </button>
@@ -1145,15 +1146,15 @@ export default function PrescriptionDashboard() {
         {activeTab === 'layout' && (
           <div className="space-y-6">
             {/* Controles */}
-            <div className="no-print bg-white p-4 rounded-lg shadow-sm border">
+            <div className="no-print dark-card p-4">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className="text-xl font-semibold text-gray-100">
                   Editor de Layout de Receta
                 </h2>
                 <div className="flex space-x-2">
                   <button
                     onClick={handleResetOrder}
-                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="inline-flex items-center px-3 py-2 dark-button-secondary text-sm"
                     title="Restablecer orden por defecto"
                   >
                     <RotateCcw className="h-4 w-4 mr-1" />
@@ -1161,7 +1162,7 @@ export default function PrescriptionDashboard() {
                   </button>
                   <button
                     onClick={handleSaveOrder}
-                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="inline-flex items-center px-3 py-2 dark-button-secondary text-sm"
                     title="Guardar orden actual"
                   >
                     <Save className="h-4 w-4 mr-1" />
@@ -1169,10 +1170,10 @@ export default function PrescriptionDashboard() {
                   </button>
                   <button
                     onClick={handlePreview}
-                    className={`inline-flex items-center px-3 py-2 border rounded-md text-sm font-medium ${
+                    className={`inline-flex items-center px-3 py-2 text-sm ${
                       isPreviewMode 
-                        ? 'border-blue-300 text-blue-700 bg-blue-50' 
-                        : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+                        ? 'dark-button-primary' 
+                        : 'dark-button-secondary'
                     }`}
                     title="Vista previa de impresión"
                   >
@@ -1181,7 +1182,7 @@ export default function PrescriptionDashboard() {
                   </button>
                   <button
                     onClick={handlePrint}
-                    className="inline-flex items-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="inline-flex items-center px-3 py-2 dark-button-primary text-sm"
                     title="Imprimir receta"
                   >
                     <Printer className="h-4 w-4 mr-1" />
@@ -1191,7 +1192,7 @@ export default function PrescriptionDashboard() {
               </div>
               
               {!isPreviewMode && (
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-gray-400">
                   <p className="flex items-center">
                     <GripVertical className="h-4 w-4 mr-2" />
                     Arrastra las secciones por el ícono de líneas para reordenarlas según tus preferencias de impresión.
@@ -1208,8 +1209,8 @@ export default function PrescriptionDashboard() {
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={`print-container space-y-4 ${
-                      isPreviewMode ? 'bg-white shadow-lg rounded-lg p-6' : ''
-                    } ${snapshot.isDraggingOver ? 'bg-blue-50' : ''}`}
+                      isPreviewMode ? 'bg-white shadow-lg rounded-lg p-6 print-friendly' : ''
+                    } ${snapshot.isDraggingOver ? 'bg-gray-800/50' : ''}`}
                   >
                     {sectionOrder.map((sectionId, index) => {
                       const sectionData = getSectionData().find(s => s.id === sectionId);
@@ -1229,8 +1230,8 @@ export default function PrescriptionDashboard() {
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               data-section-id={sectionId}
-                              className={`seccion bg-white border rounded-lg ${
-                                isPreviewMode ? 'border-transparent' : 'border-gray-200 shadow-sm'
+                              className={`seccion ${
+                                isPreviewMode ? 'bg-white border-transparent' : 'dark-card'
                               } ${snapshot.isDragging ? 'shadow-2xl rotate-2 scale-105' : ''}`}
                               style={{
                                 ...provided.draggableProps.style,
@@ -1238,16 +1239,16 @@ export default function PrescriptionDashboard() {
                               }}
                             >
                               {!isPreviewMode && (
-                                <div className="no-print flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                                <div className="no-print flex items-center justify-between p-3 bg-gray-800/50 border-b border-gray-700 rounded-t-lg">
                                   <div className="flex items-center space-x-3">
                                     <div 
                                       {...provided.dragHandleProps}
-                                      className="drag-handle cursor-grab text-gray-400 hover:text-gray-600 active:cursor-grabbing"
+                                      className="drag-handle cursor-grab text-gray-400 hover:text-gray-200 active:cursor-grabbing"
                                     >
                                       <GripVertical className="h-5 w-5" />
                                     </div>
-                                    <IconComponent className="h-5 w-5 text-gray-600" />
-                                    <span className="font-medium text-gray-900">{sectionData.title}</span>
+                                    <IconComponent className="h-5 w-5 text-gray-400" />
+                                    <span className="font-medium text-gray-200">{sectionData.title}</span>
                                   </div>
                                   <div className="text-sm text-gray-500">
                                     Orden: {index + 1}
