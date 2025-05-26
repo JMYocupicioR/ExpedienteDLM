@@ -419,7 +419,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
     setPreviewUrl(preview);
 
     const fileExt = file.name.split('.').pop();
-    const fileName = `${userProfile.id}-${Date.now()}.${fileExt}`;
+    const fileName = `${userProfile.id}/${Date.now()}.${fileExt}`;
     const bucketName = 'logos';
 
     setIsUploadingLogo(true);
@@ -427,15 +427,15 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
       // First, try to delete any existing logo for this user
       const { data: existingFiles } = await supabase.storage
         .from(bucketName)
-        .list('', {
-          search: userProfile.id
+        .list(userProfile.id, {
+          limit: 1
         });
 
       if (existingFiles && existingFiles.length > 0) {
         for (const existingFile of existingFiles) {
           const { error: deleteError } = await supabase.storage
             .from(bucketName)
-            .remove([existingFile.name]);
+            .remove([`${userProfile.id}/${existingFile.name}`]);
           
           if (deleteError) {
             console.warn('Error deleting existing logo:', deleteError);
@@ -454,7 +454,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
       if (error) {
         console.error('Error uploading logo:', error);
         if (error.message.includes('row-level security')) {
-          setLogoUploadError('Error de permisos al subir el logo. Por favor, intente nuevamente.');
+          setLogoUploadError('Error de permisos al subir el logo. Por favor, verifica que tienes los permisos necesarios.');
         } else {
           setLogoUploadError(`Error al subir el logo: ${error.message}`);
         }
@@ -476,6 +476,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
 
     } catch (err: any) {
       console.error('Logo upload error:', err);
+      setLogoUploadError(err.message || 'Error al subir el logo. Por favor, intente nuevamente.');
     } finally {
       setIsUploadingLogo(false);
       // Clear the file input so the same file can be re-selected if needed after an error
