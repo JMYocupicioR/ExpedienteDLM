@@ -145,7 +145,7 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
               </div>
             </div>
             <div className="text-sm text-gray-400">
-              <p>{template.definition.sections.length} secciones</p>
+              <p>{template.definition?.sections?.length || 0} secciones</p>
               <p className="text-xs mt-1">
                 Creada: {new Date(template.created_at).toLocaleDateString()}
               </p>
