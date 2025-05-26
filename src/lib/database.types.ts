@@ -243,29 +243,78 @@ export interface Database {
       physical_exam_templates: {
         Row: {
           id: string
-          doctor_id: string
-          name: string
-          fields: Json
           created_at: string
-          updated_at: string
+          name: string
+          doctor_id: string
+          definition: PhysicalExamTemplateDefinition
+          is_active: boolean
         }
         Insert: {
           id?: string
-          doctor_id: string
-          name: string
-          fields: Json
           created_at?: string
-          updated_at?: string
+          name: string
+          doctor_id: string
+          definition: PhysicalExamTemplateDefinition
+          is_active?: boolean
         }
         Update: {
           id?: string
-          doctor_id?: string
-          name?: string
-          fields?: Json
           created_at?: string
-          updated_at?: string
+          name?: string
+          doctor_id?: string
+          definition?: PhysicalExamTemplateDefinition
+          is_active?: boolean
         }
       }
     }
   }
+}
+
+export interface ExamQuestion {
+  id: string
+  label: string
+  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'number'
+  required?: boolean
+  options?: string[]
+  placeholder?: string
+  min?: number
+  max?: number
+  unit?: string
+  defaultValue?: string | number | boolean
+}
+
+export interface ExamSection {
+  id: string
+  title: string
+  description?: string
+  questions: ExamQuestion[]
+  order: number
+}
+
+export interface PhysicalExamTemplateDefinition {
+  sections: ExamSection[]
+  version: string
+  metadata?: {
+    lastModified?: string
+    author?: string
+    description?: string
+  }
+}
+
+export interface PhysicalExamFormData {
+  examDate: string
+  examTime: string
+  vitalSigns: {
+    systolic_pressure: string
+    diastolic_pressure: string
+    heart_rate: string
+    respiratory_rate: string
+    temperature: string
+    oxygen_saturation: string
+    weight: string
+    height: string
+    bmi: string
+  }
+  sections: Record<string, any>
+  generalObservations: string
 }
