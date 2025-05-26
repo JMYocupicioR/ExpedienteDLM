@@ -388,7 +388,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         
         <div className="p-4">
           <PhysicalExamForm
-            templateId="general"
+            templateId={selectedTemplate.id}
             templateName={selectedTemplate.name}
             onSave={handlePhysicalExamSave}
             onAutoSave={handlePhysicalExamAutoSave}
