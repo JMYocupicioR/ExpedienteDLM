@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, Clock, Heart, FileText, CheckCircle, AlertCircle, Camera, Loader2 } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
+import type { 
+  PhysicalExamFormData, 
+  PhysicalExamTemplateDefinition,
+  ExamSection,
+  ExamQuestion 
+} from '../lib/database.types';
 
 interface VitalSigns {
   systolic_pressure: string;
@@ -25,19 +31,12 @@ interface ExaminationSection {
   attachments: File[];
 }
 
-interface PhysicalExamFormData {
-  examDate: string;
-  examTime: string;
-  vitalSigns: VitalSigns;
-  sections: Record<string, ExaminationSection>;
-  generalObservations: string;
-}
-
 interface PhysicalExamFormProps {
   templateId: string;
   templateName: string;
-  onSave: (data: PhysicalExamFormData) => void;
-  onAutoSave: (data: PhysicalExamFormData) => void;
+  templateDefinition: PhysicalExamTemplateDefinition;
+  onSave: (data: PhysicalExamFormData) => Promise<void>;
+  onAutoSave: (data: PhysicalExamFormData) => Promise<void>;
   initialData?: Partial<PhysicalExamFormData>;
 }
 
@@ -207,36 +206,38 @@ const EXAMINATION_TEMPLATES = {
   }
 };
 
-export default function PhysicalExamForm({ 
-  templateId, 
-  templateName, 
-  onSave, 
-  onAutoSave, 
-  initialData 
+export default function PhysicalExamForm({
+  templateId,
+  templateName,
+  templateDefinition,
+  onSave,
+  onAutoSave,
+  initialData
 }: PhysicalExamFormProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [criticalAlerts, setCriticalAlerts] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<PhysicalExamFormData>({
     defaultValues: {
-      examDate: new Date().toISOString().split('T')[0],
-      examTime: new Date().toTimeString().split(' ')[0].substring(0, 5),
+      examDate: initialData?.examDate || new Date().toISOString().split('T')[0],
+      examTime: initialData?.examTime || new Date().toTimeString().slice(0, 5),
       vitalSigns: {
-        systolic_pressure: '',
-        diastolic_pressure: '',
-        heart_rate: '',
-        respiratory_rate: '',
-        temperature: '',
-        oxygen_saturation: '',
-        weight: '',
-        height: '',
-        bmi: ''
+        systolic_pressure: initialData?.vitalSigns?.systolic_pressure || '',
+        diastolic_pressure: initialData?.vitalSigns?.diastolic_pressure || '',
+        heart_rate: initialData?.vitalSigns?.heart_rate || '',
+        respiratory_rate: initialData?.vitalSigns?.respiratory_rate || '',
+        temperature: initialData?.vitalSigns?.temperature || '',
+        oxygen_saturation: initialData?.vitalSigns?.oxygen_saturation || '',
+        weight: initialData?.vitalSigns?.weight || '',
+        height: initialData?.vitalSigns?.height || '',
+        bmi: initialData?.vitalSigns?.bmi || ''
       },
-      sections: {},
-      generalObservations: '',
-      ...initialData
+      sections: initialData?.sections || {},
+      generalObservations: initialData?.generalObservations || ''
     }
   });
 
@@ -370,7 +371,8 @@ export default function PhysicalExamForm({
   // ✅ MEJORADO: Validation with better error handling
   const onSubmit = async (data: PhysicalExamFormData) => {
     try {
-      setSaveState('saving');
+      setIsLoading(true);
+      setError(null);
       setValidationErrors({});
       
       // Validate vital signs
@@ -393,9 +395,12 @@ export default function PhysicalExamForm({
       await onSave(data);
       setSaveState('saved');
       
-    } catch (error) {
-      console.error('Error saving physical exam:', error);
+    } catch (err: any) {
+      console.error('Error saving physical exam:', err);
+      setError(err.message);
       setSaveState('error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -439,6 +444,138 @@ export default function PhysicalExamForm({
     }
   };
 
+  const renderQuestion = (question: ExamQuestion, sectionId: string) => {
+    const fieldName = `sections.${sectionId}.${question.id}`;
+
+    switch (question.type) {
+      case 'text':
+        return (
+          <Controller
+            name={fieldName}
+            control={control}
+            rules={{ required: question.required }}
+            render={({ field }) => (
+              <input
+                {...field}
+                type="text"
+                placeholder={question.placeholder}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            )}
+          />
+        );
+
+      case 'textarea':
+        return (
+          <Controller
+            name={fieldName}
+            control={control}
+            rules={{ required: question.required }}
+            render={({ field }) => (
+              <textarea
+                {...field}
+                rows={3}
+                placeholder={question.placeholder}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            )}
+          />
+        );
+
+      case 'select':
+        return (
+          <Controller
+            name={fieldName}
+            control={control}
+            rules={{ required: question.required }}
+            render={({ field }) => (
+              <select
+                {...field}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Seleccionar...</option>
+                {question.options?.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            )}
+          />
+        );
+
+      case 'number':
+        return (
+          <Controller
+            name={fieldName}
+            control={control}
+            rules={{ required: question.required }}
+            render={({ field }) => (
+              <div className="flex items-center space-x-2">
+                <input
+                  {...field}
+                  type="number"
+                  min={question.min}
+                  max={question.max}
+                  placeholder={question.placeholder}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+                {question.unit && (
+                  <span className="text-gray-400">{question.unit}</span>
+                )}
+              </div>
+            )}
+          />
+        );
+
+      case 'checkbox':
+        return (
+          <Controller
+            name={fieldName}
+            control={control}
+            render={({ field: { value, onChange } }) => (
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={value}
+                  onChange={(e) => onChange(e.target.checked)}
+                  className="rounded border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
+                />
+                <span className="text-gray-300">{question.label}</span>
+              </label>
+            )}
+          />
+        );
+
+      case 'radio':
+        return (
+          <Controller
+            name={fieldName}
+            control={control}
+            rules={{ required: question.required }}
+            render={({ field }) => (
+              <div className="space-y-2">
+                {question.options?.map((option) => (
+                  <label key={option} className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      {...field}
+                      value={option}
+                      className="rounded-full border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
+                    />
+                    <span className="text-gray-300">{option}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          />
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6 bg-gray-800 rounded-lg shadow-lg border border-gray-700">
       {/* Header */}
@@ -468,6 +605,12 @@ export default function PhysicalExamForm({
         </div>
       )}
 
+      {error && (
+        <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm mb-6">
+          {error}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
         {/* Fecha y Hora */}
         <div className="grid grid-cols-2 gap-4">
@@ -475,10 +618,17 @@ export default function PhysicalExamForm({
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Fecha del Examen *
             </label>
-            <input
-              type="date"
-              {...register('examDate', { required: 'La fecha es requerida' })}
-              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+            <Controller
+              name="examDate"
+              control={control}
+              rules={{ required: true }}
+              render={({ field }) => (
+                <input
+                  {...field}
+                  type="date"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              )}
             />
             {errors.examDate && (
               <p className="mt-1 text-sm text-red-400">{errors.examDate.message}</p>
@@ -488,10 +638,17 @@ export default function PhysicalExamForm({
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Hora del Examen *
             </label>
-            <input
-              type="time"
-              {...register('examTime', { required: 'La hora es requerida' })}
-              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+            <Controller
+              name="examTime"
+              control={control}
+              rules={{ required: true }}
+              render={({ field }) => (
+                <input
+                  {...field}
+                  type="time"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              )}
             />
             {errors.examTime && (
               <p className="mt-1 text-sm text-red-400">{errors.examTime.message}</p>
@@ -574,8 +731,8 @@ export default function PhysicalExamForm({
           </div>
         </div>
 
-        {/* Sections */}
-        {template.sections.map((section) => (
+        {/* Secciones de la Plantilla */}
+        {templateDefinition.sections.map((section: ExamSection) => (
           <div key={section.id} className="border border-gray-600 rounded-lg p-6 bg-gray-750">
             <h3 className="text-lg font-medium text-white mb-4">{section.title}</h3>
             
