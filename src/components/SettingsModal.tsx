@@ -390,27 +390,66 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        setLogoUploadError('El archivo del logo no debe exceder los 2MB.');
-        return;
+    // Validate file size (2MB limit)
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoUploadError('El archivo del logo no debe exceder los 2MB.');
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    if (!allowedTypes.includes(file.type)) {
+      setLogoUploadError('Tipo de archivo no permitido. Use JPG, PNG, GIF, WEBP o SVG.');
+      return;
     }
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${userProfile.id}-${Date.now()}.${fileExt}`;
-    const bucketName = 'logos'; // <<< IMPORTANT: Change if your bucket name is different
+    const bucketName = 'logos';
+
+    console.log('Uploading logo:', {
+      fileName,
+      fileType: file.type,
+      fileSize: file.size,
+      userId: userProfile.id
+    });
 
     setIsUploadingLogo(true);
     try {
+      // First, try to delete any existing logo for this user
+      const { data: existingFiles } = await supabase.storage
+        .from(bucketName)
+        .list('', {
+          search: userProfile.id
+        });
+
+      if (existingFiles && existingFiles.length > 0) {
+        for (const existingFile of existingFiles) {
+          const { error: deleteError } = await supabase.storage
+            .from(bucketName)
+            .remove([existingFile.name]);
+          
+          if (deleteError) {
+            console.warn('Error deleting existing logo:', deleteError);
+          }
+        }
+      }
+
+      // Upload the new logo
       const { data, error } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file, {
-            cacheControl: '3600',
-            upsert: true, // Overwrite if file with same name exists for this user
+          cacheControl: '3600',
+          upsert: true
         });
 
       if (error) {
         console.error('Error uploading logo:', error);
-        setLogoUploadError(`Error al subir el logo: ${error.message}`);
+        if (error.message.includes('row-level security')) {
+          setLogoUploadError('Error de permisos al subir el logo. Por favor, intente nuevamente.');
+        } else {
+          setLogoUploadError(`Error al subir el logo: ${error.message}`);
+        }
         throw error;
       }
 
@@ -424,14 +463,20 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
         throw new Error('No se pudo obtener la URL pública del logo.');
       }
 
+      console.log('Logo uploaded successfully:', {
+        fileName,
+        publicUrl: publicURLData.publicUrl
+      });
+
       setPrescriptionStyle(prev => ({ ...prev, logoUrl: publicURLData.publicUrl }));
       setSuccessMessage('Logo actualizado correctamente.');
 
     } catch (err: any) {
+      console.error('Logo upload error:', err);
       // Error state already set or will be set by specific checks
     } finally {
       setIsUploadingLogo(false);
-       // Clear the file input so the same file can be re-selected if needed after an error
+      // Clear the file input so the same file can be re-selected if needed after an error
       event.target.value = '';
     }
   };
