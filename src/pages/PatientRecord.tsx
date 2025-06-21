@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
   ArrowLeft, Clock, Heart, Brain, Dna, Trash2, Eye, ChevronDown, ChevronUp,
-  Search, Filter, RefreshCw
+  Search, Filter, RefreshCw, FileDown, Printer, FileText as FileTextIcon
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
@@ -35,12 +35,27 @@ export default function PatientRecord() {
   const [error, setError] = useState<string | null>(null);
   const [consultationSearch, setConsultationSearch] = useState('');
   const [expandedConsultation, setExpandedConsultation] = useState<string | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     if (id) {
       checkSession();
     }
   }, [id]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.export-menu')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const checkSession = async () => {
     try {
@@ -236,6 +251,305 @@ export default function PatientRecord() {
     consultation.current_condition?.toLowerCase().includes(consultationSearch.toLowerCase())
   );
 
+  const handleExportMenuToggle = () => {
+    setShowExportMenu(!showExportMenu);
+  };
+
+  const calculateAge = (birthDate: string): number => {
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  const handlePrintRecord = () => {
+    const printContent = generateFullRecordContent();
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Expediente Completo - ${patient?.full_name}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
+              h1 { color: #333; text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
+              h2 { color: #444; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 30px; }
+              h3 { color: #555; margin-top: 20px; }
+              table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f5f5f5; font-weight: bold; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              .section { margin-bottom: 30px; }
+              .header-info { margin-bottom: 20px; background-color: #f8f9fa; padding: 15px; border-radius: 5px; }
+              .consultation-item { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
+              .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+              @media print { body { margin: 0; } }
+            </style>
+          </head>
+          <body>
+            ${printContent}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+    setShowExportMenu(false);
+  };
+
+  const handleExportRecordTXT = () => {
+    const txtContent = generateFullRecordTXTContent();
+    const blob = new Blob([txtContent], { type: 'text/plain; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `expediente_${patient?.full_name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleExportRecordPDF = () => {
+    const pdfContent = generateFullRecordContent();
+    const pdfWindow = window.open('', '_blank');
+    if (pdfWindow) {
+      pdfWindow.document.write(`
+        <html>
+          <head>
+            <title>Expediente Completo - ${patient?.full_name}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
+              h1 { color: #333; text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
+              h2 { color: #444; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 30px; }
+              h3 { color: #555; margin-top: 20px; }
+              table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f5f5f5; font-weight: bold; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              .section { margin-bottom: 30px; }
+              .header-info { margin-bottom: 20px; background-color: #f8f9fa; padding: 15px; border-radius: 5px; }
+              .consultation-item { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
+              .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+              @media print { body { margin: 0; } }
+            </style>
+          </head>
+          <body>
+            ${pdfContent}
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                }, 500);
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      pdfWindow.document.close();
+    }
+    setShowExportMenu(false);
+  };
+
+  const generateFullRecordContent = () => {
+    if (!patient) return '';
+    
+    const currentDate = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es });
+    
+    return `
+      <div class="header-info">
+        <h1>EXPEDIENTE MÉDICO COMPLETO</h1>
+        <div class="two-column">
+          <div>
+            <p><strong>Paciente:</strong> ${patient.full_name}</p>
+            <p><strong>Expediente No.:</strong> ${patient.id.slice(0, 8)}</p>
+            <p><strong>Fecha de generación:</strong> ${currentDate}</p>
+          </div>
+          <div>
+            <p><strong>Edad:</strong> ${calculateAge(patient.birth_date)} años</p>
+            <p><strong>Género:</strong> ${patient.gender}</p>
+            <p><strong>Generado por:</strong> ${userProfile?.full_name}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📋 INFORMACIÓN PERSONAL</h2>
+        <table>
+          <tr><th>Campo</th><th>Valor</th></tr>
+          <tr><td>Nombre Completo</td><td>${patient.full_name}</td></tr>
+          <tr><td>Fecha de Nacimiento</td><td>${format(new Date(patient.birth_date), 'dd/MM/yyyy')}</td></tr>
+          <tr><td>Edad</td><td>${calculateAge(patient.birth_date)} años</td></tr>
+          <tr><td>Género</td><td>${patient.gender}</td></tr>
+          <tr><td>Email</td><td>${patient.email || 'No especificado'}</td></tr>
+          <tr><td>Teléfono</td><td>${patient.phone || 'No especificado'}</td></tr>
+          <tr><td>Ciudad de Nacimiento</td><td>${patient.city_of_birth || 'No especificado'}</td></tr>
+          <tr><td>Ciudad de Residencia</td><td>${patient.city_of_residence || 'No especificado'}</td></tr>
+          <tr><td>Número de Seguro Social</td><td>${patient.social_security_number || 'No especificado'}</td></tr>
+          <tr><td>Dirección</td><td>${patient.address || 'No especificado'}</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>🏥 ANTECEDENTES PATOLÓGICOS</h2>
+        <table>
+          <tr><th>Campo</th><th>Información</th></tr>
+          <tr><td>Enfermedades Crónicas</td><td>${pathologicalHistory?.chronic_diseases?.join(', ') || 'Ninguna registrada'}</td></tr>
+          <tr><td>Tratamientos Actuales</td><td>${pathologicalHistory?.current_treatments?.join(', ') || 'Ninguno registrado'}</td></tr>
+          <tr><td>Cirugías</td><td>${pathologicalHistory?.surgeries?.join(', ') || 'Ninguna registrada'}</td></tr>
+          <tr><td>Fracturas</td><td>${pathologicalHistory?.fractures?.join(', ') || 'Ninguna registrada'}</td></tr>
+          <tr><td>Hospitalizaciones Previas</td><td>${pathologicalHistory?.previous_hospitalizations?.join(', ') || 'Ninguna registrada'}</td></tr>
+          <tr><td>Uso de Alcohol</td><td>${pathologicalHistory?.substance_use?.alcohol || 'No especificado'}</td></tr>
+          <tr><td>Uso de Tabaco</td><td>${pathologicalHistory?.substance_use?.tabaco || 'No especificado'}</td></tr>
+          <tr><td>Uso de Drogas</td><td>${pathologicalHistory?.substance_use?.drogas || 'No especificado'}</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>👤 ANTECEDENTES NO PATOLÓGICOS</h2>
+        <table>
+          <tr><th>Campo</th><th>Información</th></tr>
+          <tr><td>Lateralidad</td><td>${nonPathologicalHistory?.handedness || 'No especificado'}</td></tr>
+          <tr><td>Religión</td><td>${nonPathologicalHistory?.religion || 'No especificado'}</td></tr>
+          <tr><td>Estado Civil</td><td>${nonPathologicalHistory?.marital_status || 'No especificado'}</td></tr>
+          <tr><td>Escolaridad</td><td>${nonPathologicalHistory?.education_level || 'No especificado'}</td></tr>
+          <tr><td>Dieta</td><td>${nonPathologicalHistory?.diet || 'No especificado'}</td></tr>
+          <tr><td>Higiene Personal</td><td>${nonPathologicalHistory?.personal_hygiene || 'No especificado'}</td></tr>
+          <tr><td>Historial de Vacunación</td><td>${nonPathologicalHistory?.vaccination_history?.join(', ') || 'No especificado'}</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>🧬 ANTECEDENTES HEREDOFAMILIARES</h2>
+        ${hereditaryBackgrounds.length > 0 ? `
+          <table>
+            <tr><th>Parentesco</th><th>Condición/Enfermedad</th><th>Notas</th></tr>
+            ${hereditaryBackgrounds.map(bg => `
+              <tr>
+                <td>${bg.relationship}</td>
+                <td>${bg.condition}</td>
+                <td>${bg.notes || 'Sin notas adicionales'}</td>
+              </tr>
+            `).join('')}
+          </table>
+        ` : '<p><em>No hay antecedentes heredofamiliares registrados.</em></p>'}
+      </div>
+
+      <div class="section">
+        <h2>📝 HISTORIAL DE CONSULTAS (${consultations.length} consultas)</h2>
+        ${consultations.length > 0 ? consultations.map(consultation => `
+          <div class="consultation-item">
+            <h3>Consulta del ${format(new Date(consultation.created_at), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}</h3>
+            <table>
+              <tr><td><strong>Diagnóstico:</strong></td><td>${consultation.diagnosis || 'No especificado'}</td></tr>
+              <tr><td><strong>Condición Actual:</strong></td><td>${consultation.current_condition || 'No especificado'}</td></tr>
+              <tr><td><strong>Tratamiento:</strong></td><td>${consultation.treatment || 'No especificado'}</td></tr>
+              <tr><td><strong>Observaciones:</strong></td><td>${consultation.observations || 'Sin observaciones'}</td></tr>
+              <tr><td><strong>Próxima Cita:</strong></td><td>${consultation.next_appointment ? format(new Date(consultation.next_appointment), 'dd/MM/yyyy', { locale: es }) : 'No programada'}</td></tr>
+            </table>
+          </div>
+        `).join('') : '<p><em>No hay consultas registradas.</em></p>'}
+      </div>
+         `;
+   };
+
+  const generateFullRecordTXTContent = () => {
+    if (!patient) return '';
+    
+    const currentDate = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es });
+    
+    let content = `EXPEDIENTE MÉDICO COMPLETO\n`;
+    content += `${'='.repeat(50)}\n\n`;
+    content += `PACIENTE: ${patient.full_name}\n`;
+    content += `EXPEDIENTE No.: ${patient.id.slice(0, 8)}\n`;
+    content += `FECHA DE GENERACIÓN: ${currentDate}\n`;
+    content += `EDAD: ${calculateAge(patient.birth_date)} años\n`;
+    content += `GENERADO POR: ${userProfile?.full_name}\n\n`;
+    
+    // Información Personal
+    content += `INFORMACIÓN PERSONAL\n`;
+    content += `${'='.repeat(25)}\n`;
+    content += `Nombre Completo: ${patient.full_name}\n`;
+    content += `Fecha de Nacimiento: ${format(new Date(patient.birth_date), 'dd/MM/yyyy')}\n`;
+    content += `Edad: ${calculateAge(patient.birth_date)} años\n`;
+    content += `Género: ${patient.gender}\n`;
+    content += `Email: ${patient.email || 'No especificado'}\n`;
+    content += `Teléfono: ${patient.phone || 'No especificado'}\n`;
+    content += `Ciudad de Nacimiento: ${patient.city_of_birth || 'No especificado'}\n`;
+    content += `Ciudad de Residencia: ${patient.city_of_residence || 'No especificado'}\n`;
+    content += `Número de Seguro Social: ${patient.social_security_number || 'No especificado'}\n`;
+    content += `Dirección: ${patient.address || 'No especificado'}\n\n`;
+    
+    // Antecedentes Patológicos
+    content += `ANTECEDENTES PATOLÓGICOS\n`;
+    content += `${'='.repeat(25)}\n`;
+    content += `Enfermedades Crónicas: ${pathologicalHistory?.chronic_diseases?.join(', ') || 'Ninguna registrada'}\n`;
+    content += `Tratamientos Actuales: ${pathologicalHistory?.current_treatments?.join(', ') || 'Ninguno registrado'}\n`;
+    content += `Cirugías: ${pathologicalHistory?.surgeries?.join(', ') || 'Ninguna registrada'}\n`;
+    content += `Fracturas: ${pathologicalHistory?.fractures?.join(', ') || 'Ninguna registrada'}\n`;
+    content += `Hospitalizaciones Previas: ${pathologicalHistory?.previous_hospitalizations?.join(', ') || 'Ninguna registrada'}\n`;
+    content += `Uso de Alcohol: ${pathologicalHistory?.substance_use?.alcohol || 'No especificado'}\n`;
+    content += `Uso de Tabaco: ${pathologicalHistory?.substance_use?.tabaco || 'No especificado'}\n`;
+    content += `Uso de Drogas: ${pathologicalHistory?.substance_use?.drogas || 'No especificado'}\n\n`;
+    
+    // Antecedentes No Patológicos
+    content += `ANTECEDENTES NO PATOLÓGICOS\n`;
+    content += `${'='.repeat(28)}\n`;
+    content += `Lateralidad: ${nonPathologicalHistory?.handedness || 'No especificado'}\n`;
+    content += `Religión: ${nonPathologicalHistory?.religion || 'No especificado'}\n`;
+    content += `Estado Civil: ${nonPathologicalHistory?.marital_status || 'No especificado'}\n`;
+    content += `Escolaridad: ${nonPathologicalHistory?.education_level || 'No especificado'}\n`;
+    content += `Dieta: ${nonPathologicalHistory?.diet || 'No especificado'}\n`;
+    content += `Higiene Personal: ${nonPathologicalHistory?.personal_hygiene || 'No especificado'}\n`;
+    content += `Historial de Vacunación: ${nonPathologicalHistory?.vaccination_history?.join(', ') || 'No especificado'}\n\n`;
+    
+    // Antecedentes Heredofamiliares
+    content += `ANTECEDENTES HEREDOFAMILIARES\n`;
+    content += `${'='.repeat(30)}\n`;
+    if (hereditaryBackgrounds.length > 0) {
+      hereditaryBackgrounds.forEach((bg, index) => {
+        content += `${index + 1}. ${bg.relationship}\n`;
+        content += `   - Condición: ${bg.condition}\n`;
+        if (bg.notes) {
+          content += `   - Notas: ${bg.notes}\n`;
+        }
+        content += `\n`;
+      });
+    } else {
+      content += `No hay antecedentes heredofamiliares registrados.\n\n`;
+    }
+    
+    // Historial de Consultas
+    content += `HISTORIAL DE CONSULTAS (${consultations.length} consultas)\n`;
+    content += `${'='.repeat(40)}\n`;
+    if (consultations.length > 0) {
+      consultations.forEach((consultation, index) => {
+        content += `CONSULTA ${index + 1} - ${format(new Date(consultation.created_at), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}\n`;
+        content += `${'-'.repeat(50)}\n`;
+        content += `Diagnóstico: ${consultation.diagnosis || 'No especificado'}\n`;
+        content += `Condición Actual: ${consultation.current_condition || 'No especificado'}\n`;
+        content += `Tratamiento: ${consultation.treatment || 'No especificado'}\n`;
+        content += `Observaciones: ${consultation.observations || 'Sin observaciones'}\n`;
+        content += `Próxima Cita: ${consultation.next_appointment ? format(new Date(consultation.next_appointment), 'dd/MM/yyyy', { locale: es }) : 'No programada'}\n\n`;
+      });
+    } else {
+      content += `No hay consultas registradas.\n\n`;
+    }
+    
+    content += `\n${'-'.repeat(50)}\n`;
+    content += `Fin del Expediente Médico\n`;
+    content += `Documento generado automáticamente por Expediente DLM\n`;
+    
+    return content;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -366,6 +680,46 @@ export default function PatientRecord() {
           </div>
 
           <div className="flex gap-2">
+            {/* Botón de Exportación - siempre visible */}
+            <div className="relative">
+              <button
+                onClick={handleExportMenuToggle}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+                title="Exportar expediente completo"
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Exportar
+              </button>
+              
+              {showExportMenu && (
+                <div className="export-menu absolute right-0 mt-2 w-56 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-20">
+                  <div className="py-1">
+                    <button
+                      onClick={handlePrintRecord}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                    >
+                      <Printer className="h-4 w-4 mr-3" />
+                      Imprimir Expediente Completo
+                    </button>
+                    <button
+                      onClick={handleExportRecordPDF}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                    >
+                      <FileDown className="h-4 w-4 mr-3" />
+                      Exportar como PDF
+                    </button>
+                    <button
+                      onClick={handleExportRecordTXT}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                    >
+                      <FileTextIcon className="h-4 w-4 mr-3" />
+                      Exportar como TXT
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {seccionActiva === 'consultas' ? (
               <button
                 onClick={() => setShowConsultationForm(true)}
