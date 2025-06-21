@@ -14,6 +14,7 @@ import { Fragment } from 'react';
 import { supabase } from '../lib/supabase';
 import PhysicalExamTemplates from './PhysicalExamTemplates';
 import PhysicalExamTemplateEditor from './PhysicalExamTemplateEditor';
+import VisualPrescriptionRenderer from './VisualPrescriptionRenderer';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -1061,8 +1062,6 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                   </div>
                 </div>
               )}
-
-
 
               {/* System Preferences Tab */}
               {activeTab === 'preferences' && (
