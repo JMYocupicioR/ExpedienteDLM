@@ -33,7 +33,6 @@ interface Prescription {
   patients?: {
     full_name: string;
   };
-  prescription_style?: any;
 }
 
 interface Patient {
@@ -101,8 +100,7 @@ export default function PrescriptionDashboard() {
           expires_at,
           patients (
             full_name
-          ),
-          prescription_style
+          )
         `)
         .order('created_at', { ascending: false });
 
@@ -295,51 +293,42 @@ export default function PrescriptionDashboard() {
       }
     }
 
-    // Combine with prescription-specific style if available, then fallback to defaults
+    // Use user's profile prescription style with fallback to defaults
     const style = {
-      fontFamily: prescription.prescription_style?.fontFamily || userPrescriptionStyle.fontFamily || 'Arial, sans-serif',
-      primaryColor: prescription.prescription_style?.primaryColor || userPrescriptionStyle.primaryColor || '#0066cc',
-      secondaryColor: prescription.prescription_style?.secondaryColor || userPrescriptionStyle.secondaryColor || '#333',
-      fontSize: prescription.prescription_style?.fontSize === 'small' ? '12px' :
-                prescription.prescription_style?.fontSize === 'large' ? '16px' :
-                prescription.prescription_style?.fontSize === 'extraLarge' ? '18px' :
-                (userPrescriptionStyle.fontSize === 'small' ? '12px' :
-                 userPrescriptionStyle.fontSize === 'large' ? '16px' :
-                 userPrescriptionStyle.fontSize === 'extraLarge' ? '18px' : '14px'),
-      lineHeight: prescription.prescription_style?.spacing === 'compact' ? '1.3' :
-                  prescription.prescription_style?.spacing === 'relaxed' ? '1.7' :
-                  (userPrescriptionStyle.spacing === 'compact' ? '1.3' :
-                   userPrescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5'),
-      headerStyle: prescription.prescription_style?.headerStyle || userPrescriptionStyle.headerStyle || 'modern',
+      fontFamily: userPrescriptionStyle.fontFamily || 'Arial, sans-serif',
+      primaryColor: userPrescriptionStyle.primaryColor || '#0066cc',
+      secondaryColor: userPrescriptionStyle.secondaryColor || '#333',
+      fontSize: userPrescriptionStyle.fontSize === 'small' ? '12px' :
+                userPrescriptionStyle.fontSize === 'large' ? '16px' :
+                userPrescriptionStyle.fontSize === 'extraLarge' ? '18px' : '14px',
+      lineHeight: userPrescriptionStyle.spacing === 'compact' ? '1.3' :
+                  userPrescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5',
+      headerStyle: userPrescriptionStyle.headerStyle || 'modern',
       
-      clinicName: prescription.prescription_style?.clinicName || userPrescriptionStyle.clinicName || 'Nombre de su Clínica',
-      clinicAddress: prescription.prescription_style?.clinicAddress || userPrescriptionStyle.clinicAddress || 'Dirección de la Clínica, Ciudad',
-      clinicPhone: prescription.prescription_style?.clinicPhone || userPrescriptionStyle.clinicPhone || '(000) 000-0000',
-      clinicEmail: prescription.prescription_style?.clinicEmail || userPrescriptionStyle.clinicEmail || 'email@clinica.com',
+      clinicName: userPrescriptionStyle.clinicName || 'Nombre de su Clínica',
+      clinicAddress: userPrescriptionStyle.clinicAddress || 'Dirección de la Clínica, Ciudad',
+      clinicPhone: userPrescriptionStyle.clinicPhone || '(000) 000-0000',
+      clinicEmail: userPrescriptionStyle.clinicEmail || 'email@clinica.com',
       
-      doctorFullName: prescription.prescription_style?.doctorFullName || userPrescriptionStyle.doctorFullName || 'Dr. Nombre Apellido',
-      doctorLicense: prescription.prescription_style?.doctorLicense || userPrescriptionStyle.doctorLicense || 'Céd. Prof. XXXXXXX',
-      doctorSpecialty: prescription.prescription_style?.doctorSpecialty || userPrescriptionStyle.doctorSpecialty || 'Medicina General',
-      doctorContact: prescription.prescription_style?.doctorContact || userPrescriptionStyle.doctorContact || '(000) 000-0000',
+      doctorFullName: userPrescriptionStyle.doctorFullName || 'Dr. Nombre Apellido',
+      doctorLicense: userPrescriptionStyle.doctorLicense || 'Céd. Prof. XXXXXXX',
+      doctorSpecialty: userPrescriptionStyle.doctorSpecialty || 'Medicina General',
+      doctorContact: userPrescriptionStyle.doctorContact || '(000) 000-0000',
       
-      titlePrescription: prescription.prescription_style?.titlePrescription || userPrescriptionStyle.titlePrescription || 'RECETA MÉDICA',
-      titlePatientInfo: prescription.prescription_style?.titlePatientInfo || userPrescriptionStyle.titlePatientInfo || 'Información del Paciente',
-      titleDiagnosis: prescription.prescription_style?.titleDiagnosis || userPrescriptionStyle.titleDiagnosis || 'Diagnóstico',
-      titleMedications: prescription.prescription_style?.titleMedications || userPrescriptionStyle.titleMedications || 'Prescripción Médica',
-      titleNotes: prescription.prescription_style?.titleNotes || userPrescriptionStyle.titleNotes || 'Indicaciones Adicionales',
-      titleSignature: prescription.prescription_style?.titleSignature || userPrescriptionStyle.titleSignature || 'Firma del Médico',
-      titleValidity: prescription.prescription_style?.titleValidity || userPrescriptionStyle.titleValidity || 'Validez de la Receta',
+      titlePrescription: userPrescriptionStyle.titlePrescription || 'RECETA MÉDICA',
+      titlePatientInfo: userPrescriptionStyle.titlePatientInfo || 'Información del Paciente',
+      titleDiagnosis: userPrescriptionStyle.titleDiagnosis || 'Diagnóstico',
+      titleMedications: userPrescriptionStyle.titleMedications || 'Prescripción Médica',
+      titleNotes: userPrescriptionStyle.titleNotes || 'Indicaciones Adicionales',
+      titleSignature: userPrescriptionStyle.titleSignature || 'Firma del Médico',
+      titleValidity: userPrescriptionStyle.titleValidity || 'Validez de la Receta',
       
-      showLogo: prescription.prescription_style?.showLogo !== undefined ? prescription.prescription_style.showLogo :
-                (userPrescriptionStyle.showLogo !== undefined ? userPrescriptionStyle.showLogo : true),
-      logoPosition: prescription.prescription_style?.logoPosition || userPrescriptionStyle.logoPosition || 'left',
-      includeQR: prescription.prescription_style?.includeQR !== undefined ? prescription.prescription_style.includeQR :
-                 (userPrescriptionStyle.includeQR !== undefined ? userPrescriptionStyle.includeQR : true),
-      // Add new fields like paperSize, margins, includeWatermark with similar fallback logic
-      paperSize: prescription.prescription_style?.paperSize || userPrescriptionStyle.paperSize || 'letter',
-      margins: prescription.prescription_style?.margins || userPrescriptionStyle.margins || 'normal',
-      includeWatermark: prescription.prescription_style?.includeWatermark !== undefined ? prescription.prescription_style.includeWatermark :
-                        (userPrescriptionStyle.includeWatermark !== undefined ? userPrescriptionStyle.includeWatermark : false),
+      showLogo: userPrescriptionStyle.showLogo !== undefined ? userPrescriptionStyle.showLogo : true,
+      logoPosition: userPrescriptionStyle.logoPosition || 'left',
+      includeQR: userPrescriptionStyle.includeQR !== undefined ? userPrescriptionStyle.includeQR : true,
+      paperSize: userPrescriptionStyle.paperSize || 'letter',
+      margins: userPrescriptionStyle.margins || 'normal',
+      includeWatermark: userPrescriptionStyle.includeWatermark !== undefined ? userPrescriptionStyle.includeWatermark : false,
     };
 
     const printContent = `
