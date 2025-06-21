@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Save, X, FileText, AlertCircle, Clock, CheckCircle, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { supabase } from '../lib/supabase';
-import PhysicalExamForm from './PhysicalExamForm';
+import DynamicPhysicalExamForm from './DynamicPhysicalExamForm';
 import PhysicalExamTemplates from './PhysicalExamTemplates';
 import type { Database } from '../lib/database.types';
 
@@ -306,48 +306,33 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
     }
   };
 
-  // ✅ FUNCIÓN: Convertir plantilla al formato esperado
+  // ✅ FUNCIÓN: Convertir plantilla al formato esperado por DynamicPhysicalExamForm
   const convertTemplateDefinition = (template: PhysicalExamTemplate): any => {
-    if (!template?.definition) {
+    if (!template?.definition?.sections) {
       return {
-        sections: [],
-        vital_signs_config: {
-          required: ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'],
-          optional: ['oxygen_saturation', 'weight', 'height']
-        }
+        sections: []
       };
     }
 
-    const sections: any[] = [];
-    
-    if (typeof template.definition === 'object' && template.definition !== null) {
-      Object.entries(template.definition).forEach(([sectionKey, sectionData]: [string, any]) => {
-        if (sectionData && typeof sectionData === 'object' && sectionData.fields) {
-          sections.push({
-            id: sectionKey,
-            title: sectionData.title || sectionKey,
-            description: sectionData.description || '',
-            questions: sectionData.fields.map((field: any, index: number) => ({
-              id: field.id || `${sectionKey}_${index}`,
-              text: field.label || '',
-              type: field.type || 'text',
-              required: field.required || false,
-              options: field.options || [],
-              placeholder: field.placeholder || '',
-              helpText: field.helpText || ''
-            })),
-            order: sectionData.order || sections.length
-          });
-        }
-      });
-    }
-
+    // Convertir de questions a fields para DynamicPhysicalExamForm
     return {
-      sections: sections.sort((a, b) => (a.order || 0) - (b.order || 0)),
-      vital_signs_config: {
-        required: ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'],
-        optional: ['oxygen_saturation', 'weight', 'height']
-      }
+      sections: template.definition.sections.map((section: any) => ({
+        id: section.id,
+        title: section.title,
+        description: section.description || '',
+        fields: section.questions?.map((question: any) => ({
+          id: question.id,
+          label: question.text,
+          type: question.type,
+          required: question.required || false,
+          placeholder: question.placeholder || '',
+          options: question.options || [],
+          defaultValue: question.defaultValue || '',
+          helpText: question.helpText || '',
+          validation: question.validation || {}
+        })) || [],
+        order: section.order || 0
+      }))
     };
   };
 
@@ -564,10 +549,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         </div>
         
         <div className="p-4">
-          <PhysicalExamForm
-            templateId={selectedTemplate.id}
+          <DynamicPhysicalExamForm
             templateName={selectedTemplate.name}
-            templateDefinition={convertTemplateDefinition(selectedTemplate)}
+            templateSections={convertTemplateDefinition(selectedTemplate).sections}
             onSave={handlePhysicalExamSave}
             onAutoSave={handlePhysicalExamAutoSave}
             initialData={physicalExamData || undefined}
@@ -700,29 +684,31 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
                 <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
                   <h4 className="font-medium text-blue-300 mb-3">Vista Previa de la Exploración:</h4>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {selectedTemplate.definition && typeof selectedTemplate.definition === 'object' && (
-                      Object.entries(selectedTemplate.definition).map(([sectionKey, section]: [string, any]) => (
-                        <div key={sectionKey} className="border border-gray-600 rounded-lg p-3 bg-gray-800/50">
-                          <h5 className="font-medium text-white mb-2">{section.title || sectionKey}</h5>
-                          {section.description && (
-                            <p className="text-sm text-gray-400 mb-3">{section.description}</p>
-                          )}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {section.fields?.map((field: any) => (
-                              <div key={field.id} className="text-sm">
-                                <span className="text-gray-300">• {field.label}</span>
-                                {field.required && <span className="text-red-400"> *</span>}
-                                <span className="text-gray-500 ml-2">({field.type})</span>
-                                {field.options && field.options.length > 0 && (
-                                  <div className="ml-4 text-xs text-gray-400 mt-1">
-                                    Opciones: {field.options.slice(0, 3).join(', ')}{field.options.length > 3 ? '...' : ''}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                    {selectedTemplate.definition?.sections?.map((section: any) => (
+                      <div key={section.id} className="border border-gray-600 rounded-lg p-3 bg-gray-800/50">
+                        <h5 className="font-medium text-white mb-2">{section.title}</h5>
+                        {section.description && (
+                          <p className="text-sm text-gray-400 mb-3">{section.description}</p>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {section.questions?.map((question: any) => (
+                            <div key={question.id} className="text-sm">
+                              <span className="text-gray-300">• {question.text}</span>
+                              {question.required && <span className="text-red-400"> *</span>}
+                              <span className="text-gray-500 ml-2">({question.type})</span>
+                              {question.options && question.options.length > 0 && (
+                                <div className="ml-4 text-xs text-gray-400 mt-1">
+                                  Opciones: {question.options.slice(0, 3).join(', ')}{question.options.length > 3 ? '...' : ''}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))
+                      </div>
+                    )) || (
+                      <div className="text-center text-gray-400 py-4">
+                        No hay campos configurados en esta plantilla
+                      </div>
                     )}
                   </div>
                   <div className="mt-3 text-xs text-gray-400">
