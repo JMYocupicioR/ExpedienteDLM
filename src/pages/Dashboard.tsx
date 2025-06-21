@@ -259,6 +259,12 @@ export default function Dashboard() {
     setShowNotifications(!showNotifications);
   };
 
+  const handleNewConsultation = (patientId: string) => {
+    // Navegar al expediente del paciente con parámetro para abrir nueva consulta
+    navigate(`/expediente/${patientId}?nueva-consulta=true`);
+    setShowPatientActions(null);
+  };
+
   const handleExportMenuToggle = () => {
     setShowExportMenu(!showExportMenu);
   };
@@ -712,18 +718,25 @@ export default function Dashboard() {
                              <div className="patient-actions-menu absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-10">
                               <div className="py-1">
                                 <button
+                                  onClick={() => handleNewConsultation(patient.id)}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-green-300 hover:bg-gray-700 hover:text-green-200 transition-colors"
+                                >
+                                  <Plus className="h-4 w-4 mr-3" />
+                                  Nueva Consulta
+                                </button>
+                                <button
+                                  onClick={() => navigate(`/expediente/${patient.id}`)}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-blue-300 hover:bg-gray-700 hover:text-blue-200 transition-colors"
+                                >
+                                  <Eye className="h-4 w-4 mr-3" />
+                                  Ver Expediente
+                                </button>
+                                <button
                                   onClick={() => handleEditPatient(patient)}
                                   className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
                                 >
                                   <Edit className="h-4 w-4 mr-3" />
                                   Editar Paciente
-                                </button>
-                                <button
-                                  onClick={() => navigate(`/expediente/${patient.id}`)}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                                >
-                                  <Eye className="h-4 w-4 mr-3" />
-                                  Ver Expediente
                                 </button>
                                 <button
                                   onClick={() => handleDeletePatient(patient.id)}
