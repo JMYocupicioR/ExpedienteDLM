@@ -174,6 +174,138 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
     setShowPhysicalExam(true);
   };
 
+  // ✅ NUEVO: Render dynamic fields from template
+  const renderTemplateField = (field: any, sectionId: string) => {
+    const fieldName = `physicalExam.${sectionId}.${field.id}`;
+
+    switch (field.type) {
+      case 'text':
+        return (
+          <div key={field.id} className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              {field.label} {field.required && <span className="text-red-400">*</span>}
+            </label>
+            <input
+              type="text"
+              placeholder={field.placeholder}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+            {field.helpText && (
+              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
+            )}
+          </div>
+        );
+
+      case 'textarea':
+        return (
+          <div key={field.id} className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              {field.label} {field.required && <span className="text-red-400">*</span>}
+            </label>
+            <textarea
+              rows={3}
+              placeholder={field.placeholder}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+            {field.helpText && (
+              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
+            )}
+          </div>
+        );
+
+      case 'select':
+        return (
+          <div key={field.id} className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              {field.label} {field.required && <span className="text-red-400">*</span>}
+            </label>
+            <select className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+              <option value="">Seleccionar...</option>
+              {field.options?.map((option: string) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            {field.helpText && (
+              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
+            )}
+          </div>
+        );
+
+      case 'checkbox':
+        return (
+          <div key={field.id} className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              {field.label} {field.required && <span className="text-red-400">*</span>}
+            </label>
+            <div className="space-y-2">
+              {field.options?.map((option: string) => (
+                <label key={option} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    value={option}
+                    className="rounded border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
+                  />
+                  <span className="text-gray-300">{option}</span>
+                </label>
+              ))}
+            </div>
+            {field.helpText && (
+              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
+            )}
+          </div>
+        );
+
+      case 'radio':
+        return (
+          <div key={field.id} className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              {field.label} {field.required && <span className="text-red-400">*</span>}
+            </label>
+            <div className="space-y-2">
+              {field.options?.map((option: string) => (
+                <label key={option} className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name={fieldName}
+                    value={option}
+                    className="rounded-full border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
+                  />
+                  <span className="text-gray-300">{option}</span>
+                </label>
+              ))}
+            </div>
+            {field.helpText && (
+              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
+            )}
+          </div>
+        );
+
+      case 'number':
+        return (
+          <div key={field.id} className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              {field.label} {field.required && <span className="text-red-400">*</span>}
+            </label>
+            <input
+              type="number"
+              min={field.validation?.min}
+              max={field.validation?.max}
+              placeholder={field.placeholder}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+            {field.helpText && (
+              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
+            )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   // ✅ MEJORADO: Handle physical exam save
   const handlePhysicalExamSave = async (data: PhysicalExamFormData) => {
     try {
@@ -484,35 +616,71 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
                 />
               </div>
             ) : (
-              <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h4 className="font-medium text-green-300">Plantilla Seleccionada:</h4>
-                    <p className="text-green-200">{selectedTemplate.name}</p>
-                    {physicalExamData && (
-                      <p className="text-sm text-green-400 mt-1">
-                        ✓ Examen físico completado - {physicalExamData.examDate} {physicalExamData.examTime}
-                      </p>
+              <div className="space-y-4">
+                <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-medium text-green-300">Plantilla Seleccionada:</h4>
+                      <p className="text-green-200">{selectedTemplate.name}</p>
+                      {physicalExamData && (
+                        <p className="text-sm text-green-400 mt-1">
+                          ✓ Examen físico completado - {physicalExamData.examDate} {physicalExamData.examTime}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowPhysicalExam(true)}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                      >
+                        {physicalExamData ? 'Editar Examen' : 'Realizar Examen'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTemplate(null);
+                          setPhysicalExamData(null);
+                        }}
+                        className="px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors text-sm"
+                      >
+                        Cambiar Plantilla
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vista previa de campos de la plantilla */}
+                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-300 mb-3">Vista Previa de la Exploración:</h4>
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {selectedTemplate.fields && typeof selectedTemplate.fields === 'object' && (
+                      Object.entries(selectedTemplate.fields).map(([sectionKey, section]: [string, any]) => (
+                        <div key={sectionKey} className="border border-gray-600 rounded-lg p-3 bg-gray-800/50">
+                          <h5 className="font-medium text-white mb-2">{section.title || sectionKey}</h5>
+                          {section.description && (
+                            <p className="text-sm text-gray-400 mb-3">{section.description}</p>
+                          )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {section.fields?.map((field: any) => (
+                              <div key={field.id} className="text-sm">
+                                <span className="text-gray-300">• {field.label}</span>
+                                {field.required && <span className="text-red-400"> *</span>}
+                                <span className="text-gray-500 ml-2">({field.type})</span>
+                                {field.options && field.options.length > 0 && (
+                                  <div className="ml-4 text-xs text-gray-400 mt-1">
+                                    Opciones: {field.options.slice(0, 3).join(', ')}{field.options.length > 3 ? '...' : ''}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
-                  <div className="flex space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowPhysicalExam(true)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                    >
-                      {physicalExamData ? 'Editar Examen' : 'Realizar Examen'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedTemplate(null);
-                        setPhysicalExamData(null);
-                      }}
-                      className="px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors text-sm"
-                    >
-                      Cambiar Plantilla
-                    </button>
+                  <div className="mt-3 text-xs text-gray-400">
+                    💡 Haz clic en "Realizar Examen" para completar todos estos campos de forma interactiva
                   </div>
                 </div>
               </div>
