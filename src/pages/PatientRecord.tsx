@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
   ArrowLeft, Clock, Heart, Brain, Dna, Trash2, Eye, ChevronDown, ChevronUp,
@@ -22,6 +22,7 @@ type HereditaryBackground = Database['public']['Tables']['hereditary_backgrounds
 export default function PatientRecord() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [seccionActiva, setSeccionActiva] = useState('paciente');
   const [modoEdicion, setModoEdicion] = useState(false);
   const [showConsultationForm, setShowConsultationForm] = useState(false);
@@ -42,6 +43,15 @@ export default function PatientRecord() {
       checkSession();
     }
   }, [id]);
+
+  // Detectar parámetro de query para abrir nueva consulta automáticamente
+  useEffect(() => {
+    if (searchParams.get('nueva-consulta') === 'true' && patient) {
+      setShowConsultationForm(true);
+      // Limpiar el parámetro de la URL sin recargar la página
+      setSearchParams({});
+    }
+  }, [searchParams, patient, setSearchParams]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
