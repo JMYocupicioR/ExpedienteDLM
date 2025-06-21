@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, FileText, Search, User, Printer, Download, Eye, Clock, AlertTriangle,
-  Activity, QrCode, Save, Shield, History, Wifi, WifiOff, CheckCircle, AlertCircle, Loader2
+  Activity, QrCode, Save, Shield, History, Wifi, WifiOff, CheckCircle, AlertCircle, Loader2,
+  Palette
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import QRCode from 'qrcode';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import VisualPrescriptionEditor from '../components/VisualPrescriptionEditor';
 
 interface Medication {
   name: string;
@@ -42,7 +44,7 @@ interface Patient {
 export default function PrescriptionDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'new' | 'history'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'new' | 'visual' | 'history'>('dashboard');
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired' | 'dispensed'>('all');
@@ -654,6 +656,17 @@ export default function PrescriptionDashboard() {
               Nueva Receta
             </button>
             <button
+              onClick={() => setActiveTab('visual')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+                activeTab === 'visual'
+                  ? 'border-cyan-400 text-cyan-400'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <Palette className="h-5 w-5 mr-2" />
+              Editor Visual
+            </button>
+            <button
               onClick={() => setActiveTab('history')}
               className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
                 activeTab === 'history'
@@ -887,6 +900,48 @@ export default function PrescriptionDashboard() {
             saveStatus={saveStatus}
             saveMessage={saveMessage}
           />
+        )}
+
+        {/* Editor Visual */}
+        {activeTab === 'visual' && (
+          <>
+            {!selectedPatientId ? (
+              <div className="dark-card p-8 text-center">
+                <User className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+                <h3 className="text-lg font-medium text-gray-100 mb-2">Selecciona un paciente</h3>
+                <p className="text-gray-400 mb-4">Necesitas seleccionar un paciente antes de usar el editor visual</p>
+                <div className="max-w-md mx-auto">
+                  <select
+                    value={selectedPatientId}
+                    onChange={(e) => setSelectedPatientId(e.target.value)}
+                    className="w-full dark-input mb-3"
+                  >
+                    <option value="">Seleccione un paciente</option>
+                    {patients.map((patient) => (
+                      <option key={patient.id} value={patient.id}>
+                        {patient.full_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => navigate('/patients?action=new')}
+                    className="w-full dark-button-secondary"
+                  >
+                    + Registrar nuevo paciente
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="fixed inset-0 z-50">
+                <VisualPrescriptionEditor
+                  patientId={selectedPatientId}
+                  patientName={selectedPatientName}
+                  onSave={handleNewPrescription}
+                  onClose={() => setActiveTab('dashboard')}
+                />
+              </div>
+            )}
+          </>
         )}
 
         {/* Historial Completo */}
