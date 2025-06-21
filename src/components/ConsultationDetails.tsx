@@ -63,35 +63,64 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
   const renderPhysicalExamSection = (sectionKey: string, sectionData: any) => {
     if (!sectionData || typeof sectionData !== 'object') return null;
 
-    const sectionLabels: Record<string, string> = {
-      head_neck: 'Cabeza y Cuello',
-      chest_lungs: 'Tórax y Pulmones',
-      cardiovascular: 'Sistema Cardiovascular',
-      abdomen: 'Abdomen',
-      extremities: 'Extremidades',
-      musculoskeletal: 'Sistema Músculo-esquelético',
-      skin: 'Piel y Anexos',
-      neurological: 'Sistema Neurológico',
-      genitourinary: 'Sistema Genitourinario'
-    };
+    // Obtener el título de la sección
+    const sectionTitle = sectionData.title || sectionKey.replace(/_/g, ' ');
 
     return (
       <div key={sectionKey} className="bg-gray-700 rounded-lg p-4">
-        <h5 className="font-medium text-white mb-2">
-          {sectionLabels[sectionKey] || sectionKey}
+        <h5 className="font-medium text-white mb-3">
+          {sectionTitle}
         </h5>
-        {sectionData.findings && (
-          <p className="text-sm text-gray-300 whitespace-pre-wrap">
-            {sectionData.findings}
-          </p>
-        )}
+        
+        {/* Renderizar campos dinámicos */}
+        <div className="space-y-3">
+          {Object.entries(sectionData).map(([fieldKey, fieldValue]) => {
+            // Saltar campos de metadatos
+            if (['title', 'description', 'order'].includes(fieldKey)) return null;
+            if (!fieldValue || (Array.isArray(fieldValue) && fieldValue.length === 0)) return null;
+
+            return (
+              <div key={fieldKey} className="border-l-2 border-blue-400 pl-3">
+                <div className="text-sm font-medium text-gray-300 mb-1">
+                  {formatFieldLabel(fieldKey)}
+                </div>
+                <div className="text-sm text-white">
+                  {formatFieldValue(fieldValue)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Observaciones específicas de la sección */}
         {sectionData.observations && (
-          <p className="text-sm text-gray-400 mt-2">
-            <span className="font-medium">Observaciones:</span> {sectionData.observations}
-          </p>
+          <div className="mt-3 pt-3 border-t border-gray-600">
+            <div className="text-sm font-medium text-gray-300 mb-1">Observaciones:</div>
+            <p className="text-sm text-gray-400">{sectionData.observations}</p>
+          </div>
         )}
       </div>
     );
+  };
+
+  const formatFieldLabel = (fieldKey: string): string => {
+    // Convertir snake_case a texto legible
+    return fieldKey
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const formatFieldValue = (value: any): string => {
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'Sí' : 'No';
+    }
+    if (typeof value === 'object' && value !== null) {
+      return JSON.stringify(value, null, 2);
+    }
+    return String(value);
   };
 
   return (
@@ -129,8 +158,18 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
           Signos Vitales
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {/* Manejo especial para presión arterial */}
-          {vitalSigns.blood_pressure && (
+          {/* Manejo especial para presión arterial - combinar sistólica y diastólica */}
+          {(vitalSigns.systolic_pressure && vitalSigns.diastolic_pressure) ? (
+            <div className="bg-gray-700 rounded-lg p-3">
+              <div className="flex items-center text-gray-400 mb-1">
+                <Heart className="h-4 w-4 mr-1" />
+                <span className="text-xs uppercase tracking-wide">Presión Arterial</span>
+              </div>
+              <p className="text-sm font-medium text-white">
+                {vitalSigns.systolic_pressure}/{vitalSigns.diastolic_pressure} mmHg
+              </p>
+            </div>
+          ) : vitalSigns.blood_pressure && (
             <div className="bg-gray-700 rounded-lg p-3">
               <div className="flex items-center text-gray-400 mb-1">
                 <Heart className="h-4 w-4 mr-1" />
@@ -142,7 +181,9 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
           
           {/* Otros signos vitales */}
           {Object.entries(vitalSigns).map(([key, value]) => {
-            if (key === 'blood_pressure' || !value) return null;
+            // Saltar campos ya manejados o vacíos
+            if (['blood_pressure', 'systolic_pressure', 'diastolic_pressure'].includes(key) || !value) return null;
+            
             return (
               <div key={key} className="bg-gray-700 rounded-lg p-3">
                 <div className="flex items-center text-gray-400 mb-1">
@@ -158,6 +199,14 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
             );
           })}
         </div>
+        
+        {/* Mostrar si no hay signos vitales registrados */}
+        {(!vitalSigns || Object.keys(vitalSigns).length === 0) && (
+          <div className="text-center py-6 text-gray-400">
+            <Stethoscope className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No se registraron signos vitales</p>
+          </div>
+        )}
       </div>
 
       {/* Exploración Física */}
@@ -166,40 +215,75 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
           <h4 className="font-medium text-white mb-3 flex items-center">
             <Brain className="h-4 w-4 mr-2" />
             Exploración Física
+            {physicalExam.template_name && (
+              <span className="ml-2 text-xs bg-blue-600 text-blue-100 px-2 py-1 rounded">
+                {physicalExam.template_name}
+              </span>
+            )}
           </h4>
           
           {/* Información general del examen */}
-          {physicalExam.examDate && (
-            <div className="mb-4 text-sm text-gray-400">
-              Realizada el {physicalExam.examDate} a las {physicalExam.examTime}
+          <div className="mb-4 flex flex-wrap gap-4 text-sm text-gray-400">
+            {physicalExam.exam_date && (
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-1" />
+                Realizada el {format(new Date(physicalExam.exam_date), 'dd/MM/yyyy')}
+              </div>
+            )}
+            {physicalExam.exam_time && (
+              <div className="flex items-center">
+                <Clock className="h-4 w-4 mr-1" />
+                a las {physicalExam.exam_time}
+              </div>
+            )}
+          </div>
+
+          {/* Signos vitales del examen físico (si son diferentes de los generales) */}
+          {physicalExam.vital_signs && Object.keys(physicalExam.vital_signs).length > 0 && (
+            <div className="mb-4 bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+              <h5 className="font-medium text-blue-300 mb-2">Signos Vitales del Examen</h5>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {Object.entries(physicalExam.vital_signs).map(([key, value]) => {
+                  if (!value) return null;
+                  return (
+                    <div key={key} className="text-xs">
+                      <span className="text-gray-400">{formatVitalSignLabel(key)}:</span>
+                      <span className="text-white ml-1">{formatVitalSignValue(key, value)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
           {/* Secciones del examen */}
-          {physicalExam.sections && (
+          {physicalExam.sections && Object.keys(physicalExam.sections).length > 0 ? (
             <div className="space-y-3">
               {Object.entries(physicalExam.sections).map(([key, section]) => 
                 renderPhysicalExamSection(key, section)
               )}
             </div>
+          ) : (
+            <div className="text-center py-6 text-gray-400">
+              <Brain className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No se registraron datos de exploración específicos</p>
+            </div>
           )}
 
           {/* Observaciones generales */}
-          {physicalExam.generalObservations && (
+          {(physicalExam.general_observations || physicalExam.generalObservations) && (
             <div className="mt-4 bg-gray-700 rounded-lg p-4">
               <h5 className="font-medium text-white mb-2">Observaciones Generales</h5>
               <p className="text-sm text-gray-300 whitespace-pre-wrap">
-                {physicalExam.generalObservations}
+                {physicalExam.general_observations || physicalExam.generalObservations}
               </p>
             </div>
           )}
 
-          {/* Si no hay secciones pero hay datos */}
-          {!physicalExam.sections && Object.keys(physicalExam).length > 0 && (
-            <div className="bg-gray-700 rounded-lg p-4">
-              <pre className="text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto">
-                {JSON.stringify(physicalExam, null, 2)}
-              </pre>
+          {/* Información de la plantilla utilizada */}
+          {physicalExam.template_id && (
+            <div className="mt-3 text-xs text-gray-500">
+              ID de plantilla: {physicalExam.template_id}
             </div>
           )}
         </div>
