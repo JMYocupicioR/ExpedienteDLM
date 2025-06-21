@@ -8,6 +8,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { validateAndSanitizeArray } from '../lib/validation';
 import ConsultationForm from '../components/ConsultationForm';
 import ConsultationDetails from '../components/ConsultationDetails';
 import ConsultationModal from '../components/ConsultationModal';
@@ -1125,13 +1126,20 @@ export default function PatientRecord() {
                   <input
                     type="text"
                     value={nonPathologicalHistory?.vaccination_history?.join(',') || ''}
-                    onChange={(e) => setNonPathologicalHistory(prev => ({
-                      ...prev!,
-                      vaccination_history: e.target.value.split(',').map(s => s.trim()).filter(s => s)
-                    }))}
+                    onChange={(e) => {
+                      const { sanitizedArray, errors } = validateAndSanitizeArray(e.target.value, 'vaccination_history');
+                      if (errors.length > 0) {
+                        console.warn('Validation errors:', errors);
+                        // Show toast or alert for validation errors
+                      }
+                      setNonPathologicalHistory(prev => ({
+                        ...prev!,
+                        vaccination_history: sanitizedArray
+                      }));
+                    }}
                     readOnly={!modoEdicion}
                     className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    placeholder="Separar con comas"
+                    placeholder="Separar con comas (máx. 50 elementos, 80 chars c/u)"
                   />
                 </div>
               </div>
