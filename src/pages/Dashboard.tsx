@@ -953,12 +953,19 @@ export default function Dashboard() {
       )}
 
       {/* Settings Modal */}
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-        userProfile={userProfile}
-        onProfileUpdate={setUserProfile}
-      />
+      {userProfile && (
+        <SettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          userProfile={userProfile}
+          onUpdate={(updatedProfile) => {
+            if (updatedProfile) {
+              setUserProfile(updatedProfile);
+              console.log('Profile updated:', updatedProfile);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
