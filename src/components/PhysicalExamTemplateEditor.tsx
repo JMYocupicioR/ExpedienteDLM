@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Plus, Trash2, GripVertical, Copy, Eye, FileText, Edit, Share2, Download, Upload, Users } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { supabase } from '../lib/supabase';
-import type { Database } from '../lib/database.types';
+import type { Database, PhysicalExamTemplateDefinition, ExamQuestion } from '../lib/database.types';
 
 type PhysicalExamTemplate = Database['public']['Tables']['physical_exam_templates']['Row'];
 
@@ -181,9 +181,15 @@ export default function PhysicalExamTemplateEditor({
   });
 
   useEffect(() => {
-    if (template?.fields) {
-      // Parse existing template fields into sections
-      const parsedSections = parseTemplateFields(template.fields);
+    if (template?.definition?.sections) {
+      const editorSections: TemplateSection[] = template.definition.sections.map(section => ({
+        ...section,
+        fields: (section.questions || []) as TemplateField[],
+      }));
+      setSections(editorSections);
+    } else if ((template as any)?.fields) {
+      // Backwards compatibility for old format
+      const parsedSections = parseTemplateFields((template as any).fields);
       setSections(parsedSections);
     }
   }, [template]);
@@ -348,29 +354,32 @@ export default function PhysicalExamTemplateEditor({
         throw new Error('La plantilla debe tener al menos un campo');
       }
 
-      // Convert sections to storable format
-      const fields = sections.reduce((acc, section) => {
-        acc[section.id] = {
+      const definition: PhysicalExamTemplateDefinition = {
+        version: '1.0',
+        sections: sections.map(section => ({
+          id: section.id,
           title: section.title,
           description: section.description,
-          fields: section.fields,
-          order: section.order
-        };
-        return acc;
-      }, {} as Record<string, any>);
+          order: section.order,
+          questions: (section.fields || []) as ExamQuestion[],
+        })),
+      };
 
       if (template) {
         // Update existing template
-        const { error: updateError } = await supabase
+        const { data, error: updateError } = await supabase
           .from('physical_exam_templates')
           .update({
             name: templateName,
-            fields,
+            definition,
             updated_at: new Date().toISOString()
           })
-          .eq('id', template.id);
+          .eq('id', template.id)
+          .select()
+          .single();
 
         if (updateError) throw updateError;
+        if (data) onSave(data as PhysicalExamTemplate);
       } else {
         // Create new template
         const { data, error: insertError } = await supabase
@@ -378,13 +387,13 @@ export default function PhysicalExamTemplateEditor({
           .insert({
             doctor_id: doctorId,
             name: templateName,
-            fields
+            definition,
           })
           .select()
           .single();
 
         if (insertError) throw insertError;
-        if (data) onSave(data);
+        if (data) onSave(data as PhysicalExamTemplate);
       }
 
       onClose();
