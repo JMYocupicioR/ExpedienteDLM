@@ -341,6 +341,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
   // Physical exam template management state
   const [selectedTemplateToEdit, setSelectedTemplateToEdit] = useState<any>(null);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+  const [examTemplateRefreshKey, setExamTemplateRefreshKey] = useState(0);
 
   useEffect(() => {
     if (isOpen && userProfile) {
@@ -1636,6 +1637,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
 
                     <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
                       <PhysicalExamTemplates
+                        key={examTemplateRefreshKey}
                         onSelectTemplate={(template) => {
                           setSelectedTemplateToEdit(template);
                           setShowTemplateEditor(true);
@@ -1651,7 +1653,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                         onSave={(template) => {
                           setShowTemplateEditor(false);
                           setSelectedTemplateToEdit(null);
-                          // Refresh templates component
+                          setExamTemplateRefreshKey(k => k + 1);
                         }}
                         onClose={() => {
                           setShowTemplateEditor(false);
