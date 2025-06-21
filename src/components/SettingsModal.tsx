@@ -1,1411 +1,863 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, User, Lock, Bell, Shield, Clock, Trash2, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, FileText, Stethoscope, Plus, Edit as EditIcon, Palette, Layout, Type, Upload } from 'lucide-react';
-import { Dialog, Transition } from '@headlessui/react';
-import { Fragment } from 'react';
+import { 
+  X, Save, User, FileText, Settings as SettingsIcon, Shield, 
+  Eye, EyeOff, Upload, Download, Bell, Globe, Moon, Sun,
+  Smartphone, Clock, Key, LogOut, AlertCircle, CheckCircle,
+  Camera, Trash2, Edit3, Lock, Unlock, Monitor
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import PhysicalExamTemplates from './PhysicalExamTemplates';
-import PhysicalExamTemplateEditor from './PhysicalExamTemplateEditor';
-
-interface PrescriptionStyleSettings {
-  headerStyle: string;
-  fontSize: string;
-  spacing: string;
-  includeQR: boolean;
-  includeWatermark: boolean;
-  primaryColor: string;
-  secondaryColor: string;
-  showLogo: boolean;
-  logoPosition: 'left' | 'right' | 'center';
-  paperSize: string;
-  margins: string;
-  fontFamily: string;
-  
-  clinicName: string;
-  clinicAddress: string;
-  clinicPhone: string;
-  clinicEmail: string;
-  
-  doctorFullName: string;
-  doctorLicense: string;
-  doctorSpecialty: string;
-  doctorContact: string;
-  
-  titlePrescription: string;
-  titlePatientInfo: string;
-  titleDiagnosis: string;
-  titleMedications: string;
-  titleNotes: string;
-  titleSignature: string;
-  titleValidity: string;
-  logoUrl?: string;
-}
-
-interface UserProfile {
-  id: string;
-  role: string;
-  full_name: string | null;
-  license_number?: string;
-  phone?: string;
-  email?: string;
-  schedule?: {
-    monday: boolean;
-    tuesday: boolean;
-    wednesday: boolean;
-    thursday: boolean;
-    friday: boolean;
-    saturday: boolean;
-    sunday: boolean;
-    start_time: string;
-    end_time: string;
-  };
-  prescription_style?: Partial<PrescriptionStyleSettings>; // Make it partial to allow gradual saving
-}
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userProfile: UserProfile | null;
-  onUpdate: (profile: UserProfile) => void;
+  userProfile: any;
+  onProfileUpdate: (profile: any) => void;
 }
 
-interface PasswordChangeForm {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
+type TabType = 'profile' | 'prescription' | 'preferences' | 'security';
+
+interface NotificationState {
+  type: 'success' | 'error' | 'info';
+  message: string;
+  show: boolean;
 }
 
-export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications' | 'schedule' | 'prescription' | 'examTemplates'>('profile');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // Profile form state
-  const [profileForm, setProfileForm] = useState({
-    full_name: userProfile?.full_name || '',
-    license_number: userProfile?.license_number || '',
-    phone: userProfile?.phone || '',
-    email: userProfile?.email || ''
-  });
-
-  // Password form state
-  const [passwordForm, setPasswordForm] = useState<PasswordChangeForm>({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-
-  // Schedule form state
-  const [scheduleForm, setScheduleForm] = useState({
-    monday: userProfile?.schedule?.monday || false,
-    tuesday: userProfile?.schedule?.tuesday || false,
-    wednesday: userProfile?.schedule?.wednesday || false,
-    thursday: userProfile?.schedule?.thursday || false,
-    friday: userProfile?.schedule?.friday || false,
-    saturday: userProfile?.schedule?.saturday || false,
-    sunday: userProfile?.schedule?.sunday || false,
-    start_time: userProfile?.schedule?.start_time || '08:00',
-    end_time: userProfile?.schedule?.end_time || '17:00'
-  });
-
-  // Notification settings
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    appointmentReminders: true,
-    systemUpdates: false,
-    marketingEmails: false
-  });
-
-  // Prescription style settings
-  const initialPrescriptionStyle: PrescriptionStyleSettings = {
-    headerStyle: 'modern',
-    fontSize: 'medium',
-    spacing: 'normal',
-    includeQR: true,
-    includeWatermark: false,
-    primaryColor: '#2563eb',
-    secondaryColor: '#64748b',
-    showLogo: true,
-    logoPosition: 'left',
-    paperSize: 'letter',
-    margins: 'normal',
-    fontFamily: 'Arial',
-    clinicName: 'Nombre de la Clínica',
-    clinicAddress: 'Dirección de la Clínica, Ciudad, País',
-    clinicPhone: '(555) 123-4567',
-    clinicEmail: 'email@clinicaclinica.com',
-    doctorFullName: 'Dr. Nombre Apellido',
-    doctorLicense: 'Cédula Profesional',
-    doctorSpecialty: 'Especialidad Médica',
-    doctorContact: 'Teléfono de Contacto',
-    titlePrescription: 'RECETA MÉDICA',
-    titlePatientInfo: 'Información del Paciente',
-    titleDiagnosis: 'Diagnóstico',
-    titleMedications: 'Prescripción Médica',
-    titleNotes: 'Indicaciones Adicionales',
-    titleSignature: 'Firma del Médico',
-    titleValidity: 'Validez de la Receta',
-    logoUrl: undefined,
-  };
+export default function SettingsModal({ isOpen, onClose, userProfile, onProfileUpdate }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('profile');
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState<NotificationState>({ type: 'info', message: '', show: false });
   
-  const [prescriptionStyle, setPrescriptionStyle] = useState<PrescriptionStyleSettings>(initialPrescriptionStyle);
+  // Profile Settings State
+  const [profileData, setProfileData] = useState({
+    full_name: '',
+    email: '',
+    specialty: '',
+    license_number: '',
+    phone: '',
+    schedule: {}
+  });
 
-  // Physical exam template management state
-  const [selectedTemplateToEdit, setSelectedTemplateToEdit] = useState<any>(null);
-  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+  // Prescription Settings State
+  const [prescriptionSettings, setPrescriptionSettings] = useState({
+    letterhead: '',
+    signature: '',
+    default_medications: [],
+    prescription_style: {
+      header_color: '#1f2937',
+      font_family: 'Arial',
+      logo_url: '',
+      footer_text: ''
+    }
+  });
 
-  // Update form when userProfile changes
+  // System Preferences State
+  const [preferences, setPreferences] = useState({
+    language: 'es',
+    timezone: 'America/Mexico_City',
+    theme: 'dark',
+    notifications: {
+      email: true,
+      push: true,
+      sms: false,
+      appointment_reminders: true,
+      system_updates: true
+    }
+  });
+
+  // Security State
+  const [securityData, setSecurityData] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+    two_factor_enabled: false,
+    login_history: [],
+    active_sessions: []
+  });
+
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false
+  });
+
   useEffect(() => {
-    if (userProfile) {
-      setProfileForm({
+    if (isOpen && userProfile) {
+      loadUserData();
+    }
+  }, [isOpen, userProfile]);
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load profile data
+      setProfileData({
         full_name: userProfile.full_name || '',
+        email: userProfile.email || '',
+        specialty: userProfile.specialty || '',
         license_number: userProfile.license_number || '',
         phone: userProfile.phone || '',
-        email: userProfile.email || ''
+        schedule: userProfile.schedule || {}
       });
-      
-      if (userProfile.schedule) {
-        setScheduleForm(userProfile.schedule);
-      }
 
-      // Initialize prescriptionStyle with saved settings, then defaults, then profile info for doctor fields
-      setPrescriptionStyle(prev => ({
-        ...initialPrescriptionStyle, // Start with base defaults
-        ...(userProfile.prescription_style || {}), // Overlay saved styles
-        // Ensure doctor specific fields take from profile if not explicitly set in prescription_style
-        doctorFullName: userProfile.prescription_style?.doctorFullName || userProfile.full_name || initialPrescriptionStyle.doctorFullName,
-        doctorLicense: userProfile.prescription_style?.doctorLicense || userProfile.license_number || initialPrescriptionStyle.doctorLicense,
-        doctorSpecialty: userProfile.prescription_style?.doctorSpecialty || initialPrescriptionStyle.doctorSpecialty, // Specialty not directly on profile
-        doctorContact: userProfile.prescription_style?.doctorContact || userProfile.phone || initialPrescriptionStyle.doctorContact,
-      }));
-    }
-  }, [userProfile]);
-
-  // Clear messages after time
-  useEffect(() => {
-    if (successMessage) {
-      const timer = setTimeout(() => setSuccessMessage(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [successMessage]);
-
-  // Add cleanup effect for preview URL
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [previewUrl]);
-
-  // Handle profile update
-  const handleProfileUpdate = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      if (!userProfile) {
-        throw new Error('No se encontró el perfil del usuario');
-      }
-
-      // Validate required fields
-      if (!profileForm.full_name.trim()) {
-        throw new Error('El nombre completo es requerido');
-      }
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: profileForm.full_name.trim(),
-          license_number: profileForm.license_number.trim() || null,
-          phone: profileForm.phone.trim() || null
-        })
-        .eq('id', userProfile.id);
-
-      if (updateError) {
-        if (updateError.code === '42501') {
-          throw new Error('No tienes permisos para actualizar el perfil');
-        } else {
-          throw new Error('Error al actualizar el perfil');
+      // Load prescription settings
+      setPrescriptionSettings({
+        letterhead: '',
+        signature: '',
+        default_medications: [],
+        prescription_style: userProfile.prescription_style || {
+          header_color: '#1f2937',
+          font_family: 'Arial',
+          logo_url: '',
+          footer_text: ''
         }
-      }
+      });
 
-      // Update local state
-      const updatedProfile = {
-        ...userProfile,
-        full_name: profileForm.full_name.trim(),
-        license_number: profileForm.license_number.trim() || undefined,
-        phone: profileForm.phone.trim() || undefined
-      };
+      // Load security data (mock data for demo)
+      setSecurityData(prev => ({
+        ...prev,
+        two_factor_enabled: false,
+        login_history: [
+          { date: '2024-01-15 10:30', ip: '192.168.1.1', device: 'Chrome - Windows' },
+          { date: '2024-01-14 15:45', ip: '192.168.1.1', device: 'Safari - iPhone' },
+          { date: '2024-01-13 09:15', ip: '10.0.0.1', device: 'Firefox - macOS' }
+        ],
+        active_sessions: [
+          { id: '1', device: 'Chrome - Windows', location: 'Ciudad de México', last_active: '2024-01-15 10:30' },
+          { id: '2', device: 'Safari - iPhone', location: 'Ciudad de México', last_active: '2024-01-15 08:15' }
+        ]
+      }));
 
-      onUpdate(updatedProfile);
-      setSuccessMessage('Perfil actualizado correctamente');
-
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error) {
+      showNotification('error', 'Error al cargar la configuración');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  // Handle password change
+  const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
+    setNotification({ type, message, show: true });
+    setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 5000);
+  };
+
+  const handleProfileSave = async () => {
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: profileData.full_name,
+          specialty: profileData.specialty,
+          license_number: profileData.license_number,
+          phone: profileData.phone,
+          schedule: profileData.schedule
+        })
+        .eq('id', userProfile.id);
+
+      if (error) throw error;
+
+      onProfileUpdate({ ...userProfile, ...profileData });
+      showNotification('success', 'Perfil actualizado correctamente');
+    } catch (error: any) {
+      showNotification('error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrescriptionSave = async () => {
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          prescription_style: prescriptionSettings.prescription_style
+        })
+        .eq('id', userProfile.id);
+
+      if (error) throw error;
+
+      showNotification('success', 'Configuración de recetas actualizada');
+    } catch (error: any) {
+      showNotification('error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePasswordChange = async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
-      // Validate passwords
-      if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-        throw new Error('Todos los campos de contraseña son requeridos');
+      if (securityData.new_password !== securityData.confirm_password) {
+        showNotification('error', 'Las contraseñas no coinciden');
+        return;
       }
 
-      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-        throw new Error('Las contraseñas no coinciden');
+      if (securityData.new_password.length < 6) {
+        showNotification('error', 'La contraseña debe tener al menos 6 caracteres');
+        return;
       }
 
-      if (passwordForm.newPassword.length < 6) {
-        throw new Error('La nueva contraseña debe tener al menos 6 caracteres');
-      }
+      setLoading(true);
 
-      // Update password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: passwordForm.newPassword
+      const { error } = await supabase.auth.updateUser({
+        password: securityData.new_password
       });
 
-      if (updateError) throw updateError;
+      if (error) throw error;
 
-      setSuccessMessage('Contraseña actualizada correctamente');
-      setPasswordForm({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
+      setSecurityData(prev => ({
+        ...prev,
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
+      }));
 
-    } catch (err: any) {
-      setError(err.message);
+      showNotification('success', 'Contraseña actualizada correctamente');
+    } catch (error: any) {
+      showNotification('error', error.message);
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle schedule update
-  const handleScheduleUpdate = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      if (!userProfile) {
-        throw new Error('No se encontró el perfil del usuario');
-      }
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          schedule: scheduleForm
-        })
-        .eq('id', userProfile.id);
-
-      if (updateError) {
-        throw new Error('Error al actualizar el horario');
-      }
-
-      // Update local state
-      const updatedProfile = {
-        ...userProfile,
-        schedule: scheduleForm
-      };
-
-      onUpdate(updatedProfile);
-      setSuccessMessage('Horario actualizado correctamente');
-
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle account deletion
-  const handleDeleteAccount = async () => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar tu cuenta? Esta acción no se puede deshacer.')) {
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Note: In a real app, you'd need to implement proper account deletion
-      // This would involve deleting user data and signing them out
-      setSuccessMessage('Solicitud de eliminación de cuenta enviada');
-
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle prescription style update
-  const handlePrescriptionStyleUpdate = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      if (!userProfile) {
-        throw new Error('No se encontró el perfil del usuario');
-      }
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          prescription_style: prescriptionStyle
-        })
-        .eq('id', userProfile.id);
-
-      if (updateError) {
-        throw new Error('Error al actualizar el estilo de receta');
-      }
-
-      // Update local state
-      const updatedProfile = {
-        ...userProfile,
-        prescription_style: prescriptionStyle
-      };
-
-      onUpdate(updatedProfile);
-      setSuccessMessage('Estilo de receta actualizado correctamente');
-
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    setLogoUploadError(null);
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!userProfile) {
-      setLogoUploadError('Perfil de usuario no encontrado.');
-      return;
-    }
-
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-    if (!validTypes.includes(file.type)) {
-      setLogoUploadError('Por favor selecciona una imagen válida (JPG, PNG, GIF, WebP, o SVG)');
-      return;
-    }
-
-    // Validate file size (2MB limit)
-    if (file.size > 2 * 1024 * 1024) {
-      setLogoUploadError('La imagen no debe exceder 2MB');
-      return;
-    }
-
-    setSelectedFile(file);
-    const preview = URL.createObjectURL(file);
-    setPreviewUrl(preview);
-
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${userProfile.id}/${Date.now()}.${fileExt}`;
-    const bucketName = 'logos';
-
-    setIsUploadingLogo(true);
     try {
-      // First, try to delete any existing logo for this user
-      const { data: existingFiles } = await supabase.storage
-        .from(bucketName)
-        .list(userProfile.id, {
-          limit: 1
-        });
-
-      if (existingFiles && existingFiles.length > 0) {
-        for (const existingFile of existingFiles) {
-          const { error: deleteError } = await supabase.storage
-            .from(bucketName)
-            .remove([`${userProfile.id}/${existingFile.name}`]);
-          
-          if (deleteError) {
-            console.warn('Error deleting existing logo:', deleteError);
-          }
-        }
-      }
-
-      // Upload the new logo
-      const { data, error } = await supabase.storage
-        .from(bucketName)
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (error) {
-        console.error('Error uploading logo:', error);
-        if (error.message.includes('row-level security')) {
-          setLogoUploadError('Error de permisos al subir el logo. Por favor, verifica que tienes los permisos necesarios.');
-        } else {
-          setLogoUploadError(`Error al subir el logo: ${error.message}`);
-        }
-        throw error;
-      }
-
-      // Get public URL
-      const { data: publicURLData } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(fileName);
+      setLoading(true);
       
-      if (!publicURLData.publicUrl) {
-        setLogoUploadError('No se pudo obtener la URL pública del logo.');
-        throw new Error('No se pudo obtener la URL pública del logo.');
-      }
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userProfile.id}-logo.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('logos')
+        .upload(fileName, file, { upsert: true });
 
-      setPrescriptionStyle(prev => ({ ...prev, logoUrl: publicURLData.publicUrl }));
-      setSuccessMessage('Logo actualizado correctamente.');
+      if (uploadError) throw uploadError;
 
-    } catch (err: any) {
-      console.error('Logo upload error:', err);
-      setLogoUploadError(err.message || 'Error al subir el logo. Por favor, intente nuevamente.');
+      const { data: { publicUrl } } = supabase.storage
+        .from('logos')
+        .getPublicUrl(fileName);
+
+      setPrescriptionSettings(prev => ({
+        ...prev,
+        prescription_style: {
+          ...prev.prescription_style,
+          logo_url: publicUrl
+        }
+      }));
+
+      showNotification('success', 'Logo subido correctamente');
+    } catch (error: any) {
+      showNotification('error', error.message);
     } finally {
-      setIsUploadingLogo(false);
-      // Clear the file input so the same file can be re-selected if needed after an error
-      event.target.value = '';
+      setLoading(false);
     }
   };
 
+  const handleSessionTerminate = async (sessionId: string) => {
+    try {
+      // In a real implementation, this would call an API to terminate the session
+      setSecurityData(prev => ({
+        ...prev,
+        active_sessions: prev.active_sessions.filter(session => session.id !== sessionId)
+      }));
+      showNotification('success', 'Sesión terminada');
+    } catch (error: any) {
+      showNotification('error', error.message);
+    }
+  };
+
+  if (!isOpen) return null;
+
   const tabs = [
     { id: 'profile', label: 'Perfil', icon: User },
-    { id: 'security', label: 'Seguridad', icon: Lock },
-    { id: 'notifications', label: 'Notificaciones', icon: Bell },
-    { id: 'schedule', label: 'Horario', icon: Clock },
-    { id: 'prescription', label: 'Estilo de Receta', icon: FileText },
-    { id: 'examTemplates', label: 'Plantillas de Exploración', icon: Stethoscope }
+    { id: 'prescription', label: 'Recetas', icon: FileText },
+    { id: 'preferences', label: 'Preferencias', icon: SettingsIcon },
+    { id: 'security', label: 'Seguridad', icon: Shield }
   ];
-
-  const weekDays = [
-    { key: 'monday', label: 'Lunes' },
-    { key: 'tuesday', label: 'Martes' },
-    { key: 'wednesday', label: 'Miércoles' },
-    { key: 'thursday', label: 'Jueves' },
-    { key: 'friday', label: 'Viernes' },
-    { key: 'saturday', label: 'Sábado' },
-    { key: 'sunday', label: 'Domingo' }
-  ];
-
-  if (!userProfile) {
-    return null;
-  }
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-        </Transition.Child>
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+      <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden border border-gray-700">
+        {/* Header */}
+        <div className="bg-gray-900 px-6 py-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-white">Configuración</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel className="w-full max-w-4xl transform overflow-hidden rounded-xl bg-gray-800 border border-gray-700 shadow-xl transition-all">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-700">
-                  <Dialog.Title className="text-xl font-semibold text-white">
-                    Configuración
-                  </Dialog.Title>
-                  <button
-                    onClick={onClose}
-                    className="text-gray-400 hover:text-white transition-colors"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
+        {/* Notification */}
+        {notification.show && (
+          <div className={`px-6 py-3 border-b border-gray-700 ${
+            notification.type === 'success' ? 'bg-green-900/50 border-green-700' :
+            notification.type === 'error' ? 'bg-red-900/50 border-red-700' :
+            'bg-blue-900/50 border-blue-700'
+          }`}>
+            <div className="flex items-center">
+              {notification.type === 'success' ? (
+                <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
+              ) : notification.type === 'error' ? (
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-blue-400 mr-2" />
+              )}
+              <span className={`text-sm ${
+                notification.type === 'success' ? 'text-green-300' :
+                notification.type === 'error' ? 'text-red-300' :
+                'text-blue-300'
+              }`}>
+                {notification.message}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex h-[calc(90vh-120px)]">
+          {/* Sidebar */}
+          <div className="w-64 bg-gray-900 border-r border-gray-700">
+            <nav className="p-4">
+              <ul className="space-y-2">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <li key={tab.id}>
+                      <button
+                        onClick={() => setActiveTab(tab.id as TabType)}
+                        className={`w-full flex items-center px-3 py-2 rounded-lg transition-colors ${
+                          activeTab === tab.id
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        }`}
+                      >
+                        <Icon className="h-5 w-5 mr-3" />
+                        {tab.label}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-6">
+              {/* Profile Settings Tab */}
+              {activeTab === 'profile' && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-medium text-white mb-4">Información del Perfil</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Nombre Completo *
+                        </label>
+                        <input
+                          type="text"
+                          value={profileData.full_name}
+                          onChange={(e) => setProfileData(prev => ({ ...prev, full_name: e.target.value }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          value={profileData.email}
+                          readOnly
+                          className="w-full px-3 py-2 bg-gray-600 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">El email no se puede modificar</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Especialidad
+                        </label>
+                        <select
+                          value={profileData.specialty}
+                          onChange={(e) => setProfileData(prev => ({ ...prev, specialty: e.target.value }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="">Seleccionar especialidad</option>
+                          <option value="medicina_general">Medicina General</option>
+                          <option value="cardiologia">Cardiología</option>
+                          <option value="neurologia">Neurología</option>
+                          <option value="pediatria">Pediatría</option>
+                          <option value="ginecologia">Ginecología</option>
+                          <option value="traumatologia">Traumatología</option>
+                          <option value="dermatologia">Dermatología</option>
+                          <option value="psiquiatria">Psiquiatría</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Número de Cédula
+                        </label>
+                        <input
+                          type="text"
+                          value={profileData.license_number}
+                          onChange={(e) => setProfileData(prev => ({ ...prev, license_number: e.target.value }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Teléfono
+                        </label>
+                        <input
+                          type="tel"
+                          value={profileData.phone}
+                          onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={handleProfileSave}
+                        disabled={loading}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        {loading ? 'Guardando...' : 'Guardar Cambios'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              )}
 
-                {/* Messages */}
-                {error && (
-                  <div className="mx-6 mt-4 bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm flex items-center">
-                    <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>{error}</span>
-                    <button
-                      onClick={() => setError(null)}
-                      className="ml-auto text-red-400 hover:text-red-300"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+              {/* Prescription Settings Tab */}
+              {activeTab === 'prescription' && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-medium text-white mb-4">Configuración de Recetas</h3>
+                    
+                    <div className="space-y-6">
+                      {/* Logo Upload */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Logo del Consultorio
+                        </label>
+                        <div className="flex items-center space-x-4">
+                          {prescriptionSettings.prescription_style.logo_url ? (
+                            <div className="relative">
+                              <img
+                                src={prescriptionSettings.prescription_style.logo_url}
+                                alt="Logo"
+                                className="h-16 w-16 object-cover rounded-lg border border-gray-600"
+                              />
+                              <button
+                                onClick={() => setPrescriptionSettings(prev => ({
+                                  ...prev,
+                                  prescription_style: { ...prev.prescription_style, logo_url: '' }
+                                }))}
+                                className="absolute -top-2 -right-2 p-1 bg-red-600 text-white rounded-full hover:bg-red-700"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="h-16 w-16 bg-gray-700 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center">
+                              <Camera className="h-6 w-6 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleLogoUpload}
+                              className="hidden"
+                              id="logo-upload"
+                            />
+                            <label
+                              htmlFor="logo-upload"
+                              className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+                            >
+                              <Upload className="h-4 w-4 mr-2" />
+                              Subir Logo
+                            </label>
+                            <p className="text-xs text-gray-400 mt-1">PNG, JPG hasta 2MB</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Header Color */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Color del Encabezado
+                        </label>
+                        <div className="flex items-center space-x-4">
+                          <input
+                            type="color"
+                            value={prescriptionSettings.prescription_style.header_color}
+                            onChange={(e) => setPrescriptionSettings(prev => ({
+                              ...prev,
+                              prescription_style: { ...prev.prescription_style, header_color: e.target.value }
+                            }))}
+                            className="h-10 w-20 rounded border border-gray-600"
+                          />
+                          <input
+                            type="text"
+                            value={prescriptionSettings.prescription_style.header_color}
+                            onChange={(e) => setPrescriptionSettings(prev => ({
+                              ...prev,
+                              prescription_style: { ...prev.prescription_style, header_color: e.target.value }
+                            }))}
+                            className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Font Family */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Fuente
+                        </label>
+                        <select
+                          value={prescriptionSettings.prescription_style.font_family}
+                          onChange={(e) => setPrescriptionSettings(prev => ({
+                            ...prev,
+                            prescription_style: { ...prev.prescription_style, font_family: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="Arial">Arial</option>
+                          <option value="Times New Roman">Times New Roman</option>
+                          <option value="Helvetica">Helvetica</option>
+                          <option value="Georgia">Georgia</option>
+                        </select>
+                      </div>
+
+                      {/* Footer Text */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Texto del Pie de Página
+                        </label>
+                        <textarea
+                          value={prescriptionSettings.prescription_style.footer_text}
+                          onChange={(e) => setPrescriptionSettings(prev => ({
+                            ...prev,
+                            prescription_style: { ...prev.prescription_style, footer_text: e.target.value }
+                          }))}
+                          rows={3}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                          placeholder="Información de contacto, dirección, etc."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={handlePrescriptionSave}
+                        disabled={loading}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        {loading ? 'Guardando...' : 'Guardar Configuración'}
+                      </button>
+                    </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {successMessage && (
-                  <div className="mx-6 mt-4 bg-green-900/50 border border-green-700 text-green-300 p-3 rounded-lg text-sm flex items-center">
-                    <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>{successMessage}</span>
-                    <button
-                      onClick={() => setSuccessMessage(null)}
-                      className="ml-auto text-green-400 hover:text-green-300"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
+              {/* System Preferences Tab */}
+              {activeTab === 'preferences' && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-medium text-white mb-4">Preferencias del Sistema</h3>
+                    
+                    <div className="space-y-6">
+                      {/* Language */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          <Globe className="h-4 w-4 inline mr-2" />
+                          Idioma
+                        </label>
+                        <select
+                          value={preferences.language}
+                          onChange={(e) => setPreferences(prev => ({ ...prev, language: e.target.value }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="es">Español</option>
+                          <option value="en">English</option>
+                        </select>
+                      </div>
 
-                <div className="flex">
-                  {/* Sidebar */}
-                  <div className="w-1/3 border-r border-gray-700 p-6">
-                    <nav className="space-y-2">
-                      {tabs.map((tab) => {
-                        const Icon = tab.icon;
-                        return (
+                      {/* Timezone */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          <Clock className="h-4 w-4 inline mr-2" />
+                          Zona Horaria
+                        </label>
+                        <select
+                          value={preferences.timezone}
+                          onChange={(e) => setPreferences(prev => ({ ...prev, timezone: e.target.value }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="America/Mexico_City">Ciudad de México (GMT-6)</option>
+                          <option value="America/New_York">Nueva York (GMT-5)</option>
+                          <option value="America/Los_Angeles">Los Ángeles (GMT-8)</option>
+                          <option value="Europe/Madrid">Madrid (GMT+1)</option>
+                        </select>
+                      </div>
+
+                      {/* Theme */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          <Monitor className="h-4 w-4 inline mr-2" />
+                          Tema
+                        </label>
+                        <div className="flex space-x-4">
                           <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
-                            className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                              activeTab === tab.id
-                                ? 'bg-blue-600 text-white'
-                                : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                            onClick={() => setPreferences(prev => ({ ...prev, theme: 'dark' }))}
+                            className={`flex items-center px-4 py-2 rounded-lg border transition-colors ${
+                              preferences.theme === 'dark'
+                                ? 'border-blue-500 bg-blue-600/20 text-blue-300'
+                                : 'border-gray-600 text-gray-300 hover:bg-gray-700'
                             }`}
                           >
-                            <Icon className="h-5 w-5 mr-3" />
-                            {tab.label}
+                            <Moon className="h-4 w-4 mr-2" />
+                            Oscuro
                           </button>
-                        );
-                      })}
-                    </nav>
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 p-6">
-                    {/* Profile Tab */}
-                    {activeTab === 'profile' && (
-                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-lg font-medium text-white mb-4">Información Personal</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Nombre Completo *
-                              </label>
-                              <input
-                                type="text"
-                                value={profileForm.full_name}
-                                onChange={(e) => setProfileForm(prev => ({ ...prev, full_name: e.target.value }))}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                placeholder="Tu nombre completo"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Número de Cédula
-                              </label>
-                              <input
-                                type="text"
-                                value={profileForm.license_number}
-                                onChange={(e) => setProfileForm(prev => ({ ...prev, license_number: e.target.value }))}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                placeholder="Número de cédula profesional"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Teléfono
-                              </label>
-                              <input
-                                type="tel"
-                                value={profileForm.phone}
-                                onChange={(e) => setProfileForm(prev => ({ ...prev, phone: e.target.value }))}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                placeholder="Tu número de teléfono"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Email
-                              </label>
-                              <input
-                                type="email"
-                                value={profileForm.email}
-                                disabled
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
-                                placeholder="tu@email.com"
-                              />
-                              <p className="text-xs text-gray-400 mt-1">El email no se puede cambiar desde aquí</p>
-                            </div>
-                          </div>
-                          <div className="mt-6">
-                            <button
-                              onClick={handleProfileUpdate}
-                              disabled={isLoading}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
-                            >
-                              {isLoading ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <Save className="h-4 w-4 mr-2" />
-                              )}
-                              Guardar Cambios
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => setPreferences(prev => ({ ...prev, theme: 'light' }))}
+                            className={`flex items-center px-4 py-2 rounded-lg border transition-colors ${
+                              preferences.theme === 'light'
+                                ? 'border-blue-500 bg-blue-600/20 text-blue-300'
+                                : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                            }`}
+                          >
+                            <Sun className="h-4 w-4 mr-2" />
+                            Claro
+                          </button>
                         </div>
                       </div>
-                    )}
 
-                    {/* Security Tab */}
-                    {activeTab === 'security' && (
-                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-lg font-medium text-white mb-4">Cambiar Contraseña</h3>
-                          <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Contraseña Actual
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type={showPassword ? 'text' : 'password'}
-                                  value={passwordForm.currentPassword}
-                                  onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
-                                  className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                  placeholder="Tu contraseña actual"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPassword(!showPassword)}
-                                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-white"
-                                >
-                                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Nueva Contraseña
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type={showNewPassword ? 'text' : 'password'}
-                                  value={passwordForm.newPassword}
-                                  onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
-                                  className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                  placeholder="Tu nueva contraseña"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowNewPassword(!showNewPassword)}
-                                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-white"
-                                >
-                                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Confirmar Nueva Contraseña
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type={showConfirmPassword ? 'text' : 'password'}
-                                  value={passwordForm.confirmPassword}
-                                  onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                                  className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                  placeholder="Confirma tu nueva contraseña"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-white"
-                                >
-                                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="mt-6">
-                            <button
-                              onClick={handlePasswordChange}
-                              disabled={isLoading}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
-                            >
-                              {isLoading ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <Lock className="h-4 w-4 mr-2" />
-                              )}
-                              Cambiar Contraseña
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-gray-700 pt-6">
-                          <h3 className="text-lg font-medium text-white mb-4">Zona de Peligro</h3>
-                          <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-                            <h4 className="text-red-300 font-medium mb-2">Eliminar Cuenta</h4>
-                            <p className="text-red-200 text-sm mb-4">
-                              Una vez que elimines tu cuenta, no hay vuelta atrás. Por favor, ten esto en cuenta.
-                            </p>
-                            <button
-                              onClick={handleDeleteAccount}
-                              disabled={isLoading}
-                              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Eliminar Cuenta
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Notifications Tab */}
-                    {activeTab === 'notifications' && (
-                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-lg font-medium text-white mb-4">Preferencias de Notificación</h3>
-                          <div className="space-y-4">
-                            {Object.entries(notificationSettings).map(([key, value]) => (
-                              <div key={key} className="flex items-center justify-between">
-                                <div>
-                                  <label className="text-sm font-medium text-gray-300">
-                                    {key === 'emailNotifications' ? 'Notificaciones por Email' :
-                                     key === 'pushNotifications' ? 'Notificaciones Push' :
-                                     key === 'appointmentReminders' ? 'Recordatorios de Citas' :
-                                     key === 'systemUpdates' ? 'Actualizaciones del Sistema' :
-                                     'Emails de Marketing'}
-                                  </label>
-                                  <p className="text-xs text-gray-400">
-                                    {key === 'emailNotifications' ? 'Recibe notificaciones importantes por email' :
-                                     key === 'pushNotifications' ? 'Recibe notificaciones en el navegador' :
-                                     key === 'appointmentReminders' ? 'Recordatorios automáticos de citas médicas' :
-                                     key === 'systemUpdates' ? 'Notificaciones sobre actualizaciones y mantenimiento' :
-                                     'Ofertas especiales y contenido promocional'}
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={() => setNotificationSettings(prev => ({ ...prev, [key]: !value }))}
-                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    value ? 'bg-blue-600' : 'bg-gray-600'
-                                  }`}
-                                >
-                                  <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                      value ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Schedule Tab */}
-                    {activeTab === 'schedule' && (
-                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-lg font-medium text-white mb-4">Horario de Trabajo</h3>
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                  Hora de Inicio
-                                </label>
-                                <input
-                                  type="time"
-                                  value={scheduleForm.start_time}
-                                  onChange={(e) => setScheduleForm(prev => ({ ...prev, start_time: e.target.value }))}
-                                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                  Hora de Fin
-                                </label>
-                                <input
-                                  type="time"
-                                  value={scheduleForm.end_time}
-                                  onChange={(e) => setScheduleForm(prev => ({ ...prev, end_time: e.target.value }))}
-                                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-3">
-                                Días de Trabajo
-                              </label>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {weekDays.map((day) => (
-                                  <label key={day.key} className="flex items-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={scheduleForm[day.key as keyof typeof scheduleForm] as boolean}
-                                      onChange={(e) => setScheduleForm(prev => ({ ...prev, [day.key]: e.target.checked }))}
-                                      className="rounded border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
-                                    />
-                                    <span className="ml-2 text-sm text-gray-300">{day.label}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="mt-6">
-                            <button
-                              onClick={handleScheduleUpdate}
-                              disabled={isLoading}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
-                            >
-                              {isLoading ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <Clock className="h-4 w-4 mr-2" />
-                              )}
-                              Guardar Horario
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Prescription Style Tab */}
-                    {activeTab === 'prescription' && (
-                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-lg font-medium text-white mb-4">Personalizar Estilo de Receta</h3>
-                          
-                          <div className="space-y-4">
-                            {/* Estilo de Encabezado */}
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Estilo de Encabezado
-                              </label>
-                              <select
-                                value={prescriptionStyle.headerStyle}
-                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, headerStyle: e.target.value }))}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              >
-                                <option value="modern">Moderno</option>
-                                <option value="classic">Clásico</option>
-                                <option value="minimal">Minimalista</option>
-                                <option value="professional">Profesional</option>
-                              </select>
-                            </div>
-
-                            {/* Font Family */}
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                <Type className="inline h-4 w-4 mr-1" />
-                                Familia de Fuente
-                              </label>
-                              <select
-                                value={prescriptionStyle.fontFamily}
-                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, fontFamily: e.target.value }))}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              >
-                                <option value="Arial">Arial</option>
-                                <option value="Verdana">Verdana</option>
-                                <option value="Times New Roman">Times New Roman</option>
-                                <option value="Helvetica">Helvetica</option>
-                                <option value="Georgia">Georgia</option>
-                                <option value="Courier New">Courier New</option>
-                                <option value="system-ui">System UI (Predeterminada)</option>
-                              </select>
-                            </div>
-
-                            {/* Tamaño de Fuente */}
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                <Type className="inline h-4 w-4 mr-1" />
-                                Tamaño de Fuente
-                              </label>
-                              <select
-                                value={prescriptionStyle.fontSize}
-                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, fontSize: e.target.value }))}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              >
-                                <option value="small">Pequeño</option>
-                                <option value="medium">Mediano</option>
-                                <option value="large">Grande</option>
-                                <option value="extraLarge">Extra Grande</option>
-                              </select>
-                            </div>
-
-                            {/* Espaciado */}
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                <Layout className="inline h-4 w-4 mr-1" />
-                                Espaciado
-                              </label>
-                              <select
-                                value={prescriptionStyle.spacing}
-                                onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, spacing: e.target.value }))}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              >
-                                <option value="compact">Compacto</option>
-                                <option value="normal">Normal</option>
-                                <option value="relaxed">Amplio</option>
-                              </select>
-                            </div>
-
-                            {/* Colores */}
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                  <Palette className="inline h-4 w-4 mr-1" />
-                                  Color Principal
-                                </label>
-                                <div className="flex items-center space-x-2">
-                                  <input
-                                    type="color"
-                                    value={prescriptionStyle.primaryColor}
-                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, primaryColor: e.target.value }))}
-                                    className="h-10 w-20 rounded cursor-pointer"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={prescriptionStyle.primaryColor}
-                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, primaryColor: e.target.value }))}
-                                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                  />
-                                </div>
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                  Color Secundario
-                                </label>
-                                <div className="flex items-center space-x-2">
-                                  <input
-                                    type="color"
-                                    value={prescriptionStyle.secondaryColor}
-                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, secondaryColor: e.target.value }))}
-                                    className="h-10 w-20 rounded cursor-pointer"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={prescriptionStyle.secondaryColor}
-                                    onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, secondaryColor: e.target.value }))}
-                                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Opciones adicionales */}
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-gray-300">
-                                  Incluir código QR
-                                </label>
-                                <button
-                                  onClick={() => setPrescriptionStyle(prev => ({ ...prev, includeQR: !prev.includeQR }))}
-                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    prescriptionStyle.includeQR ? 'bg-blue-600' : 'bg-gray-600'
-                                  }`}
-                                >
-                                  <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                      prescriptionStyle.includeQR ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
-
-                              <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-gray-300">
-                                  Mostrar marca de agua
-                                </label>
-                                <button
-                                  onClick={() => setPrescriptionStyle(prev => ({ ...prev, includeWatermark: !prev.includeWatermark }))}
-                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    prescriptionStyle.includeWatermark ? 'bg-blue-600' : 'bg-gray-600'
-                                  }`}
-                                >
-                                  <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                      prescriptionStyle.includeWatermark ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
-
-                              <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-gray-300">
-                                  Mostrar logotipo
-                                </label>
-                                <button
-                                  onClick={() => setPrescriptionStyle(prev => ({ ...prev, showLogo: !prev.showLogo }))}
-                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    prescriptionStyle.showLogo ? 'bg-blue-600' : 'bg-gray-600'
-                                  }`}
-                                >
-                                  <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                      prescriptionStyle.showLogo ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Tamaño de papel y márgenes */}
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                  Tamaño de Papel
-                                </label>
-                                <select
-                                  value={prescriptionStyle.paperSize}
-                                  onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, paperSize: e.target.value }))}
-                                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                >
-                                  <option value="letter">Carta (Letter)</option>
-                                  <option value="a4">A4</option>
-                                  <option value="legal">Oficio (Legal)</option>
-                                  <option value="half">Media Carta</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                  Márgenes
-                                </label>
-                                <select
-                                  value={prescriptionStyle.margins}
-                                  onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, margins: e.target.value }))}
-                                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                >
-                                  <option value="narrow">Estrechos</option>
-                                  <option value="normal">Normales</option>
-                                  <option value="wide">Amplios</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            {/* Información de la Clínica */}
-                            <div className="mt-6 pt-6 border-t border-gray-700">
-                              <h4 className="text-md font-medium text-white mb-3">Información de la Clínica</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Nombre</label>
-                                  <input type="text" value={prescriptionStyle.clinicName} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicName: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Nombre de la clínica" />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Teléfono</label>
-                                  <input type="text" value={prescriptionStyle.clinicPhone} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicPhone: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="(555) 123-4567" />
-                                </div>
-                                <div className="md:col-span-2">
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Dirección</label>
-                                  <input type="text" value={prescriptionStyle.clinicAddress} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicAddress: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Calle, Número, Ciudad" />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
-                                  <input type="email" value={prescriptionStyle.clinicEmail} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, clinicEmail: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="contacto@clinica.com" />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Información del Médico (para la receta) */}
-                            <div className="mt-6 pt-6 border-t border-gray-700">
-                              <h4 className="text-md font-medium text-white mb-3">Información del Médico (visible en receta)</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Nombre Completo</label>
-                                  <input type="text" value={prescriptionStyle.doctorFullName} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorFullName: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Cédula Profesional</label>
-                                  <input type="text" value={prescriptionStyle.doctorLicense} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorLicense: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Especialidad</label>
-                                  <input type="text" value={prescriptionStyle.doctorSpecialty} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorSpecialty: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-300 mb-1">Contacto (Tel/Email)</label>
-                                  <input type="text" value={prescriptionStyle.doctorContact} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, doctorContact: e.target.value }))} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Títulos de Sección de la Receta */}
-                            <div className="mt-6 pt-6 border-t border-gray-700">
-                              <h4 className="text-md font-medium text-white mb-3">Títulos de Sección</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-400 mb-1">Título Principal</label>
-                                  <input type="text" value={prescriptionStyle.titlePrescription} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titlePrescription: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                 <div>
-                                  <label className="block text-xs font-medium text-gray-400 mb-1">Info. Paciente</label>
-                                  <input type="text" value={prescriptionStyle.titlePatientInfo} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titlePatientInfo: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-400 mb-1">Diagnóstico</label>
-                                  <input type="text" value={prescriptionStyle.titleDiagnosis} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleDiagnosis: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-400 mb-1">Medicamentos</label>
-                                  <input type="text" value={prescriptionStyle.titleMedications} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleMedications: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-400 mb-1">Notas Adicionales</label>
-                                  <input type="text" value={prescriptionStyle.titleNotes} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleNotes: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                 <div>
-                                  <label className="block text-xs font-medium text-gray-400 mb-1">Firma</label>
-                                  <input type="text" value={prescriptionStyle.titleSignature} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleSignature: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                                 <div>
-                                  <label className="block text-xs font-medium text-gray-400 mb-1">Validez</label>
-                                  <input type="text" value={prescriptionStyle.titleValidity} onChange={(e) => setPrescriptionStyle(prev => ({ ...prev, titleValidity: e.target.value }))} className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Logo Upload */}
-                            <div className="mt-6 pt-6 border-t border-gray-700">
-                              <h4 className="text-md font-medium text-white mb-3">Logotipo de la Clínica</h4>
-                              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-lg hover:border-gray-500 transition-colors">
-                                <div className="space-y-1 text-center">
-                                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                                  <div className="flex text-sm text-gray-400">
-                                    <label className="relative cursor-pointer rounded-md font-medium text-blue-500 hover:text-blue-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                                      <span>Subir un archivo</span>
-                                      <input
-                                        type="file"
-                                        className="sr-only"
-                                        accept="image/png, image/jpeg, image/svg+xml, image/webp"
-                                        onChange={handleLogoUpload}
-                                        disabled={isUploadingLogo}
-                                      />
-                                    </label>
-                                    <p className="pl-1">o arrastra y suelta</p>
-                                  </div>
-                                  <p className="text-xs text-gray-500">
-                                    PNG, JPG, GIF hasta 2MB
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              {isUploadingLogo && (
-                                <p className="text-sm text-blue-400 mt-2 flex items-center">
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin"/> 
-                                  Subiendo logo...
-                                </p>
-                              )}
-                              
-                              {logoUploadError && (
-                                <p className="text-sm text-red-400 mt-2">{logoUploadError}</p>
-                              )}
-                              
-                              {(prescriptionStyle.logoUrl || previewUrl) && !isUploadingLogo && !logoUploadError && (
-                                <div className="mt-3">
-                                  <p className="text-xs text-gray-400 mb-1">Logo actual:</p>
-                                  <img 
-                                    src={previewUrl || prescriptionStyle.logoUrl} 
-                                    alt="Logo de la clínica" 
-                                    className="max-h-20 rounded border border-gray-600 bg-gray-700 p-1" 
-                                  />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Vista previa */}
-                            <div className="mt-8 p-4 bg-gray-900 rounded-lg border border-gray-700 relative">
-                               {prescriptionStyle.includeWatermark && (
-                                <div style={{
-                                    position: 'absolute',
-                                    top: '50%',
-                                    left: '50%',
-                                    transform: 'translate(-50%, -50%) rotate(-30deg)',
-                                    opacity: 0.05,
-                                    fontSize: '4em',
-                                    color: prescriptionStyle.primaryColor,
-                                    fontWeight: 'bold',
-                                    pointerEvents: 'none',
-                                    zIndex: 1,
-                                    textAlign: 'center',
-                                    width: '100%'
-                                }}>
-                                    {prescriptionStyle.clinicName || "CLÍNICA"}
-                                </div>
-                              )}
-                              <p className="text-sm text-gray-400 mb-2">Vista Previa</p>
-                              <div 
-                                className="bg-white p-6 rounded-lg shadow-lg relative" 
-                                style={{ 
-                                  fontFamily: prescriptionStyle.fontFamily,
-                                  fontSize: prescriptionStyle.fontSize === 'small' ? '12px' : prescriptionStyle.fontSize === 'large' ? '17px' : prescriptionStyle.fontSize === 'extraLarge' ? '19px' : '15px', 
-                                  lineHeight: prescriptionStyle.spacing === 'compact' ? '1.3' : prescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5',
-                                  borderTop: `8px solid ${prescriptionStyle.primaryColor}`,
-                                  paddingTop: '20px'
-                                }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `1px solid ${prescriptionStyle.secondaryColor}33`, paddingBottom: '15px', marginBottom: '15px' }}>
-                                  <div>
-                                    <h3 style={{ color: prescriptionStyle.primaryColor, margin: 0, fontSize: '1.8em', fontWeight: 'bold' }}>{prescriptionStyle.titlePrescription}</h3>
-                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '5px 0 2px 0', fontSize: '1em', fontWeight: 'bold' }}>{prescriptionStyle.doctorFullName}</p>
-                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.85em' }}>{prescriptionStyle.doctorSpecialty}</p>
-                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.85em' }}>Cédula: {prescriptionStyle.doctorLicense}</p>
-                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.85em' }}>{prescriptionStyle.doctorContact}</p>
-                                  </div>
-                                  {prescriptionStyle.showLogo && (
-                                    <div style={{ textAlign: prescriptionStyle.logoPosition === 'center' ? 'center' : prescriptionStyle.logoPosition, width: prescriptionStyle.logoPosition === 'center' ? '100%' : 'auto', marginTop: prescriptionStyle.logoPosition === 'center' ? '10px' : '0'}}>
-                                      {/* Placeholder for logo */}
-                                      {prescriptionStyle.logoUrl ? (
-                                        <img src={prescriptionStyle.logoUrl} alt="Logo" style={{ maxHeight: '80px', maxWidth: '150px', height: 'auto', borderRadius: '4px' }} />
-                                      ) : (
-                                        <div style={{ width: '80px', height: '80px', background: prescriptionStyle.secondaryColor + '22', color: prescriptionStyle.secondaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5em', borderRadius: '4px', fontWeight: 'bold' }}>
-                                          LOGO
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                                    <p style={{ color: prescriptionStyle.primaryColor, margin: '0', fontWeight: 'bold', fontSize: '1.1em' }}>{prescriptionStyle.clinicName}</p>
-                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '2px 0', fontSize: '0.9em' }}>{prescriptionStyle.clinicAddress}</p>
-                                    <p style={{ color: prescriptionStyle.secondaryColor, margin: '2px 0', fontSize: '0.9em' }}>Tel: {prescriptionStyle.clinicPhone} | Email: {prescriptionStyle.clinicEmail}</p>
-                                </div>
-                                
-                                <div style={{ marginBottom: '20px', borderBottom: `1px solid ${prescriptionStyle.secondaryColor}33`, paddingBottom: '15px' }}>
-                                  <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 8px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titlePatientInfo}</h4>
-                                  <p style={{ color: '#374151', margin: '4px 0' }}><b>Paciente:</b> Ejemplo Apellido Ejemplo</p>
-                                  <p style={{ color: '#374151', margin: '4px 0' }}><b>Fecha:</b> DD/MM/AAAA</p>
-                                </div>
-
-                                <div style={{ marginBottom: '20px', borderBottom: `1px solid ${prescriptionStyle.secondaryColor}33`, paddingBottom: '15px' }}>
-                                  <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 8px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titleDiagnosis}</h4>
-                                  <p style={{ color: '#374151', margin: '4px 0' }}>Diagnóstico de ejemplo que puede ser un poco más largo para probar el espaciado.</p>
-                                </div>
-                                  
-                                <div style={{ marginBottom: '20px' }}>
-                                  <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 10px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titleMedications}</h4>
-                                  <div style={{ paddingLeft: '15px', borderLeft: `3px solid ${prescriptionStyle.primaryColor}` }}>
-                                    <p style={{ color: '#374151', margin: '5px 0' }}><b>Medicamento Ejemplo 500mg</b> - Tomar 1 tableta cada 8 horas por 7 días. Vía oral. Con alimentos.</p>
-                                    <p style={{ color: '#374151', margin: '10px 0 5px 0' }}><b>Otro Medicamento 20mg</b> - Tomar 1 cápsula en ayunas por 30 días. Vía oral.</p>
-                                  </div>
-                                </div>
-
-                                {prescriptionStyle.titleNotes && (
-                                  <div style={{ marginBottom: '30px'}}>
-                                    <h4 style={{ color: prescriptionStyle.primaryColor, margin: '0 0 8px 0', fontSize: '1.2em', fontWeight: 'bold' }}>{prescriptionStyle.titleNotes}</h4>
-                                    <p style={{ color: '#374151', margin: '4px 0', fontStyle:'italic' }}>Indicaciones adicionales: Reposo relativo, beber abundantes líquidos. Próxima cita en 2 semanas.</p>
-                                  </div>
-                                )}
-
-                                <div style={{ display: 'flex', justifyContent: prescriptionStyle.includeQR ? 'space-between' : 'center', alignItems: 'flex-end', marginTop: '30px', paddingTop: '20px', borderTop: `1px solid ${prescriptionStyle.secondaryColor}33` }}>
-                                   <div style={{ textAlign: 'center' }}>
-                                     <div style={{ display: 'inline-block', borderTop: `2px solid ${prescriptionStyle.secondaryColor}`, width: '220px', paddingTop: '8px' }}>
-                                       <p style={{ color: prescriptionStyle.secondaryColor, margin: '0', fontSize: '0.95em' }}>{prescriptionStyle.titleSignature}</p>
-                                     </div>
-                                   </div>
-                                   {prescriptionStyle.includeQR && (
-                                      <div style={{ textAlign: 'center' }}>
-                                          <svg width="70" height="70" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee" /><text x="50" y="55" dominantBaseline="middle" textAnchor="middle" fill="#333" fontSize="28">QR</text></svg>
-                                          <p style={{fontSize: '0.7em', color: '#555', marginTop: '3px'}}>Verificar</p>
-                                      </div>
-                                   )}
-                                </div>
-                                <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.85em', color: '#555' }}>
-                                    <p>{prescriptionStyle.titleValidity}: Esta receta tiene una validez de 30 días a partir de la fecha de emisión.</p>
-                                </div>
-
-                              </div>
-                            </div>
-
-                            <div className="mt-6">
+                      {/* Notifications */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-4">
+                          <Bell className="h-4 w-4 inline mr-2" />
+                          Notificaciones
+                        </label>
+                        <div className="space-y-3">
+                          {Object.entries(preferences.notifications).map(([key, value]) => (
+                            <div key={key} className="flex items-center justify-between">
+                              <span className="text-gray-300 capitalize">
+                                {key.replace(/_/g, ' ')}
+                              </span>
                               <button
-                                onClick={handlePrescriptionStyleUpdate}
-                                disabled={isLoading}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
+                                onClick={() => setPreferences(prev => ({
+                                  ...prev,
+                                  notifications: { ...prev.notifications, [key]: !value }
+                                }))}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                  value ? 'bg-blue-600' : 'bg-gray-600'
+                                }`}
                               >
-                                {isLoading ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Save className="h-4 w-4 mr-2" />
-                                )}
-                                Guardar Estilo
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    value ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={() => showNotification('success', 'Preferencias guardadas')}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        Guardar Preferencias
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Security Tab */}
+              {activeTab === 'security' && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-medium text-white mb-4">Configuración de Seguridad</h3>
+                    
+                    <div className="space-y-6">
+                      {/* Change Password */}
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                        <h4 className="text-md font-medium text-white mb-4">Cambiar Contraseña</h4>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                              Contraseña Actual
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPasswords.current ? 'text' : 'password'}
+                                value={securityData.current_password}
+                                onChange={(e) => setSecurityData(prev => ({ ...prev, current_password: e.target.value }))}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                              >
+                                {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </button>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Physical Exam Templates Tab */}
-                    {activeTab === 'examTemplates' && (
-                      <div className="space-y-6">
-                        <div>
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-medium text-white">Plantillas de Exploración Física</h3>
-                            <button
-                              onClick={() => setShowTemplateEditor(true)}
-                              className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Nueva Plantilla
-                            </button>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                              Nueva Contraseña
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPasswords.new ? 'text' : 'password'}
+                                value={securityData.new_password}
+                                onChange={(e) => setSecurityData(prev => ({ ...prev, new_password: e.target.value }))}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                              >
+                                {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                           </div>
 
-                          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
-                            <PhysicalExamTemplates
-                              onSelectTemplate={(template) => {
-                                setSelectedTemplateToEdit(template);
-                                setShowTemplateEditor(true);
-                              }}
-                              doctorId={userProfile?.id || ''}
-                            />
+                          <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                              Confirmar Nueva Contraseña
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPasswords.confirm ? 'text' : 'password'}
+                                value={securityData.confirm_password}
+                                onChange={(e) => setSecurityData(prev => ({ ...prev, confirm_password: e.target.value }))}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                              >
+                                {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                           </div>
 
-                          {showTemplateEditor && (
-                            <PhysicalExamTemplateEditor
-                              template={selectedTemplateToEdit}
-                              doctorId={userProfile?.id || ''}
-                              onSave={(template) => {
-                                setShowTemplateEditor(false);
-                                setSelectedTemplateToEdit(null);
-                                // Refresh templates component
-                              }}
-                              onClose={() => {
-                                setShowTemplateEditor(false);
-                                setSelectedTemplateToEdit(null);
-                              }}
-                            />
-                          )}
+                          <button
+                            onClick={handlePasswordChange}
+                            disabled={loading || !securityData.current_password || !securityData.new_password || !securityData.confirm_password}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                          >
+                            <Key className="h-4 w-4 mr-2" />
+                            Cambiar Contraseña
+                          </button>
                         </div>
                       </div>
-                    )}
+
+                      {/* Two Factor Authentication */}
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h4 className="text-md font-medium text-white">Autenticación de Dos Factores</h4>
+                            <p className="text-sm text-gray-400">Agrega una capa extra de seguridad a tu cuenta</p>
+                          </div>
+                          <button
+                            onClick={() => setSecurityData(prev => ({ ...prev, two_factor_enabled: !prev.two_factor_enabled }))}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                              securityData.two_factor_enabled ? 'bg-blue-600' : 'bg-gray-600'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                securityData.two_factor_enabled ? 'translate-x-6' : 'translate-x-1'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        {securityData.two_factor_enabled && (
+                          <div className="flex items-center space-x-2 text-sm text-green-300">
+                            <CheckCircle className="h-4 w-4" />
+                            <span>Autenticación de dos factores activada</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Active Sessions */}
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                        <h4 className="text-md font-medium text-white mb-4">Sesiones Activas</h4>
+                        <div className="space-y-3">
+                          {securityData.active_sessions.map((session) => (
+                            <div key={session.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <Smartphone className="h-4 w-4 text-gray-400" />
+                                  <span className="text-white text-sm">{session.device}</span>
+                                </div>
+                                <p className="text-xs text-gray-400">{session.location} • {session.last_active}</p>
+                              </div>
+                              <button
+                                onClick={() => handleSessionTerminate(session.id)}
+                                className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                              >
+                                Terminar
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Login History */}
+                      <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                        <h4 className="text-md font-medium text-white mb-4">Historial de Accesos</h4>
+                        <div className="space-y-2">
+                          {securityData.login_history.map((login, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 text-sm">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                                <span className="text-gray-300">{login.device}</span>
+                              </div>
+                              <div className="text-gray-400">
+                                <span>{login.date}</span>
+                                <span className="ml-2 text-xs">({login.ip})</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </Dialog.Panel>
-            </Transition.Child>
+              )}
+            </div>
           </div>
         </div>
-      </Dialog>
-    </Transition>
+      </div>
+    </div>
   );
 }
