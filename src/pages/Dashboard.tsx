@@ -4,7 +4,7 @@ import {
   Users, Calendar, Activity, FileText, Plus, Search, Filter, 
   MoreVertical, Edit, Trash2, Eye, Settings, LogOut, Bell,
   TrendingUp, Clock, Heart, Brain, Stethoscope, AlertCircle,
-  CheckCircle, RefreshCw, Download, Upload, BarChart3
+  CheckCircle, RefreshCw, Download, Upload, BarChart3, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
@@ -38,6 +38,9 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [showPatientActions, setShowPatientActions] = useState<string | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     totalPatients: 0,
     totalConsultations: 0,
@@ -70,6 +73,21 @@ export default function Dashboard() {
     );
     setFilteredPatients(filtered);
   }, [patients, searchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.patient-actions-menu') && !target.closest('.notifications-menu')) {
+        setShowPatientActions(null);
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const checkSession = async () => {
     try {
@@ -196,6 +214,46 @@ export default function Dashboard() {
     return age;
   };
 
+  const handleDeletePatient = async (patientId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este paciente? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('patients')
+        .delete()
+        .eq('id', patientId);
+
+      if (error) throw error;
+      
+      await fetchDashboardData();
+      setShowPatientActions(null);
+    } catch (error: any) {
+      console.error('Error deleting patient:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditPatient = (patient: Patient) => {
+    // Aquí podrías abrir un modal de edición o navegar a una página de edición
+    setSelectedPatient(patient);
+    setShowPatientActions(null);
+    // Por ahora, navegar al expediente del paciente
+    navigate(`/expediente/${patient.id}`);
+  };
+
+  const handlePatientActionsToggle = (patientId: string) => {
+    setShowPatientActions(showPatientActions === patientId ? null : patientId);
+  };
+
+  const handleNotificationsToggle = () => {
+    setShowNotifications(!showNotifications);
+  };
+
   if (loading && !userProfile) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -216,10 +274,57 @@ export default function Dashboard() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-white transition-colors relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={handleNotificationsToggle}
+                  className="p-2 text-gray-400 hover:text-white transition-colors relative"
+                >
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
+                </button>
+                
+                                 {showNotifications && (
+                   <div className="notifications-menu absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-20">
+                    <div className="p-4 border-b border-gray-700">
+                      <h3 className="text-sm font-medium text-white">Notificaciones</h3>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      <div className="p-4 hover:bg-gray-700 transition-colors">
+                        <div className="flex items-start">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></div>
+                          <div>
+                            <p className="text-sm text-white">Nueva consulta programada</p>
+                            <p className="text-xs text-gray-400 mt-1">Hace 2 horas</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 hover:bg-gray-700 transition-colors">
+                        <div className="flex items-start">
+                          <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3"></div>
+                          <div>
+                            <p className="text-sm text-white">Paciente registrado exitosamente</p>
+                            <p className="text-xs text-gray-400 mt-1">Hace 4 horas</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 hover:bg-gray-700 transition-colors">
+                        <div className="flex items-start">
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 mr-3"></div>
+                          <div>
+                            <p className="text-sm text-white">Recordatorio de cita</p>
+                            <p className="text-xs text-gray-400 mt-1">Hace 1 día</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-gray-700">
+                      <button className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                        Ver todas las notificaciones
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               
               <div className="relative group">
                 <button className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors">
@@ -399,12 +504,47 @@ export default function Dashboard() {
                         <button
                           onClick={() => navigate(`/expediente/${patient.id}`)}
                           className="text-blue-400 hover:text-blue-300 mr-3 transition-colors"
+                          title="Ver expediente"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-white transition-colors">
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
+                        <div className="relative inline-block">
+                          <button 
+                            onClick={() => handlePatientActionsToggle(patient.id)}
+                            className="text-gray-400 hover:text-white transition-colors"
+                            title="Más opciones"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          
+                                                     {showPatientActions === patient.id && (
+                             <div className="patient-actions-menu absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-10">
+                              <div className="py-1">
+                                <button
+                                  onClick={() => handleEditPatient(patient)}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                                >
+                                  <Edit className="h-4 w-4 mr-3" />
+                                  Editar Paciente
+                                </button>
+                                <button
+                                  onClick={() => navigate(`/expediente/${patient.id}`)}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                                >
+                                  <Eye className="h-4 w-4 mr-3" />
+                                  Ver Expediente
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePatient(patient.id)}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 transition-colors"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-3" />
+                                  Eliminar Paciente
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
