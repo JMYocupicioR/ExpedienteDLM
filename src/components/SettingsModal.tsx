@@ -405,6 +405,14 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
     try {
       setLoading(true);
       
+      if (!userProfile) {
+        throw new Error('No se encontró el perfil del usuario');
+      }
+
+      if (typeof onUpdate !== 'function') {
+        throw new Error('Función de actualización no disponible');
+      }
+      
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -418,9 +426,11 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
 
       if (error) throw error;
 
-      onUpdate({ ...userProfile, ...profileData });
+      const updatedProfile = { ...userProfile, ...profileData };
+      onUpdate(updatedProfile);
       showNotification('success', 'Perfil actualizado correctamente');
     } catch (error: any) {
+      console.error('Error saving profile:', error);
       showNotification('error', error.message);
     } finally {
       setLoading(false);
@@ -814,6 +824,10 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
         throw new Error('No se encontró el perfil del usuario');
       }
 
+      if (typeof onUpdate !== 'function') {
+        throw new Error('Función de actualización no disponible');
+      }
+
       const updatedPrescriptionStyle = {
         ...prescriptionSettings.prescription_style,
         visualTemplate: {
@@ -834,7 +848,8 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
         .eq('id', userProfile.id);
 
       if (updateError) {
-        throw new Error('Error al guardar la plantilla visual');
+        console.error('Supabase update error:', updateError);
+        throw new Error(`Error al guardar la plantilla visual: ${updateError.message}`);
       }
 
       const updatedProfile = {
@@ -842,10 +857,18 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
         prescription_style: updatedPrescriptionStyle
       };
 
+      // Actualizar también el estado local
+      setPrescriptionSettings(prev => ({
+        ...prev,
+        prescription_style: updatedPrescriptionStyle
+      }));
+
       onUpdate(updatedProfile);
       showNotification('success', 'Plantilla visual guardada correctamente');
 
     } catch (err: any) {
+      console.error('Error saving visual template:', err);
+      setError(err.message);
       showNotification('error', err.message);
     } finally {
       setLoading(false);
@@ -1566,18 +1589,31 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                         <div className="text-sm text-gray-400">
                           Plantilla para formato de recetas médicas. Los campos con [CORCHETES] serán reemplazados automáticamente.
                         </div>
-                        <button
-                          onClick={handleSaveVisualTemplate}
-                          disabled={loading}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
-                        >
-                          {loading ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Save className="h-4 w-4 mr-2" />
-                          )}
-                          Guardar Plantilla
-                        </button>
+                        <div className="space-y-2">
+                          <button
+                            onClick={() => {
+                              console.log('Saving visual template...');
+                              console.log('userProfile:', userProfile);
+                              console.log('onUpdate type:', typeof onUpdate);
+                              console.log('templateElements count:', templateElements.length);
+                              handleSaveVisualTemplate();
+                            }}
+                            disabled={loading}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
+                          >
+                            {loading ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Save className="h-4 w-4 mr-2" />
+                            )}
+                            Guardar Plantilla
+                          </button>
+                          
+                          {/* Debug info */}
+                          <div className="text-xs text-gray-500">
+                            Debug: {templateElements.length} elementos | onUpdate: {typeof onUpdate}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
