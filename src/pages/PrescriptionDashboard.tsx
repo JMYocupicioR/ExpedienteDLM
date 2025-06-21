@@ -10,6 +10,7 @@ import QRCode from 'qrcode';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import VisualPrescriptionEditor from '../components/VisualPrescriptionEditor';
+import { renderTemplateElement, TemplateElement } from '../components/VisualPrescriptionRenderer';
 
 interface Medication {
   name: string;
@@ -293,244 +294,83 @@ export default function PrescriptionDashboard() {
       }
     }
 
-    // Use user's profile prescription style with fallback to defaults
-    const style = {
-      fontFamily: userPrescriptionStyle.fontFamily || 'Arial, sans-serif',
-      primaryColor: userPrescriptionStyle.primaryColor || '#0066cc',
-      secondaryColor: userPrescriptionStyle.secondaryColor || '#333',
-      fontSize: userPrescriptionStyle.fontSize === 'small' ? '12px' :
-                userPrescriptionStyle.fontSize === 'large' ? '16px' :
-                userPrescriptionStyle.fontSize === 'extraLarge' ? '18px' : '14px',
-      lineHeight: userPrescriptionStyle.spacing === 'compact' ? '1.3' :
-                  userPrescriptionStyle.spacing === 'relaxed' ? '1.7' : '1.5',
-      headerStyle: userPrescriptionStyle.headerStyle || 'modern',
-      
-      clinicName: userPrescriptionStyle.clinicName || 'Nombre de su Clínica',
-      clinicAddress: userPrescriptionStyle.clinicAddress || 'Dirección de la Clínica, Ciudad',
-      clinicPhone: userPrescriptionStyle.clinicPhone || '(000) 000-0000',
-      clinicEmail: userPrescriptionStyle.clinicEmail || 'email@clinica.com',
-      
-      doctorFullName: userPrescriptionStyle.doctorFullName || 'Dr. Nombre Apellido',
-      doctorLicense: userPrescriptionStyle.doctorLicense || 'Céd. Prof. XXXXXXX',
-      doctorSpecialty: userPrescriptionStyle.doctorSpecialty || 'Medicina General',
-      doctorContact: userPrescriptionStyle.doctorContact || '(000) 000-0000',
-      
-      titlePrescription: userPrescriptionStyle.titlePrescription || 'RECETA MÉDICA',
-      titlePatientInfo: userPrescriptionStyle.titlePatientInfo || 'Información del Paciente',
-      titleDiagnosis: userPrescriptionStyle.titleDiagnosis || 'Diagnóstico',
-      titleMedications: userPrescriptionStyle.titleMedications || 'Prescripción Médica',
-      titleNotes: userPrescriptionStyle.titleNotes || 'Indicaciones Adicionales',
-      titleSignature: userPrescriptionStyle.titleSignature || 'Firma del Médico',
-      titleValidity: userPrescriptionStyle.titleValidity || 'Validez de la Receta',
-      
-      showLogo: userPrescriptionStyle.showLogo !== undefined ? userPrescriptionStyle.showLogo : true,
-      logoPosition: userPrescriptionStyle.logoPosition || 'left',
-      includeQR: userPrescriptionStyle.includeQR !== undefined ? userPrescriptionStyle.includeQR : true,
-      paperSize: userPrescriptionStyle.paperSize || 'letter',
-      margins: userPrescriptionStyle.margins || 'normal',
-      includeWatermark: userPrescriptionStyle.includeWatermark !== undefined ? userPrescriptionStyle.includeWatermark : false,
-    };
-
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Receta Médica - ${prescription.patient_name}</title>
-        <style>
-          body { 
-            font-family: ${style.fontFamily}; 
-            max-width: 800px; 
-            margin: 0 auto; 
-            padding: 20px;
-            color: ${style.secondaryColor};
-            font-size: ${style.fontSize};
-            line-height: ${style.lineHeight};
-            /* Basic styling for margins based on selection */
-            ${style.margins === 'narrow' ? 'padding: 10px;' : style.margins === 'wide' ? 'padding: 30px;' : 'padding: 20px;'}
-            /* Basic styling for paper size - actual control is via @page CSS */
-            ${style.paperSize === 'a4' ? 'width: 210mm; min-height: 297mm;' : style.paperSize === 'legal' ? 'width: 216mm; min-height: 356mm;' : 'width: 216mm; min-height: 279mm;' /* Letter as default */}
-          }
-          .header { 
-            text-align: ${style.headerStyle === 'classic' ? 'center' : 'left'}; 
-            border-bottom: 2px solid ${style.primaryColor}; 
-            padding-bottom: 20px; 
-            margin-bottom: 20px; 
-          }
-          .header h1 {
-            color: ${style.primaryColor};
-            margin-bottom: 10px;
-            font-size: 1.8em;
-          }
-          .doctor-info {
-            font-size: 0.9em;
-            color: ${style.secondaryColor};
-          }
-          .clinic-info {
-            text-align: center;
-            margin-bottom: 20px;
-            padding: 10px;
-            border: 1px solid #eee;
-            border-radius: 5px;
-            font-size: 0.9em;
-          }
-          .patient-info { 
-            margin-bottom: 20px;
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 5px;
-          }
-          .medications { 
-            margin-bottom: 30px; 
-          }
-          .medication-item { 
-            margin-bottom: 15px; 
-            padding: 15px; 
-            border-left: 4px solid ${style.primaryColor}; 
-            background: #f9f9f9;
-            border-radius: 0 5px 5px 0;
-          }
-          .medication-name {
-            font-weight: bold;
-            color: ${style.primaryColor};
-            font-size: 1.1em;
-          }
-          .medication-details {
-            margin-top: 5px;
-            color: #555;
-          }
-          .diagnosis-section,
-          .notes-section {
-            background: #eef7ff; /* Lighter blue for sections */
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-          }
-          .section-title {
-            color: ${style.primaryColor};
-            font-weight: bold;
-            margin-bottom: 8px;
-            font-size: 1.2em; /* Slightly larger section titles */
-          }
-          .footer { 
-            margin-top: 50px; 
-            text-align: center; 
-          }
-          .signature-line { 
-            border-top: 1px solid ${style.secondaryColor}; 
-            width: 200px; 
-            margin: 40px auto 10px; 
-          }
-          .validity {
-            margin-top: 30px;
-            text-align: center;
-            font-size: 0.8em;
-            color: #666;
-          }
-          .logo-container {
-            ${style.logoPosition === 'left' ? 'float: left; margin-right: 15px;' : 'float: right; margin-left: 15px;'}
-            /* Basic logo placeholder */
-            width: 60px; height: 60px; background: ${style.secondaryColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; border-radius: 4px;
-          }
-          .qr-code-container {
-            text-align: center; margin-top: 20px;
-          }
-          .qr-code-container img {
-            width: 100px; height: 100px;
-          }
-          @media print {
-            @page {
-              size: ${style.paperSize === 'a4' ? 'A4' : style.paperSize === 'legal' ? 'Legal' : 'Letter'};
-              margin: ${style.margins === 'narrow' ? '0.5in' : style.margins === 'wide' ? '1.5in' : '1in'};
+    // Si hay plantilla visual, renderizar usando los elementos
+    if (userPrescriptionStyle.visualTemplate && userPrescriptionStyle.visualTemplate.elements) {
+      // Crear un contenedor temporal para renderizar los elementos como HTML
+      const container = document.createElement('div');
+      container.style.position = 'relative';
+      container.style.width = (userPrescriptionStyle.visualTemplate.canvasSettings?.canvasSize?.width || 794) + 'px';
+      container.style.height = (userPrescriptionStyle.visualTemplate.canvasSettings?.canvasSize?.height || 1123) + 'px';
+      container.style.background = userPrescriptionStyle.visualTemplate.canvasSettings?.backgroundColor || '#fff';
+      if (userPrescriptionStyle.visualTemplate.canvasSettings?.backgroundImage) {
+        container.style.backgroundImage = `url(${userPrescriptionStyle.visualTemplate.canvasSettings.backgroundImage})`;
+        container.style.backgroundSize = 'cover';
+      }
+      // Renderizar cada elemento
+      userPrescriptionStyle.visualTemplate.elements
+        .filter((el: TemplateElement) => el.isVisible)
+        .sort((a: TemplateElement, b: TemplateElement) => a.zIndex - b.zIndex)
+        .forEach((element: TemplateElement) => {
+          const elDiv = document.createElement('div');
+          elDiv.style.position = 'absolute';
+          elDiv.style.left = element.position.x + 'px';
+          elDiv.style.top = element.position.y + 'px';
+          elDiv.style.width = element.size.width + 'px';
+          elDiv.style.height = element.size.height + 'px';
+          elDiv.style.fontSize = (element.style.fontSize || 14) + 'px';
+          elDiv.style.fontFamily = element.style.fontFamily || 'Arial';
+          elDiv.style.color = element.style.color || '#000';
+          elDiv.style.fontWeight = element.style.fontWeight || 'normal';
+          elDiv.style.fontStyle = element.style.fontStyle || 'normal';
+          elDiv.style.textDecoration = element.style.textDecoration || 'none';
+          elDiv.style.textAlign = element.style.textAlign || 'left';
+          elDiv.style.lineHeight = element.style.lineHeight ? String(element.style.lineHeight) : '1.5';
+          elDiv.style.zIndex = String(element.zIndex);
+          elDiv.style.background = element.backgroundColor || 'transparent';
+          elDiv.style.overflow = 'hidden';
+          elDiv.style.whiteSpace = 'pre-wrap';
+          // Reemplazar campos dinámicos
+          let content = element.content;
+          if (content) {
+            content = content.replace(/\[NOMBRE DEL PACIENTE\]/g, prescription.patient_name || '')
+              .replace(/\[FECHA\]/g, format(new Date(prescription.created_at), 'dd/MM/yyyy'))
+              .replace(/\[DIAGNÓSTICO\]/g, prescription.diagnosis || '')
+              .replace(/\[NOTAS E INSTRUCCIONES ESPECIALES\]/g, prescription.notes || '')
+              .replace(/\[NOMBRE DEL MÉDICO\]/g, userPrescriptionStyle.doctorFullName || '')
+              .replace(/\[ESPECIALIDAD\]/g, userPrescriptionStyle.doctorSpecialty || '')
+              .replace(/\[NÚMERO\]/g, userPrescriptionStyle.doctorLicense || '')
+              .replace(/\[NOMBRE DE LA CLÍNICA\]/g, userPrescriptionStyle.clinicName || '')
+              .replace(/\[DIRECCIÓN\]/g, userPrescriptionStyle.clinicAddress || '')
+              .replace(/\[TELÉFONO\]/g, userPrescriptionStyle.clinicPhone || '')
+              .replace(/\[EMAIL\]/g, userPrescriptionStyle.clinicEmail || '');
+            // Medicamentos dinámicos
+            if (content.includes('[MEDICAMENTO]')) {
+              let meds = '';
+              prescription.medications.forEach((med, idx) => {
+                meds += `${idx + 1}. ${med.name} - ${med.dosage}\n   Frecuencia: ${med.frequency}\n   Duración: ${med.duration}\n   Instrucciones: ${med.instructions || ''}\n`;
+              });
+              content = content.replace(/\[MEDICAMENTO\][^\[]*/g, meds);
             }
-            body { margin: 0; }
-            .no-print { display: none; }
           }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          ${style.showLogo ? `<div class="logo-container" style="${style.logoPosition === 'center' ? 'text-align: center; float: none; margin-bottom: 10px;' : (style.logoPosition === 'left' ? 'float: left; margin-right: 15px;' : 'float: right; margin-left: 15px;')}">LOGO</div>` : ''}
-          <h1>${style.titlePrescription}</h1>
-          <div class="doctor-info">
-            <p><strong>${style.doctorFullName}</strong></p>
-            <p>${style.doctorSpecialty}</p>
-            <p>Cédula Profesional: ${style.doctorLicense}</p>
-            <p>Contacto: ${style.doctorContact}</p>
-          </div>
-          <div style="clear: both;"></div>
-        </div>
-
-        <div class="clinic-info">
-          <p><strong>${style.clinicName}</strong></p>
-          <p>${style.clinicAddress}</p>
-          <p>Tel: ${style.clinicPhone} | Email: ${style.clinicEmail}</p>
-        </div>
-        
-        <div class="patient-info">
-          <h3 class="section-title">${style.titlePatientInfo}</h3>
-          <p><strong>Paciente:</strong> ${prescription.patient_name}</p>
-          <p><strong>Fecha:</strong> ${format(new Date(prescription.created_at), 'dd/MM/yyyy', { locale: es })}</p>
-          <p><strong>Hora:</strong> ${format(new Date(prescription.created_at), 'HH:mm')}</p>
-        </div>
-        
-        <div class="diagnosis-section">
-          <h3 class="section-title">${style.titleDiagnosis}</h3>
-          <p>${prescription.diagnosis}</p>
-        </div>
-        
-        <div class="medications">
-          <h3 class="section-title">${style.titleMedications}</h3>
-          ${prescription.medications.map((med, index) => `
-            <div class="medication-item">
-              <div class="medication-name">${index + 1}. ${med.name} - ${med.dosage}</div>
-              <div class="medication-details">
-                <p><strong>Frecuencia:</strong> ${med.frequency}</p>
-                <p><strong>Duración:</strong> ${med.duration}</p>
-                ${med.instructions ? `<p><strong>Instrucciones:</strong> ${med.instructions}</p>` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        
-        ${prescription.notes ? `
-          <div class="notes-section">
-            <h3 class="section-title">${style.titleNotes}</h3>
-            <p>${prescription.notes}</p>
-          </div>
-        ` : ''}
-        
-        <div class="footer">
-          <div class="signature-line"></div>
-          <p>${style.titleSignature}</p>
-        </div>
-        
-        ${style.includeQR ? `
-          <div class="qr-code-container">
-            <img src="${await QRCode.toDataURL(JSON.stringify({ id: prescription.id, patient: prescription.patient_name }), { width: 100, margin: 1 })}" alt="QR Code" />
-          </div>
-        ` : ''}
-
-        <div class="validity">
-          <p>${style.titleValidity}: Esta receta tiene una validez de 30 días a partir de su emisión.</p>
-          <p>Válida hasta: ${format(new Date(prescription.expires_at), 'dd/MM/yyyy')}</p>
-          <p>ID: ${prescription.id}</p>
-        </div>
-        ${style.includeWatermark ? `
-          <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.1; font-size: 5em; color: ${style.primaryColor}; font-weight: bold; pointer-events: none; z-index: -1; text-align: center; width: 100%;">
-            ${style.clinicName || "CLÍNICA"}
-          </div>
-        ` : ''}
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    
-    // Esperar un momento para que se cargue el contenido
-    setTimeout(() => {
-      printWindow.print();
-    }, 250);
+          elDiv.textContent = content;
+          // Si es QR, renderizar imagen QR
+          if (element.type === 'qr') {
+            const img = document.createElement('img');
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.alt = 'QR Code';
+            img.src = await QRCode.toDataURL(JSON.stringify({ id: prescription.id, patient: prescription.patient_name }), { width: 100, margin: 1 });
+            elDiv.textContent = '';
+            elDiv.appendChild(img);
+          }
+          container.appendChild(elDiv);
+        });
+      printWindow.document.write(`<!DOCTYPE html><html><head><title>Receta Médica</title><style>body{margin:0;padding:0;} .canvas{position:relative;}</style></head><body><div class="canvas">${container.innerHTML}</div></body></html>`);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 250);
+      return;
+    }
+    // ... si no hay plantilla visual, usar el HTML por defecto ...
   };
 
   const handleDownloadPrescription = async (prescription: Prescription) => {
