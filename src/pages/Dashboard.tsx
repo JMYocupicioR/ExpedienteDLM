@@ -4,7 +4,8 @@ import {
   Users, Calendar, Activity, FileText, Plus, Search, Filter, 
   MoreVertical, Edit, Trash2, Eye, Settings, LogOut, Bell,
   TrendingUp, Clock, Heart, Brain, Stethoscope, AlertCircle,
-  CheckCircle, RefreshCw, Download, Upload, BarChart3, X
+  CheckCircle, RefreshCw, Download, Upload, BarChart3, X,
+  FileDown, Printer, FileText as FileTextIcon
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showPatientActions, setShowPatientActions] = useState<string | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     totalPatients: 0,
     totalConsultations: 0,
@@ -77,9 +79,12 @@ export default function Dashboard() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
-      if (!target.closest('.patient-actions-menu') && !target.closest('.notifications-menu')) {
+      if (!target.closest('.patient-actions-menu') && 
+          !target.closest('.notifications-menu') && 
+          !target.closest('.export-menu')) {
         setShowPatientActions(null);
         setShowNotifications(false);
+        setShowExportMenu(false);
       }
     };
 
@@ -252,6 +257,154 @@ export default function Dashboard() {
 
   const handleNotificationsToggle = () => {
     setShowNotifications(!showNotifications);
+  };
+
+  const handleExportMenuToggle = () => {
+    setShowExportMenu(!showExportMenu);
+  };
+
+  const handlePrint = () => {
+    const printContent = generatePrintContent();
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Lista de Pacientes - Expediente DLM</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              h1 { color: #333; text-align: center; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f5f5f5; font-weight: bold; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              .header-info { margin-bottom: 20px; }
+            </style>
+          </head>
+          <body>
+            ${printContent}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+    setShowExportMenu(false);
+  };
+
+  const handleExportTXT = () => {
+    const txtContent = generateTXTContent();
+    const blob = new Blob([txtContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pacientes_${format(new Date(), 'yyyy-MM-dd')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleExportPDF = () => {
+    // Para PDF, vamos a generar un HTML que se puede imprimir como PDF
+    const pdfContent = generatePrintContent();
+    const pdfWindow = window.open('', '_blank');
+    if (pdfWindow) {
+      pdfWindow.document.write(`
+        <html>
+          <head>
+            <title>Lista de Pacientes - Expediente DLM</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              h1 { color: #333; text-align: center; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f5f5f5; font-weight: bold; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              .header-info { margin-bottom: 20px; }
+              @media print {
+                body { margin: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            ${pdfContent}
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                }, 500);
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      pdfWindow.document.close();
+    }
+    setShowExportMenu(false);
+  };
+
+  const generatePrintContent = () => {
+    const currentDate = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es });
+    
+    return `
+      <div class="header-info">
+        <h1>Lista de Pacientes - Expediente DLM</h1>
+        <p><strong>Fecha de generación:</strong> ${currentDate}</p>
+        <p><strong>Total de pacientes:</strong> ${filteredPatients.length}</p>
+        <p><strong>Generado por:</strong> ${userProfile?.full_name}</p>
+      </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre Completo</th>
+            <th>Edad</th>
+            <th>Género</th>
+            <th>Email</th>
+            <th>Teléfono</th>
+            <th>Fecha de Registro</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filteredPatients.map(patient => `
+            <tr>
+              <td>${patient.full_name}</td>
+              <td>${calculateAge(patient.birth_date)} años</td>
+              <td style="text-transform: capitalize;">${patient.gender}</td>
+              <td>${patient.email}</td>
+              <td>${patient.phone}</td>
+              <td>${format(new Date(patient.created_at), 'dd/MM/yyyy')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  };
+
+  const generateTXTContent = () => {
+    const currentDate = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es });
+    
+    let content = `LISTA DE PACIENTES - EXPEDIENTE DLM\n`;
+    content += `===========================================\n\n`;
+    content += `Fecha de generación: ${currentDate}\n`;
+    content += `Total de pacientes: ${filteredPatients.length}\n`;
+    content += `Generado por: ${userProfile?.full_name}\n\n`;
+    
+    content += `DATOS DE PACIENTES:\n`;
+    content += `===================\n\n`;
+    
+    filteredPatients.forEach((patient, index) => {
+      content += `${index + 1}. ${patient.full_name}\n`;
+      content += `   - Edad: ${calculateAge(patient.birth_date)} años\n`;
+      content += `   - Género: ${patient.gender}\n`;
+      content += `   - Email: ${patient.email}\n`;
+      content += `   - Teléfono: ${patient.phone}\n`;
+      content += `   - Fecha de registro: ${format(new Date(patient.created_at), 'dd/MM/yyyy')}\n\n`;
+    });
+    
+    return content;
   };
 
   if (loading && !userProfile) {
@@ -434,6 +587,44 @@ export default function Dashboard() {
                     className="pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+                <div className="relative">
+                  <button
+                    onClick={handleExportMenuToggle}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center mr-3"
+                  >
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Exportar
+                  </button>
+                  
+                  {showExportMenu && (
+                    <div className="export-menu absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-10">
+                      <div className="py-1">
+                        <button
+                          onClick={handlePrint}
+                          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                        >
+                          <Printer className="h-4 w-4 mr-3" />
+                          Imprimir
+                        </button>
+                        <button
+                          onClick={handleExportPDF}
+                          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                        >
+                          <FileDown className="h-4 w-4 mr-3" />
+                          Exportar como PDF
+                        </button>
+                        <button
+                          onClick={handleExportTXT}
+                          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                        >
+                          <FileTextIcon className="h-4 w-4 mr-3" />
+                          Exportar como TXT
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
                 <button
                   onClick={() => setShowNewPatientForm(true)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
