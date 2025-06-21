@@ -7,7 +7,7 @@ import {
   Move, Image, ZoomIn, ZoomOut, Grid, Layers, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline,
   Calendar, Minus as Separator, Square, QrCode,
   FileSignature, Table, MapPin, Phone, Mail, Copy, RotateCcw, Plus, Edit as EditIcon, Palette, Layout, Type,
-  Stethoscope, Loader2
+  Stethoscope, Loader2, Maximize2
 } from 'lucide-react';
 import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
@@ -22,7 +22,7 @@ interface SettingsModalProps {
   onUpdate: (profile: any) => void;
 }
 
-type TabType = 'profile' | 'prescription' | 'preferences' | 'security' | 'visualEditor' | 'examTemplates';
+type TabType = 'profile' | 'preferences' | 'security' | 'recetas' | 'examTemplates';
 
 interface NotificationState {
   type: 'success' | 'error' | 'info';
@@ -115,6 +115,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<NotificationState>({ type: 'info', message: '', show: false });
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Profile Settings State
   const [profileData, setProfileData] = useState({
@@ -855,25 +856,39 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
 
   const tabs = [
     { id: 'profile', label: 'Perfil', icon: User },
-    { id: 'prescription', label: 'Recetas', icon: FileText },
     { id: 'preferences', label: 'Preferencias', icon: SettingsIcon },
     { id: 'security', label: 'Seguridad', icon: Shield },
-    { id: 'visualEditor', label: 'Editor Visual', icon: Palette },
+    { id: 'recetas', label: 'Recetas', icon: FileText },
     { id: 'examTemplates', label: 'Plantillas de Exploración', icon: Stethoscope }
   ];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-      <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden border border-gray-700">
+    <div className={`fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 ${
+      isFullscreen ? 'p-0' : 'p-4'
+    }`}>
+      <div className={`bg-gray-800 rounded-lg shadow-xl overflow-hidden border border-gray-700 ${
+        isFullscreen 
+          ? 'w-full h-full max-w-none max-h-none m-0' 
+          : 'max-w-4xl w-full max-h-[90vh]'
+      }`}>
         {/* Header */}
         <div className="bg-gray-900 px-6 py-4 border-b border-gray-700 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-white">Configuración</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="text-gray-400 hover:text-white transition-colors"
+              title={isFullscreen ? "Ventana normal" : "Pantalla completa"}
+            >
+              <Maximize2 className="h-5 w-5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Notification */}
@@ -902,7 +917,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
           </div>
         )}
 
-        <div className="flex h-[calc(90vh-120px)]">
+        <div className={`flex ${isFullscreen ? 'h-[calc(100vh-120px)]' : 'h-[calc(90vh-120px)]'}`}>
           {/* Sidebar */}
           <div className="w-64 bg-gray-900 border-r border-gray-700">
             <nav className="p-4">
@@ -1024,139 +1039,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                 </div>
               )}
 
-              {/* Prescription Settings Tab */}
-              {activeTab === 'prescription' && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-medium text-white mb-4">Configuración de Recetas</h3>
-                    
-                    <div className="space-y-6">
-                      {/* Logo Upload */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Logo del Consultorio
-                        </label>
-                        <div className="flex items-center space-x-4">
-                          {prescriptionSettings.prescription_style.logo_url ? (
-                            <div className="relative">
-                              <img
-                                src={prescriptionSettings.prescription_style.logo_url}
-                                alt="Logo"
-                                className="h-16 w-16 object-cover rounded-lg border border-gray-600"
-                              />
-                              <button
-                                onClick={() => setPrescriptionSettings(prev => ({
-                                  ...prev,
-                                  prescription_style: { ...prev.prescription_style, logo_url: '' }
-                                }))}
-                                className="absolute -top-2 -right-2 p-1 bg-red-600 text-white rounded-full hover:bg-red-700"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="h-16 w-16 bg-gray-700 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center">
-                              <Camera className="h-6 w-6 text-gray-400" />
-                            </div>
-                          )}
-                          <div>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleLogoUpload}
-                              className="hidden"
-                              id="logo-upload"
-                            />
-                            <label
-                              htmlFor="logo-upload"
-                              className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
-                            >
-                              <Upload className="h-4 w-4 mr-2" />
-                              Subir Logo
-                            </label>
-                            <p className="text-xs text-gray-400 mt-1">PNG, JPG hasta 2MB</p>
-                          </div>
-                        </div>
-                      </div>
 
-                      {/* Header Color */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Color del Encabezado
-                        </label>
-                        <div className="flex items-center space-x-4">
-                          <input
-                            type="color"
-                            value={prescriptionSettings.prescription_style.header_color}
-                            onChange={(e) => setPrescriptionSettings(prev => ({
-                              ...prev,
-                              prescription_style: { ...prev.prescription_style, header_color: e.target.value }
-                            }))}
-                            className="h-10 w-20 rounded border border-gray-600"
-                          />
-                          <input
-                            type="text"
-                            value={prescriptionSettings.prescription_style.header_color}
-                            onChange={(e) => setPrescriptionSettings(prev => ({
-                              ...prev,
-                              prescription_style: { ...prev.prescription_style, header_color: e.target.value }
-                            }))}
-                            className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Font Family */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Fuente
-                        </label>
-                        <select
-                          value={prescriptionSettings.prescription_style.font_family}
-                          onChange={(e) => setPrescriptionSettings(prev => ({
-                            ...prev,
-                            prescription_style: { ...prev.prescription_style, font_family: e.target.value }
-                          }))}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        >
-                          <option value="Arial">Arial</option>
-                          <option value="Times New Roman">Times New Roman</option>
-                          <option value="Helvetica">Helvetica</option>
-                          <option value="Georgia">Georgia</option>
-                        </select>
-                      </div>
-
-                      {/* Footer Text */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Texto del Pie de Página
-                        </label>
-                        <textarea
-                          value={prescriptionSettings.prescription_style.footer_text}
-                          onChange={(e) => setPrescriptionSettings(prev => ({
-                            ...prev,
-                            prescription_style: { ...prev.prescription_style, footer_text: e.target.value }
-                          }))}
-                          rows={3}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                          placeholder="Información de contacto, dirección, etc."
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-6 flex justify-end">
-                      <button
-                        onClick={handlePrescriptionSave}
-                        disabled={loading}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                      >
-                        <Save className="h-4 w-4 mr-2" />
-                        {loading ? 'Guardando...' : 'Guardar Configuración'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* System Preferences Tab */}
               {activeTab === 'preferences' && (
@@ -1437,11 +1320,11 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                 </div>
               )}
 
-              {/* Visual Editor Tab */}
-              {activeTab === 'visualEditor' && (
+              {/* Recetas Tab */}
+              {activeTab === 'recetas' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium text-white mb-4">Editor Visual de Plantilla de Receta</h3>
+                    <h3 className="text-lg font-medium text-white mb-4">Editor de Plantilla de Recetas</h3>
                     
                     <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
                       <div className="flex">
