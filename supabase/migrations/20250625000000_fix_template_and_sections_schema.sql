@@ -43,6 +43,51 @@ FOR ALL
 TO service_role
 USING (true);
 
+-- Crear la tabla 'physical_exam_files' para almacenar archivos adjuntos de la exploración física
+CREATE TABLE IF NOT EXISTS public.physical_exam_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id uuid REFERENCES public.consultations(id) ON DELETE CASCADE,
+  section_id BIGINT REFERENCES public.physical_exam_sections(id) ON DELETE SET NULL,
+  file_name text NOT NULL,
+  file_url text NOT NULL,
+  file_type text NOT NULL,
+  file_size bigint,
+  description text,
+  created_at timestamptz DEFAULT now(),
+  CONSTRAINT valid_file_url CHECK (public.validate_url(file_url))
+);
+
+-- Habilitar RLS para 'physical_exam_files'
+ALTER TABLE public.physical_exam_files ENABLE ROW LEVEL SECURITY;
+
+-- Políticas RLS para 'physical_exam_files'
+CREATE POLICY "El personal médico puede ver los archivos del examen"
+  ON public.physical_exam_files FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('doctor', 'nurse', 'administrator')
+    )
+  );
+
+CREATE POLICY "El personal médico puede gestionar los archivos del examen"
+  ON public.physical_exam_files FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('doctor', 'administrator')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('doctor', 'administrator')
+    )
+  );
+
 -- Mensaje de Log para confirmar la ejecución de la migración
 DO $$
 BEGIN
