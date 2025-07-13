@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCode, AlertCircle, CheckCircle, Printer, Save, Eye, Shield, History, Download, Wifi, WifiOff } from 'lucide-react';
+import { QrCode, AlertCircle, CheckCircle, Printer, Save, Eye, Shield, History, Download, Wifi, WifiOff, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import QRCode from 'qrcode';
 import { useNavigate } from 'react-router-dom';
+import { 
+  validateMedication, 
+  checkDrugInteractions, 
+  calculatePrescriptionExpiry,
+  MEDICATION_CONSTRAINTS,
+  SYSTEM_LIMITS
+} from '../lib/medicalConfig';
+import { validateJSONBSchema } from '../lib/validation';
 
 interface Medication {
   name: string;
@@ -13,6 +21,12 @@ interface Medication {
   instructions: string;
 }
 
+interface ValidationAlert {
+  type: 'error' | 'warning' | 'info';
+  message: string;
+  medication?: string;
+}
+
 interface EnhancedPrescriptionFormProps {
   patientId: string;
   patientName: string;
@@ -20,29 +34,22 @@ interface EnhancedPrescriptionFormProps {
   previousPrescriptions?: any[];
   patients?: { id: string; full_name: string }[];
   onPatientChange?: (patientId: string) => void;
+  patientAllergies?: string[];
+  doctorSpecialty?: string;
 }
 
-// Base de datos de medicamentos comunes para autocompletado
-const commonMedications = [
-  { name: 'Amoxicilina', dosages: ['250mg', '500mg', '875mg'], frequencies: ['Cada 8 horas', 'Cada 12 horas'] },
-  { name: 'Ibuprofeno', dosages: ['200mg', '400mg', '600mg', '800mg'], frequencies: ['Cada 4-6 horas', 'Cada 6 horas', 'Cada 8 horas'] },
-  { name: 'Paracetamol', dosages: ['500mg', '650mg', '1g'], frequencies: ['Cada 4-6 horas', 'Cada 6 horas', 'Cada 8 horas'] },
-  { name: 'Losartán', dosages: ['25mg', '50mg', '100mg'], frequencies: ['Una vez al día', 'Dos veces al día'] },
-  { name: 'Metformina', dosages: ['500mg', '850mg', '1000mg'], frequencies: ['Una vez al día', 'Dos veces al día', 'Tres veces al día'] },
-  { name: 'Omeprazol', dosages: ['20mg', '40mg'], frequencies: ['Una vez al día', 'Dos veces al día'] },
-  { name: 'Atorvastatina', dosages: ['10mg', '20mg', '40mg', '80mg'], frequencies: ['Una vez al día'] },
-  { name: 'Amlodipino', dosages: ['5mg', '10mg'], frequencies: ['Una vez al día'] },
-  { name: 'Ciprofloxacino', dosages: ['250mg', '500mg', '750mg'], frequencies: ['Cada 12 horas'] },
-  { name: 'Azitromicina', dosages: ['250mg', '500mg'], frequencies: ['Una vez al día'] }
-];
-
-// Verificador de interacciones medicamentosas (simulado)
-const drugInteractions: { [key: string]: string[] } = {
-  'Warfarina': ['Aspirina', 'Ibuprofeno', 'Amoxicilina'],
-  'Metformina': ['Alcohol', 'Contrastes yodados'],
-  'Losartán': ['Potasio', 'Espironolactona'],
-  'Atorvastatina': ['Gemfibrozilo', 'Eritromicina']
-};
+// Base de datos de medicamentos comunes para autocompletado (usando la configuración centralizada)
+const commonMedications = Object.keys(MEDICATION_CONSTRAINTS).map(name => {
+  const constraint = MEDICATION_CONSTRAINTS[name];
+  return {
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    dosages: [`${constraint.minDosage}mg`, `${constraint.maxDosage}mg`],
+    frequencies: constraint.allowedFrequencies,
+    maxDuration: constraint.maxDurationDays,
+    controlled: constraint.controlledSubstance || false,
+    requiresSpecialist: constraint.requiresSpecialist || false
+  };
+});
 
 export default function EnhancedPrescriptionForm({ 
   patientId, 
@@ -50,7 +57,9 @@ export default function EnhancedPrescriptionForm({
   onSave,
   previousPrescriptions = [],
   patients = [],
-  onPatientChange
+  onPatientChange,
+  patientAllergies = [],
+  doctorSpecialty = 'medicina_general'
 }: EnhancedPrescriptionFormProps) {
   const navigate = useNavigate();
   const [medications, setMedications] = useState<Medication[]>([{
@@ -65,10 +74,12 @@ export default function EnhancedPrescriptionForm({
   const [showPreview, setShowPreview] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [signatureData, setSignatureData] = useState<string | null>(null);
-  const [drugAlerts, setDrugAlerts] = useState<string[]>([]);
+  const [validationAlerts, setValidationAlerts] = useState<ValidationAlert[]>([]);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const [expiryDate, setExpiryDate] = useState<Date | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -86,21 +97,153 @@ export default function EnhancedPrescriptionForm({
     };
   }, []);
 
-  // Generar código QR
+  // ===== VALIDACIÓN COMPLETA EN TIEMPO REAL =====
+  useEffect(() => {
+    validatePrescriptionComplete();
+  }, [medications, diagnosis, patientAllergies, doctorSpecialty]);
+
+  const validatePrescriptionComplete = async () => {
+    setIsValidating(true);
+    const alerts: ValidationAlert[] = [];
+    
+    try {
+      // Validar medicamentos individuales
+      for (let i = 0; i < medications.length; i++) {
+        const med = medications[i];
+        if (!med.name) continue;
+
+        // Extraer dosificación numérica
+        const dosageMatch = med.dosage.match(/(\d+(?:\.\d+)?)/);
+        const dosageNum = dosageMatch ? parseFloat(dosageMatch[1]) : 0;
+        
+        // Extraer duración numérica
+        const durationMatch = med.duration.match(/(\d+)/);
+        const durationNum = durationMatch ? parseInt(durationMatch[1]) : 0;
+
+        // Validar con configuración médica
+        const validation = validateMedication(med.name.toLowerCase(), dosageNum, med.frequency.toLowerCase(), durationNum);
+        
+        if (!validation.isValid) {
+          validation.errors.forEach(error => {
+            alerts.push({
+              type: 'error',
+              message: error,
+              medication: med.name
+            });
+          });
+        }
+
+        validation.warnings.forEach(warning => {
+          alerts.push({
+            type: 'warning',
+            message: warning,
+            medication: med.name
+          });
+        });
+
+        // Verificar alergias del paciente
+        if (patientAllergies.some(allergy => med.name.toLowerCase().includes(allergy.toLowerCase()))) {
+          alerts.push({
+            type: 'error',
+            message: `Paciente alérgico a ${med.name}`,
+            medication: med.name
+          });
+        }
+
+        // Verificar si requiere especialista
+        const constraint = MEDICATION_CONSTRAINTS[med.name.toLowerCase()];
+        if (constraint?.requiresSpecialist && doctorSpecialty === 'medicina_general') {
+          alerts.push({
+            type: 'warning',
+            message: `${med.name} requiere prescripción por especialista`,
+            medication: med.name
+          });
+        }
+      }
+
+      // Verificar interacciones medicamentosas
+      const medicationNames = medications.filter(m => m.name).map(m => m.name);
+      const interactions = checkDrugInteractions(medicationNames);
+      
+      interactions.forEach(interaction => {
+        alerts.push({
+          type: 'warning',
+          message: interaction
+        });
+      });
+
+      // Verificar límite de medicamentos
+      if (medications.filter(m => m.name).length > SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION) {
+        alerts.push({
+          type: 'error',
+          message: `Máximo ${SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION} medicamentos por receta`
+        });
+      }
+
+      // Validar usando esquema JSONB
+      const medicationsForValidation = medications.filter(m => m.name).map(m => ({
+        name: m.name,
+        dosage: m.dosage,
+        frequency: m.frequency,
+        duration: m.duration,
+        instructions: m.instructions
+      }));
+
+      if (medicationsForValidation.length > 0) {
+        const jsonbValidation = validateJSONBSchema(medicationsForValidation, 'medications');
+        if (!jsonbValidation.isValid) {
+          jsonbValidation.errors.forEach(error => {
+            alerts.push({
+              type: 'error',
+              message: `Validación de esquema: ${error}`
+            });
+          });
+        }
+      }
+
+      // Calcular fecha de expiración inteligente
+      if (medicationNames.length > 0) {
+        const expiry = calculatePrescriptionExpiry(medicationNames);
+        setExpiryDate(expiry);
+      }
+
+      setValidationAlerts(alerts);
+    } catch (error) {
+      console.error('Error en validación:', error);
+      alerts.push({
+        type: 'error',
+        message: 'Error interno de validación'
+      });
+      setValidationAlerts(alerts);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // Generar código QR con información de seguridad
   useEffect(() => {
     const generateQR = async () => {
+      const validMedications = medications.filter(m => m.name);
+      if (validMedications.length === 0) return;
+
       const prescriptionData = {
         id: Date.now().toString(),
         patient: patientName,
+        patientId: patientId,
         date: new Date().toISOString(),
-        medications: medications.filter(m => m.name),
-        doctor: 'Dr. Juan Médico' // Esto vendría del perfil del usuario
+        medications: validMedications,
+        diagnosis: diagnosis,
+        doctor: 'Dr. Juan Médico', // Esto vendría del perfil del usuario
+        expiryDate: expiryDate?.toISOString(),
+        signature: signatureData ? true : false,
+        version: '1.0'
       };
 
       try {
         const url = await QRCode.toDataURL(JSON.stringify(prescriptionData), {
           width: 150,
-          margin: 1
+          margin: 1,
+          errorCorrectionLevel: 'M'
         });
         setQrCodeUrl(url);
       } catch (err) {
@@ -108,27 +251,10 @@ export default function EnhancedPrescriptionForm({
       }
     };
 
-    if (medications.some(m => m.name)) {
-      generateQR();
-    }
-  }, [medications, patientName]);
+    generateQR();
+  }, [medications, patientName, patientId, diagnosis, expiryDate, signatureData]);
 
-  // Verificar interacciones medicamentosas
-  useEffect(() => {
-    const alerts: string[] = [];
-    medications.forEach((med, index) => {
-      if (med.name && drugInteractions[med.name]) {
-        medications.forEach((otherMed, otherIndex) => {
-          if (index !== otherIndex && drugInteractions[med.name].includes(otherMed.name)) {
-            alerts.push(`⚠️ Posible interacción entre ${med.name} y ${otherMed.name}`);
-          }
-        });
-      }
-    });
-    setDrugAlerts(Array.from(new Set(alerts)));
-  }, [medications]);
-
-  // Autocompletado de medicamentos
+  // Autocompletado de medicamentos mejorado
   const handleMedicationNameChange = (index: number, value: string) => {
     const updatedMeds = [...medications];
     updatedMeds[index].name = value;
@@ -146,23 +272,35 @@ export default function EnhancedPrescriptionForm({
     }
   };
 
-  // Seleccionar sugerencia
+  // Seleccionar sugerencia con autocompletado inteligente
   const selectSuggestion = (suggestion: any, index: number) => {
     const updatedMeds = [...medications];
     updatedMeds[index].name = suggestion.name;
+    
+    // Autocompletar con valores sugeridos
     if (suggestion.dosages.length > 0) {
       updatedMeds[index].dosage = suggestion.dosages[0];
     }
     if (suggestion.frequencies.length > 0) {
       updatedMeds[index].frequency = suggestion.frequencies[0];
     }
+    
+    // Sugerir duración basada en el tipo de medicamento
+    const defaultDuration = Math.min(suggestion.maxDuration, 7);
+    updatedMeds[index].duration = `${defaultDuration} días`;
+    
     setMedications(updatedMeds);
     setSuggestions([]);
     setActiveSuggestionIndex(-1);
   };
 
-  // Agregar medicamento
+  // Agregar medicamento con validación
   const addMedication = () => {
+    if (medications.length >= SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION) {
+      alert(`Máximo ${SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION} medicamentos permitidos por receta`);
+      return;
+    }
+    
     setMedications([...medications, {
       name: '',
       dosage: '',
@@ -209,8 +347,14 @@ export default function EnhancedPrescriptionForm({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#2563eb';
+    
     ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
     ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
   };
 
   // Firma digital - Terminar dibujo
@@ -234,17 +378,38 @@ export default function EnhancedPrescriptionForm({
     setSignatureData(null);
   };
 
-  // Guardar receta
+  // Guardar receta con validación completa
   const handleSave = () => {
+    // Verificar errores críticos
+    const criticalErrors = validationAlerts.filter(alert => alert.type === 'error');
+    if (criticalErrors.length > 0) {
+      alert('No se puede guardar la receta. Hay errores que deben corregirse:\n' + 
+            criticalErrors.map(error => `• ${error.message}`).join('\n'));
+      return;
+    }
+
+    // Validar campos requeridos
+    if (!diagnosis.trim()) {
+      alert('El diagnóstico es requerido');
+      return;
+    }
+
+    const validMedications = medications.filter(m => m.name && m.dosage && m.frequency && m.duration);
+    if (validMedications.length === 0) {
+      alert('Debe agregar al menos un medicamento completo');
+      return;
+    }
+
     const prescriptionData = {
       patient_id: patientId,
-      medications: medications.filter(m => m.name),
-      diagnosis,
-      notes,
+      medications: validMedications,
+      diagnosis: diagnosis.trim(),
+      notes: notes.trim(),
       signature: signatureData,
       qr_code: qrCodeUrl,
       created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      expires_at: (expiryDate || calculatePrescriptionExpiry(validMedications.map(m => m.name))).toISOString(),
+      validation_alerts: validationAlerts.filter(alert => alert.type === 'warning').map(alert => alert.message)
     };
 
     // Si está offline, guardar en localStorage
@@ -262,6 +427,46 @@ export default function EnhancedPrescriptionForm({
     window.print();
   };
 
+  // Renderizar alertas de validación
+  const renderValidationAlerts = () => {
+    if (validationAlerts.length === 0) return null;
+
+    const errors = validationAlerts.filter(alert => alert.type === 'error');
+    const warnings = validationAlerts.filter(alert => alert.type === 'warning');
+
+    return (
+      <div className="space-y-2 mb-4">
+        {errors.length > 0 && (
+          <div className="bg-red-900/20 border border-red-500 rounded-lg p-3">
+            <div className="flex items-center mb-2">
+              <AlertCircle className="h-4 w-4 text-red-400 mr-2" />
+              <span className="text-red-300 font-medium">Errores que requieren corrección:</span>
+            </div>
+            {errors.map((error, index) => (
+              <div key={index} className="text-red-300 text-sm ml-6">
+                • {error.medication && `[${error.medication}] `}{error.message}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-3">
+            <div className="flex items-center mb-2">
+              <Shield className="h-4 w-4 text-yellow-400 mr-2" />
+              <span className="text-yellow-300 font-medium">Advertencias importantes:</span>
+            </div>
+            {warnings.map((warning, index) => (
+              <div key={index} className="text-yellow-300 text-sm ml-6">
+                • {warning.medication && `[${warning.medication}] `}{warning.message}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Indicador de estado offline */}
@@ -269,6 +474,32 @@ export default function EnhancedPrescriptionForm({
         <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-3 flex items-center">
           <WifiOff className="h-5 w-5 text-yellow-400 mr-2" />
           <span className="text-yellow-300 text-sm">Modo offline: Las recetas se guardarán localmente</span>
+        </div>
+      )}
+
+      {/* Estado de validación */}
+      {isValidating && (
+        <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-3 flex items-center">
+          <Clock className="h-5 w-5 text-blue-400 mr-2 animate-spin" />
+          <span className="text-blue-300 text-sm">Validando receta...</span>
+        </div>
+      )}
+
+      {/* Alertas de validación */}
+      {renderValidationAlerts()}
+
+      {/* Información de expiración */}
+      {expiryDate && (
+        <div className="bg-gray-900/50 border border-gray-600 rounded-lg p-3 flex items-center justify-between">
+          <div className="flex items-center">
+            <Clock className="h-4 w-4 text-gray-400 mr-2" />
+            <span className="text-gray-300 text-sm">
+              Fecha de expiración: {format(expiryDate, 'dd/MM/yyyy', { locale: es })}
+            </span>
+          </div>
+          <div className="text-xs text-gray-500">
+            {Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} días de validez
+          </div>
         </div>
       )}
 
@@ -304,23 +535,6 @@ export default function EnhancedPrescriptionForm({
           <p className="mt-1 text-xs text-yellow-400">Debe seleccionar un paciente para continuar</p>
         )}
       </div>
-
-      {/* Alertas de interacciones medicamentosas */}
-      {drugAlerts.length > 0 && (
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
-          <div className="flex items-start">
-            <AlertCircle className="h-5 w-5 text-red-400 mt-0.5 mr-2" />
-            <div>
-              <h4 className="text-red-300 font-medium mb-2">Alertas de Interacciones</h4>
-              <ul className="text-red-200 text-sm space-y-1">
-                {drugAlerts.map((alert, index) => (
-                  <li key={index}>{alert}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Historial de recetas anteriores */}
       {previousPrescriptions.length > 0 && (
