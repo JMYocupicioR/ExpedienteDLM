@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, Clock, Heart, FileText, CheckCircle, AlertCircle, Camera, Loader2 } from 'lucide-react';
+import { Save, Clock, Heart, AlertCircle, CheckCircle, Loader2, Activity, Thermometer } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
+import { 
+  VITAL_SIGNS_RANGES, 
+  validateVitalSign, 
+  SYSTEM_LIMITS,
+  VitalSignRange 
+} from '../lib/medicalConfig';
+import { validateJSONBSchema } from '../lib/validation';
+import DynamicPhysicalExamForm from './DynamicPhysicalExamForm';
 import type { 
   PhysicalExamFormData, 
   PhysicalExamTemplateDefinition,
@@ -43,17 +51,6 @@ interface PhysicalExamFormProps {
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 // Validaciones médicas
-const VITAL_SIGNS_RANGES = {
-  systolic_pressure: { min: 70, max: 250, unit: 'mmHg' },
-  diastolic_pressure: { min: 40, max: 150, unit: 'mmHg' },
-  heart_rate: { min: 30, max: 220, unit: 'lpm' },
-  respiratory_rate: { min: 8, max: 50, unit: 'rpm' },
-  temperature: { min: 30, max: 45, unit: '°C' },
-  oxygen_saturation: { min: 70, max: 100, unit: '%' },
-  weight: { min: 1, max: 300, unit: 'kg' },
-  height: { min: 30, max: 250, unit: 'cm' }
-};
-
 const EXAMINATION_TEMPLATES = {
   general: {
     name: 'Exploración Física General',
@@ -220,6 +217,7 @@ export default function PhysicalExamForm({
   const [criticalAlerts, setCriticalAlerts] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vitalSignsAlerts, setVitalSignsAlerts] = useState<Record<string, { level: 'normal' | 'warning' | 'critical'; message?: string }>>({});
 
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<PhysicalExamFormData>({
     defaultValues: {
@@ -244,9 +242,62 @@ export default function PhysicalExamForm({
   const watchedData = watch();
   const template = EXAMINATION_TEMPLATES[templateId as keyof typeof EXAMINATION_TEMPLATES] || EXAMINATION_TEMPLATES.general;
 
-  // ✅ CORREGIDO: Auto-save con cleanup apropiado
-  const stableAutoSave = useCallback((data: PhysicalExamFormData) => {
-    onAutoSave(data);
+  // ===== VALIDACIÓN EN TIEMPO REAL DE SIGNOS VITALES =====
+  useEffect(() => {
+    const validateAllVitalSigns = () => {
+      const alerts: Record<string, { level: 'normal' | 'warning' | 'critical'; message?: string }> = {};
+      const criticalMessages: string[] = [];
+
+      Object.entries(watchedData.vitalSigns).forEach(([field, value]) => {
+        if (field === 'bmi' || !value) return;
+
+                 const validation = validateVitalSign(field, value as string | number);
+         alerts[field] = validation;
+
+         if (validation.level === 'critical' && !validation.isValid) {
+           criticalMessages.push(`${field}: ${validation.message}`);
+         } else if (validation.level === 'critical' && validation.message) {
+           criticalMessages.push(`⚠️ CRÍTICO - ${field}: ${validation.message}`);
+         }
+      });
+
+      setVitalSignsAlerts(alerts);
+      setCriticalAlerts(criticalMessages);
+    };
+
+    validateAllVitalSigns();
+  }, [watchedData.vitalSigns]);
+
+  // ===== CÁLCULO AUTOMÁTICO DE IMC =====
+  useEffect(() => {
+    const weight = parseFloat(watchedData.vitalSigns?.weight || '0');
+    const height = parseFloat(watchedData.vitalSigns?.height || '0') / 100;
+    
+    if (weight > 0 && height > 0) {
+      const bmi = (weight / (height * height)).toFixed(1);
+      setValue('vitalSigns.bmi', bmi);
+    }
+  }, [watchedData.vitalSigns?.weight, watchedData.vitalSigns?.height, setValue]);
+
+  // ===== AUTO-SAVE MEJORADO CON VALIDACIÓN =====
+  const stableAutoSave = useCallback(async (data: PhysicalExamFormData) => {
+    try {
+      // Validar datos antes del auto-save
+      const vitalSignsValidation = validateJSONBSchema(data.vitalSigns, 'vital_signs');
+      const physicalExamValidation = validateJSONBSchema({
+        exam_date: data.examDate,
+        exam_time: data.examTime,
+        sections: data.sections,
+        generalObservations: data.generalObservations,
+        vital_signs: data.vitalSigns
+      }, 'physical_examination');
+
+      if (vitalSignsValidation.isValid && physicalExamValidation.isValid) {
+        onAutoSave(data);
+      }
+    } catch (error) {
+      console.error('Error en auto-save:', error);
+    }
   }, [onAutoSave]);
 
   useEffect(() => {
@@ -261,135 +312,95 @@ export default function PhysicalExamForm({
         setSaveState('error');
         console.error('Auto-save error:', error);
       }
-    }, 3000); // Reducido a 3 segundos para mejor UX
+    }, 3000);
 
-    return () => clearTimeout(timer); // ✅ Cleanup correcto
+    return () => clearTimeout(timer);
   }, [watchedData, stableAutoSave]);
 
-  // ✅ NUEVO: Validación de signos vitales en tiempo real
-  const validateVitalSign = (field: keyof VitalSigns, value: string): string | null => {
+  // ===== VALIDACIÓN MEJORADA DE SIGNOS VITALES =====
+  const validateVitalSignField = (field: string, value: string): string | null => {
     if (!value) return null;
     
-    const numValue = parseFloat(value);
-    const range = VITAL_SIGNS_RANGES[field];
-    
-    if (isNaN(numValue)) {
-      return 'Valor inválido';
-    }
-    
-    if (numValue < range.min || numValue > range.max) {
-      return `Valor fuera del rango normal (${range.min}-${range.max} ${range.unit})`;
+    const validation = validateVitalSign(field, value);
+    if (!validation.isValid) {
+      return validation.message || 'Valor inválido';
     }
     
     return null;
   };
 
-  // ✅ NUEVO: Alertas críticas automáticas
-  const checkCriticalAlerts = useCallback((vitalSigns: VitalSigns) => {
-    const alerts: string[] = [];
+  // ===== VALIDACIÓN COMPLETA DEL FORMULARIO =====
+  const validateCompleteForm = (data: PhysicalExamFormData): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
     
-    const systolic = parseFloat(vitalSigns.systolic_pressure);
-    const diastolic = parseFloat(vitalSigns.diastolic_pressure);
-    const heartRate = parseFloat(vitalSigns.heart_rate);
-    const temperature = parseFloat(vitalSigns.temperature);
-    const oxygenSat = parseFloat(vitalSigns.oxygen_saturation);
+    // Validar campos requeridos
+    if (!data.examDate) errors.push('Fecha del examen es requerida');
+    if (!data.examTime) errors.push('Hora del examen es requerida');
     
-    // Alertas críticas
-    if (systolic > 180 || diastolic > 110) alerts.push('🚨 CRISIS HIPERTENSIVA');
-    if (systolic < 90 || diastolic < 60) alerts.push('⚠️ HIPOTENSIÓN SEVERA');
-    if (heartRate > 120) alerts.push('🚨 TAQUICARDIA SEVERA');
-    if (heartRate < 50) alerts.push('⚠️ BRADICARDIA SEVERA');
-    if (temperature > 39.5) alerts.push('🚨 FIEBRE ALTA');
-    if (temperature < 35) alerts.push('🚨 HIPOTERMIA');
-    if (oxygenSat < 90) alerts.push('🚨 SATURACIÓN CRÍTICA');
-    
-    setCriticalAlerts(alerts);
-  }, []);
-
-  // Initialize sections
-  useEffect(() => {
-    const initialSections: Record<string, ExaminationSection> = {};
-    template.sections.forEach(section => {
-      initialSections[section.id] = {
-        id: section.id,
-        title: section.title,
-        normalFindings: section.normalFindings,
-        commonAbnormalFindings: section.commonAbnormalFindings,
-        observations: '',
-        isNormal: null,
-        selectedFindings: [],
-        attachments: []
-      };
+    // Validar signos vitales requeridos
+    const requiredVitalSigns = ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'];
+    requiredVitalSigns.forEach(field => {
+      if (!data.vitalSigns[field as keyof VitalSigns]) {
+        errors.push(`${field.replace('_', ' ')} es requerido`);
+      }
     });
-    setValue('sections', initialSections);
-  }, [templateId, setValue, template.sections]);
 
-  // ✅ MEJORADO: Calculate BMI with validation
-  useEffect(() => {
-    const weight = parseFloat(watchedData.vitalSigns?.weight || '0');
-    const height = parseFloat(watchedData.vitalSigns?.height || '0') / 100;
+    // Validar rangos de signos vitales
+    Object.entries(data.vitalSigns).forEach(([field, value]) => {
+      if (field !== 'bmi' && value) {
+        const validation = validateVitalSign(field, value);
+        if (!validation.isValid) {
+          errors.push(`${field}: ${validation.message}`);
+        }
+      }
+    });
+
+    // Validar que al menos una sección tenga datos
+    const hasAnySection = Object.values(data.sections || {}).some(section => 
+      section.observations || (section.selectedFindings && section.selectedFindings.length > 0)
+    );
     
-    if (weight > 0 && height > 0) {
-      const bmi = (weight / (height * height)).toFixed(1);
-      setValue('vitalSigns.bmi', bmi);
+    if (!hasAnySection && !data.generalObservations) {
+      errors.push('Debe completar al menos una sección del examen físico o agregar observaciones generales');
     }
-  }, [watchedData.vitalSigns?.weight, watchedData.vitalSigns?.height, setValue]);
 
-  // ✅ NUEVO: Check vital signs alerts
-  useEffect(() => {
-    if (watchedData.vitalSigns) {
-      checkCriticalAlerts(watchedData.vitalSigns);
+    // Validar longitud de observaciones generales
+    if (data.generalObservations && data.generalObservations.length > SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH) {
+      errors.push(`Observaciones generales demasiado largas (máximo ${SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH} caracteres)`);
     }
-  }, [watchedData.vitalSigns, checkCriticalAlerts]);
 
-  const handleSectionChange = (sectionId: string, field: string, value: any) => {
-    setValue(`sections.${sectionId}.${field}`, value);
+    return { isValid: errors.length === 0, errors };
   };
 
-  const handleFindingToggle = (sectionId: string, finding: string) => {
-    const currentSection = watchedData.sections?.[sectionId];
-    if (!currentSection) return;
-
-    const currentFindings = currentSection.selectedFindings || [];
-    const newFindings = currentFindings.includes(finding)
-      ? currentFindings.filter(f => f !== finding)
-      : [...currentFindings, finding];
-
-    handleSectionChange(sectionId, 'selectedFindings', newFindings);
-  };
-
-  const handleFileUpload = (sectionId: string, files: FileList | null) => {
-    if (!files) return;
-    
-    const newFiles = Array.from(files);
-    const currentSection = watchedData.sections?.[sectionId];
-    const currentAttachments = currentSection?.attachments || [];
-    
-    handleSectionChange(sectionId, 'attachments', [...currentAttachments, ...newFiles]);
-  };
-
-  // ✅ MEJORADO: Validation with better error handling
+  // ===== VALIDACIÓN EN SUBMIT =====
   const onSubmit = async (data: PhysicalExamFormData) => {
     try {
       setIsLoading(true);
       setError(null);
       setValidationErrors({});
       
-      // Validate vital signs
-      const errors: Record<string, string> = {};
-      Object.entries(data.vitalSigns).forEach(([key, value]) => {
-        if (key !== 'bmi' && value) {
-          const error = validateVitalSign(key as keyof VitalSigns, value);
-          if (error) {
-            errors[key] = error;
-          }
-        }
-      });
+      // Validación completa
+      const validation = validateCompleteForm(data);
       
-      if (Object.keys(errors).length > 0) {
-        setValidationErrors(errors);
+      if (!validation.isValid) {
+        setValidationErrors(validation.errors.reduce((acc, error, index) => {
+          acc[`error_${index}`] = error;
+          return acc;
+        }, {} as Record<string, string>));
         setSaveState('error');
         return;
+      }
+
+      // Verificar alertas críticas
+      if (criticalAlerts.length > 0) {
+        const proceed = window.confirm(
+          'Se detectaron valores críticos en signos vitales:\n' + 
+          criticalAlerts.join('\n') + 
+          '\n\n¿Desea continuar guardando?'
+        );
+        if (!proceed) {
+          return;
+        }
       }
       
       await onSave(data);
@@ -410,483 +421,360 @@ export default function PhysicalExamForm({
            vs?.respiratory_rate && vs?.temperature;
   };
 
-  // ✅ NUEVO: Render save status indicator
-  const renderSaveStatus = () => {
-    switch (saveState) {
-      case 'saving':
-        return (
-          <div className="flex items-center text-sm text-blue-400">
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-            Guardando...
-          </div>
-        );
-      case 'saved':
-        return (
-          <div className="flex items-center text-sm text-green-400">
-            <CheckCircle className="h-4 w-4 mr-1" />
-            Guardado: {lastSaved?.toLocaleTimeString()}
-          </div>
-        );
-      case 'error':
-        return (
-          <div className="flex items-center text-sm text-red-400">
-            <AlertCircle className="h-4 w-4 mr-1" />
-            Error al guardar
-          </div>
-        );
-      default:
-        return (
-          <div className="flex items-center text-sm text-gray-400">
-            <Clock className="h-4 w-4 mr-1" />
-            Auto-guardado activo
-          </div>
-        );
-    }
+  // ===== RENDER HELPER PARA CAMPO DE SIGNOS VITALES =====
+  const renderVitalSignField = (field: string, range: VitalSignRange, isRequired: boolean = true) => {
+    const fieldKey = field as keyof VitalSigns;
+    const value = watchedData.vitalSigns?.[fieldKey] || '';
+    const alert = vitalSignsAlerts[field];
+    const validationError = validateVitalSignField(field, value);
+
+    const getFieldLabel = (field: string) => {
+      const labels: Record<string, string> = {
+        'systolic_pressure': 'Presión Sistólica',
+        'diastolic_pressure': 'Presión Diastólica',
+        'heart_rate': 'Frecuencia Cardíaca',
+        'respiratory_rate': 'Frecuencia Respiratoria',
+        'temperature': 'Temperatura',
+        'oxygen_saturation': 'Saturación O₂',
+        'weight': 'Peso',
+        'height': 'Altura'
+      };
+      return labels[field] || field;
+    };
+
+    const getAlertColor = (level: 'normal' | 'warning' | 'critical') => {
+      switch (level) {
+        case 'critical': return 'border-red-500 bg-red-900/20';
+        case 'warning': return 'border-yellow-500 bg-yellow-900/20';
+        default: return 'border-gray-600';
+      }
+    };
+
+    return (
+      <div key={field} className="space-y-1">
+        <label className="block text-sm font-medium text-gray-300">
+          {getFieldLabel(field)} ({range.unit}) {isRequired && <span className="text-red-400">*</span>}
+        </label>
+        <div className="relative">
+          <input
+            type="number"
+            step={field === 'temperature' ? '0.1' : field === 'weight' ? '0.1' : '1'}
+            {...register(`vitalSigns.${fieldKey}`, {
+              required: isRequired ? 'Este campo es requerido' : false,
+              min: { value: range.min, message: `Mínimo ${range.min} ${range.unit}` },
+              max: { value: range.max, message: `Máximo ${range.max} ${range.unit}` }
+            })}
+            className={`w-full rounded-md bg-gray-700 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600 ${
+              alert ? getAlertColor(alert.level) : 'border-gray-600'
+            }`}
+            placeholder={`${range.min}-${range.max}`}
+          />
+          {alert?.level === 'critical' && (
+            <AlertCircle className="absolute right-2 top-2 h-4 w-4 text-red-400" />
+          )}
+          {alert?.level === 'warning' && (
+            <AlertCircle className="absolute right-2 top-2 h-4 w-4 text-yellow-400" />
+          )}
+        </div>
+        
+        {/* Mostrar rangos de referencia */}
+        <div className="text-xs text-gray-500 flex justify-between">
+          <span>Normal: {range.warningMin}-{range.warningMax} {range.unit}</span>
+          {alert?.level !== 'normal' && alert?.message && (
+            <span className={alert.level === 'critical' ? 'text-red-400' : 'text-yellow-400'}>
+              {alert.message}
+            </span>
+          )}
+        </div>
+        
+        {validationError && (
+          <p className="text-xs text-red-400">{validationError}</p>
+        )}
+        {errors.vitalSigns?.[fieldKey] && (
+          <p className="text-xs text-red-400">{errors.vitalSigns[fieldKey]?.message}</p>
+        )}
+      </div>
+    );
   };
 
-  const renderQuestion = (question: ExamQuestion, sectionId: string) => {
-    const fieldName = `sections.${sectionId}.${question.id}`;
+  // ===== RENDER ALERTAS CRÍTICAS =====
+  const renderCriticalAlerts = () => {
+    if (criticalAlerts.length === 0) return null;
 
-    switch (question.type) {
-      case 'text':
-        return (
-          <Controller
-            name={fieldName}
-            control={control}
-            rules={{ required: question.required }}
-            render={({ field }) => (
-              <input
-                {...field}
-                type="text"
-                placeholder={question.placeholder}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            )}
-          />
-        );
+    return (
+      <div className="mb-4 bg-red-900/20 border border-red-500 rounded-lg p-4">
+        <div className="flex items-center mb-2">
+          <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+          <h3 className="text-red-300 font-medium">¡VALORES CRÍTICOS DETECTADOS!</h3>
+        </div>
+        <ul className="text-red-200 text-sm space-y-1">
+          {criticalAlerts.map((alert, index) => (
+            <li key={index} className="flex items-start">
+              <span className="w-2 h-2 bg-red-400 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+              {alert}
+            </li>
+          ))}
+        </ul>
+        <p className="text-red-300 text-xs mt-2 font-medium">
+          Se recomienda atención médica inmediata para valores críticos.
+        </p>
+      </div>
+    );
+  };
 
-      case 'textarea':
-        return (
-          <Controller
-            name={fieldName}
-            control={control}
-            rules={{ required: question.required }}
-            render={({ field }) => (
-              <textarea
-                {...field}
-                rows={3}
-                placeholder={question.placeholder}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            )}
-          />
-        );
+  // ===== RENDER ERRORES DE VALIDACIÓN =====
+  const renderValidationErrors = () => {
+    if (Object.keys(validationErrors).length === 0) return null;
 
-      case 'select':
-        return (
-          <Controller
-            name={fieldName}
-            control={control}
-            rules={{ required: question.required }}
-            render={({ field }) => (
-              <select
-                {...field}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="">Seleccionar...</option>
-                {question.options?.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            )}
-          />
-        );
-
-      case 'number':
-        return (
-          <Controller
-            name={fieldName}
-            control={control}
-            rules={{ required: question.required }}
-            render={({ field }) => (
-              <div className="flex items-center space-x-2">
-                <input
-                  {...field}
-                  type="number"
-                  min={question.min}
-                  max={question.max}
-                  placeholder={question.placeholder}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-                {question.unit && (
-                  <span className="text-gray-400">{question.unit}</span>
-                )}
-              </div>
-            )}
-          />
-        );
-
-      case 'checkbox':
-        return (
-          <Controller
-            name={fieldName}
-            control={control}
-            render={({ field: { value, onChange } }) => (
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={value}
-                  onChange={(e) => onChange(e.target.checked)}
-                  className="rounded border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
-                />
-                <span className="text-gray-300">{question.label}</span>
-              </label>
-            )}
-          />
-        );
-
-      case 'radio':
-        return (
-          <Controller
-            name={fieldName}
-            control={control}
-            rules={{ required: question.required }}
-            render={({ field }) => (
-              <div className="space-y-2">
-                {question.options?.map((option) => (
-                  <label key={option} className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      {...field}
-                      value={option}
-                      className="rounded-full border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
-                    />
-                    <span className="text-gray-300">{option}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          />
-        );
-
-      default:
-        return null;
-    }
+    return (
+      <div className="mb-4 bg-red-900/20 border border-red-500 rounded-lg p-3">
+        <div className="flex items-center mb-2">
+          <AlertCircle className="h-4 w-4 text-red-400 mr-2" />
+          <span className="text-red-300 font-medium">Errores de validación:</span>
+        </div>
+        {Object.values(validationErrors).map((error, index) => (
+          <div key={index} className="text-red-300 text-sm ml-6">
+            • {error}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-      {/* Header */}
-      <div className="border-b border-gray-700 pb-4 mb-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-white">{templateName}</h2>
-            <p className="text-sm text-gray-300 mt-1">
-              Fecha y hora del examen: {watchedData.examDate} {watchedData.examTime}
-            </p>
+    <div className="space-y-6">
+      {/* Alertas críticas */}
+      {renderCriticalAlerts()}
+      
+      {/* Errores de validación */}
+      {renderValidationErrors()}
+
+      {/* Estado del formulario */}
+      <div className="bg-gray-900/50 border border-gray-600 rounded-lg p-3 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          {/* Estado de guardado */}
+          <div className="flex items-center">
+            {/* {saveState === 'saving' && <Loader2 className="h-4 w-4 text-blue-400 mr-2 animate-spin" />} */}
+            {saveState === 'saved' && <CheckCircle className="h-4 w-4 text-green-400 mr-2" />}
+            {saveState === 'error' && <AlertCircle className="h-4 w-4 text-red-400 mr-2" />}
+            <span className="text-sm text-gray-300">
+              {saveState === 'saving' && 'Guardando...'}
+              {saveState === 'saved' && `Guardado: ${lastSaved?.toLocaleTimeString()}`}
+              {saveState === 'error' && 'Error al guardar'}
+              {saveState === 'idle' && 'Auto-guardado activo'}
+            </span>
           </div>
-          <div className="flex items-center space-x-4">
-            {renderSaveStatus()}
+
+          {/* Indicador de completitud */}
+          <div className="flex items-center">
+            <Activity className="h-4 w-4 text-gray-400 mr-2" />
+            <span className="text-sm text-gray-400">
+              Signos vitales: {isVitalSignsComplete() ? 'Completos' : 'Incompletos'}
+            </span>
           </div>
+        </div>
+
+        {/* Fecha y hora */}
+        <div className="text-xs text-gray-500">
+          {watchedData.examDate} {watchedData.examTime}
         </div>
       </div>
 
-      {/* ✅ NUEVO: Critical Alerts */}
-      {criticalAlerts.length > 0 && (
-        <div className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded-lg">
-          <h3 className="text-lg font-semibold text-red-300 mb-2">⚠️ Alertas Críticas</h3>
-          <ul className="space-y-1">
-            {criticalAlerts.map((alert, index) => (
-              <li key={index} className="text-red-200 text-sm">{alert}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm mb-6">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-        {/* Fecha y Hora */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Fecha del Examen *
-            </label>
-            <Controller
-              name="examDate"
-              control={control}
-              rules={{ required: true }}
-              render={({ field }) => (
-                <input
-                  {...field}
-                  type="date"
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-              )}
-            />
-            {errors.examDate && (
-              <p className="mt-1 text-sm text-red-400">{errors.examDate.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Hora del Examen *
-            </label>
-            <Controller
-              name="examTime"
-              control={control}
-              rules={{ required: true }}
-              render={({ field }) => (
-                <input
-                  {...field}
-                  type="time"
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-              )}
-            />
-            {errors.examTime && (
-              <p className="mt-1 text-sm text-red-400">{errors.examTime.message}</p>
-            )}
-          </div>
-        </div>
-
-        {/* ✅ MEJORADO: Signos Vitales con validación */}
-        <div className="bg-blue-900/30 p-6 rounded-lg border border-blue-700">
-          <div className="flex items-center mb-4">
-            <Heart className="h-5 w-5 text-blue-400 mr-2" />
-            <h3 className="text-lg font-medium text-white">Signos Vitales *</h3>
-            {!isVitalSignsComplete() && (
-              <AlertCircle className="h-5 w-5 text-yellow-500 ml-2" />
-            )}
-          </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Información básica */}
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <h3 className="text-lg font-medium text-white mb-4 flex items-center">
+            <Clock className="h-5 w-5 mr-2 text-blue-400" />
+            Información del Examen
+          </h3>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(VITAL_SIGNS_RANGES).map(([field, range]) => {
-              if (field === 'bmi') return null;
-              
-              const fieldKey = field as keyof VitalSigns;
-              const isRequired = ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'].includes(field);
-              const fieldValue = watchedData.vitalSigns?.[fieldKey] || '';
-              const validationError = fieldValue ? validateVitalSign(fieldKey, fieldValue) : null;
-              
-              return (
-                <div key={field}>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    {field === 'systolic_pressure' ? 'Presión Sistólica' :
-                     field === 'diastolic_pressure' ? 'Presión Diastólica' :
-                     field === 'heart_rate' ? 'Frecuencia Cardíaca' :
-                     field === 'respiratory_rate' ? 'Frecuencia Respiratoria' :
-                     field === 'temperature' ? 'Temperatura' :
-                     field === 'oxygen_saturation' ? 'Saturación O₂' :
-                     field === 'weight' ? 'Peso' :
-                     'Altura'} ({range.unit}) {isRequired && '*'}
-                  </label>
-                  <input
-                    type="number"
-                    step={field === 'temperature' ? '0.1' : field === 'weight' ? '0.1' : '1'}
-                    {...register(`vitalSigns.${fieldKey}`, {
-                      required: isRequired ? 'Este campo es requerido' : false,
-                      min: { value: range.min, message: `Mínimo ${range.min} ${range.unit}` },
-                      max: { value: range.max, message: `Máximo ${range.max} ${range.unit}` }
-                    })}
-                    className={`w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600 ${
-                      validationError ? 'border-red-500' : ''
-                    }`}
-                    placeholder={`${range.min}-${range.max}`}
-                  />
-                  {validationError && (
-                    <p className="mt-1 text-xs text-red-400">{validationError}</p>
-                  )}
-                  {errors.vitalSigns?.[fieldKey] && (
-                    <p className="mt-1 text-xs text-red-400">{errors.vitalSigns[fieldKey]?.message}</p>
-                  )}
-                </div>
-              );
-            })}
-            
-            {watchedData.vitalSigns?.bmi && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  IMC
-                </label>
-                <input
-                  type="text"
-                  value={`${watchedData.vitalSigns.bmi} kg/m²`}
-                  readOnly
-                  className="w-full rounded-md border-gray-600 bg-gray-600 text-gray-200 shadow-sm"
-                />
-                <p className="mt-1 text-xs text-gray-400">
-                  {parseFloat(watchedData.vitalSigns.bmi) < 18.5 ? 'Bajo peso' :
-                   parseFloat(watchedData.vitalSigns.bmi) < 25 ? 'Normal' :
-                   parseFloat(watchedData.vitalSigns.bmi) < 30 ? 'Sobrepeso' : 'Obesidad'}
-                </p>
-              </div>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Fecha del examen <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="date"
+                {...register('examDate', { required: 'Fecha es requerida' })}
+                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+              {errors.examDate && (
+                <p className="mt-1 text-xs text-red-400">{errors.examDate.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Hora del examen <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="time"
+                {...register('examTime', { required: 'Hora es requerida' })}
+                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+              {errors.examTime && (
+                <p className="mt-1 text-xs text-red-400">{errors.examTime.message}</p>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Secciones de la Plantilla */}
-        {templateDefinition.sections.map((section: ExamSection) => (
-          <div key={section.id} className="border border-gray-600 rounded-lg p-6 bg-gray-750">
-            <h3 className="text-lg font-medium text-white mb-4">{section.title}</h3>
-            
-            {/* Normal/Abnormal Toggle */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Estado General
-              </label>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => handleSectionChange(section.id, 'isNormal', true)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    watchedData.sections?.[section.id]?.isNormal === true
-                      ? 'bg-green-600 text-white border-green-500'
-                      : 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600'
-                  } border`}
-                >
-                  Normal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSectionChange(section.id, 'isNormal', false)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    watchedData.sections?.[section.id]?.isNormal === false
-                      ? 'bg-red-600 text-white border-red-500'
-                      : 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600'
-                  } border`}
-                >
-                  Anormal
-                </button>
-              </div>
-            </div>
+        {/* Signos vitales */}
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <h3 className="text-lg font-medium text-white mb-4 flex items-center">
+            <Heart className="h-5 w-5 mr-2 text-red-400" />
+            Signos Vitales
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(VITAL_SIGNS_RANGES).map(([field, range]) => {
+              const isRequired = ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'].includes(field);
+              return renderVitalSignField(field, range, isRequired);
+            })}
 
-            {/* Pre-defined Findings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Hallazgos Normales
-                </label>
-                <div className="space-y-2">
-                  {section.normalFindings.map((finding, index) => (
-                    <label key={index} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={watchedData.sections?.[section.id]?.selectedFindings?.includes(finding) || false}
-                        onChange={() => handleFindingToggle(section.id, finding)}
-                        className="rounded border-gray-500 text-green-600 focus:ring-green-500 bg-gray-700"
-                      />
-                      <span className="ml-2 text-sm text-gray-300">{finding}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Hallazgos Anormales Comunes
-                </label>
-                <div className="space-y-2">
-                  {section.commonAbnormalFindings.map((finding, index) => (
-                    <label key={index} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={watchedData.sections?.[section.id]?.selectedFindings?.includes(finding) || false}
-                        onChange={() => handleFindingToggle(section.id, finding)}
-                        className="rounded border-gray-500 text-red-600 focus:ring-red-500 bg-gray-700"
-                      />
-                      <span className="ml-2 text-sm text-gray-300">{finding}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Observations */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Observaciones Detalladas
+            {/* IMC calculado automáticamente */}
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-gray-300">
+                IMC (calculado)
               </label>
-              <textarea
-                value={watchedData.sections?.[section.id]?.observations || ''}
-                onChange={(e) => handleSectionChange(section.id, 'observations', e.target.value)}
-                rows={4}
-                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                placeholder="Describa hallazgos específicos, técnicas utilizadas, y observaciones detalladas..."
+              <input
+                type="text"
+                {...register('vitalSigns.bmi')}
+                readOnly
+                className="w-full rounded-md bg-gray-600 border-gray-500 text-gray-300 shadow-sm cursor-not-allowed"
+                placeholder="Se calcula automáticamente"
               />
-            </div>
-
-            {/* File Upload */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Adjuntar Imágenes/Diagramas
-              </label>
-              <div className="flex items-center">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => handleFileUpload(section.id, e.target.files)}
-                  className="hidden"
-                  id={`file-${section.id}`}
-                />
-                <label
-                  htmlFor={`file-${section.id}`}
-                  className="flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 cursor-pointer transition-colors"
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  Seleccionar Archivos
-                </label>
-                {watchedData.sections?.[section.id]?.attachments?.length > 0 && (
-                  <span className="ml-3 text-sm text-gray-400">
-                    {watchedData.sections[section.id].attachments.length} archivo(s) seleccionado(s)
-                  </span>
-                )}
+              <div className="text-xs text-gray-500">
+                Calculado automáticamente con peso y altura
               </div>
             </div>
           </div>
-        ))}
+        </div>
 
-        {/* General Observations */}
-        <div className="border border-gray-600 rounded-lg p-6 bg-gray-750">
+                 {/* Plantilla dinámica de exploración */}
+         {templateDefinition ? (
+           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+             <h3 className="text-lg font-medium text-white mb-4">Plantilla Personalizada</h3>
+             <p className="text-gray-400 text-sm">
+               Plantilla "{templateName}" cargada. Funcionalidad completa disponible próximamente.
+             </p>
+           </div>
+         ) : (
+          /* Formulario de exploración estática */
+          <div className="space-y-4">
+            {template.sections.map((section) => (
+              <div key={section.id} className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-white mb-4">{section.title}</h3>
+                
+                {/* Hallazgos normales */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Hallazgos normales (seleccione los aplicables):
+                  </label>
+                  <div className="space-y-2">
+                    {section.normalFindings.map((finding, index) => (
+                      <label key={index} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          {...register(`sections.${section.id}.selectedFindings.${index}`)}
+                          className="rounded border-gray-600 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-700"
+                        />
+                        <span className="ml-2 text-sm text-gray-300">{finding}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Observaciones */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Observaciones adicionales:
+                  </label>
+                  <textarea
+                    {...register(`sections.${section.id}.observations`)}
+                    rows={3}
+                    className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="Describa hallazgos anormales o observaciones específicas..."
+                    maxLength={2000}
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    Máximo 2000 caracteres
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Observaciones generales */}
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
           <h3 className="text-lg font-medium text-white mb-4">Observaciones Generales</h3>
           <textarea
-            {...register('generalObservations')}
+            {...register('generalObservations', {
+              maxLength: { 
+                value: SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH, 
+                message: `Máximo ${SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH} caracteres` 
+              }
+            })}
             rows={6}
-            className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-            placeholder="Comentarios generales sobre el examen físico, impresión clínica global, y cualquier observación adicional relevante..."
+            className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            placeholder="Impresión clínica general, hallazgos relevantes, recomendaciones..."
+            maxLength={SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH}
           />
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <span>Máximo {SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH} caracteres</span>
+            <span>{watchedData.generalObservations?.length || 0} / {SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH}</span>
+          </div>
+          {errors.generalObservations && (
+            <p className="mt-1 text-xs text-red-400">{errors.generalObservations.message}</p>
+          )}
         </div>
 
-        {/* ✅ MEJORADO: Submit Button con estados */}
-        <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            className="px-6 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors"
-            disabled={saveState === 'saving'}
-          >
-            Guardar como Borrador
-          </button>
+        {/* Botones de acción */}
+        <div className="flex space-x-4">
           <button
             type="submit"
-            disabled={saveState === 'saving' || !isVitalSignsComplete()}
-            className="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
+            disabled={isLoading}
+            className={`flex-1 flex items-center justify-center py-3 px-4 rounded-lg font-medium transition-colors ${
+              isLoading 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
           >
-            {saveState === 'saving' ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Guardando...
+              </>
             ) : (
-              <Save className="h-4 w-4 mr-2" />
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Guardar Examen
+              </>
             )}
-            {saveState === 'saving' ? 'Guardando...' : 'Completar Examen'}
           </button>
+
+          {onAutoSave && (
+            <button
+              type="button"
+              onClick={() => onAutoSave(watchedData)}
+              className="px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Guardar Borrador
+            </button>
+          )}
         </div>
       </form>
+
+      {error && (
+        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+            <span className="text-red-300 font-medium">Error:</span>
+          </div>
+          <p className="text-red-200 mt-1">{error}</p>
+        </div>
+      )}
     </div>
   );
 } 
