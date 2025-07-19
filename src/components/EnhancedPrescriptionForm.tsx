@@ -12,6 +12,8 @@ import {
   SYSTEM_LIMITS
 } from '../lib/medicalConfig';
 import { validateJSONBSchema } from '../lib/validation';
+// ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
+import { useValidation } from '../hooks/useValidation';
 
 interface Medication {
   name: string;
@@ -83,6 +85,9 @@ export default function EnhancedPrescriptionForm({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
+  // ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
+  const { validateMedicationsField, validateCompleteForm } = useValidation();
+
   // Detectar estado de conexión
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -97,7 +102,7 @@ export default function EnhancedPrescriptionForm({
     };
   }, []);
 
-  // ===== VALIDACIÓN COMPLETA EN TIEMPO REAL =====
+  // ===== VALIDACIÓN CENTRALIZADA EN TIEMPO REAL =====
   useEffect(() => {
     validatePrescriptionComplete();
   }, [medications, diagnosis, patientAllergies, doctorSpecialty]);
@@ -107,101 +112,44 @@ export default function EnhancedPrescriptionForm({
     const alerts: ValidationAlert[] = [];
     
     try {
-      // Validar medicamentos individuales
-      for (let i = 0; i < medications.length; i++) {
-        const med = medications[i];
-        if (!med.name) continue;
+      // Usar validación centralizada para medicamentos
+      const medicationsValidation = validateMedicationsField(
+        medications.filter(m => m.name), 
+        patientAllergies
+      );
 
-        // Extraer dosificación numérica
-        const dosageMatch = med.dosage.match(/(\d+(?:\.\d+)?)/);
-        const dosageNum = dosageMatch ? parseFloat(dosageMatch[1]) : 0;
-        
-        // Extraer duración numérica
-        const durationMatch = med.duration.match(/(\d+)/);
-        const durationNum = durationMatch ? parseInt(durationMatch[1]) : 0;
-
-        // Validar con configuración médica
-        const validation = validateMedication(med.name.toLowerCase(), dosageNum, med.frequency.toLowerCase(), durationNum);
-        
-        if (!validation.isValid) {
-          validation.errors.forEach(error => {
-            alerts.push({
-              type: 'error',
-              message: error,
-              medication: med.name
-            });
-          });
-        }
-
-        validation.warnings.forEach(warning => {
-          alerts.push({
-            type: 'warning',
-            message: warning,
-            medication: med.name
-          });
-        });
-
-        // Verificar alergias del paciente
-        if (patientAllergies.some(allergy => med.name.toLowerCase().includes(allergy.toLowerCase()))) {
+      if (!medicationsValidation.isValid) {
+        medicationsValidation.errors.forEach(error => {
           alerts.push({
             type: 'error',
-            message: `Paciente alérgico a ${med.name}`,
-            medication: med.name
+            message: error
           });
-        }
-
-        // Verificar si requiere especialista
-        const constraint = MEDICATION_CONSTRAINTS[med.name.toLowerCase()];
-        if (constraint?.requiresSpecialist && doctorSpecialty === 'medicina_general') {
-          alerts.push({
-            type: 'warning',
-            message: `${med.name} requiere prescripción por especialista`,
-            medication: med.name
-          });
-        }
+        });
       }
 
-      // Verificar interacciones medicamentosas
-      const medicationNames = medications.filter(m => m.name).map(m => m.name);
-      const interactions = checkDrugInteractions(medicationNames);
-      
-      interactions.forEach(interaction => {
+      medicationsValidation.warnings.forEach(warning => {
         alerts.push({
           type: 'warning',
-          message: interaction
+          message: warning
         });
       });
 
-      // Verificar límite de medicamentos
-      if (medications.filter(m => m.name).length > SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION) {
-        alerts.push({
-          type: 'error',
-          message: `Máximo ${SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION} medicamentos por receta`
-        });
-      }
-
-      // Validar usando esquema JSONB
-      const medicationsForValidation = medications.filter(m => m.name).map(m => ({
-        name: m.name,
-        dosage: m.dosage,
-        frequency: m.frequency,
-        duration: m.duration,
-        instructions: m.instructions
-      }));
-
-      if (medicationsForValidation.length > 0) {
-        const jsonbValidation = validateJSONBSchema(medicationsForValidation, 'medications');
-        if (!jsonbValidation.isValid) {
-          jsonbValidation.errors.forEach(error => {
+      // Validación adicional para especialista
+      medications.forEach(med => {
+        if (med.name) {
+          const constraint = MEDICATION_CONSTRAINTS[med.name.toLowerCase()];
+          if (constraint?.requiresSpecialist && doctorSpecialty === 'medicina_general') {
             alerts.push({
-              type: 'error',
-              message: `Validación de esquema: ${error}`
+              type: 'warning',
+              message: `${med.name} requiere prescripción por especialista`,
+              medication: med.name
             });
-          });
+          }
         }
-      }
+      });
 
       // Calcular fecha de expiración inteligente
+      const medicationNames = medications.filter(m => m.name).map(m => m.name);
       if (medicationNames.length > 0) {
         const expiry = calculatePrescriptionExpiry(medicationNames);
         setExpiryDate(expiry);
@@ -400,6 +348,39 @@ export default function EnhancedPrescriptionForm({
       return;
     }
 
+    // ===== VALIDACIÓN COMPLETA USANDO SISTEMA CENTRALIZADO =====
+    const prescriptionForValidation = {
+      patient_id: patientId,
+      medications: validMedications,
+      diagnosis: diagnosis.trim()
+    };
+
+    try {
+      const completeValidation = validateCompleteForm(prescriptionForValidation, 'prescription', {
+        patientAllergies,
+        doctorSpecialty
+      });
+
+      if (!completeValidation.isValid) {
+        alert('Errores de validación detectados:\n' + completeValidation.errors.join('\n'));
+        return;
+      }
+
+      // Mostrar advertencias (no bloquear)
+      if (completeValidation.warnings.length > 0) {
+        const proceedWithWarnings = window.confirm(
+          'Se detectaron las siguientes advertencias:\n' + 
+          completeValidation.warnings.join('\n') + 
+          '\n\n¿Desea continuar?'
+        );
+        if (!proceedWithWarnings) return;
+      }
+    } catch (error) {
+      console.error('Error en validación completa:', error);
+      alert('Error interno de validación. Revise los datos e intente nuevamente.');
+      return;
+    }
+
     const prescriptionData = {
       patient_id: patientId,
       medications: validMedications,
@@ -409,14 +390,33 @@ export default function EnhancedPrescriptionForm({
       qr_code: qrCodeUrl,
       created_at: new Date().toISOString(),
       expires_at: (expiryDate || calculatePrescriptionExpiry(validMedications.map(m => m.name))).toISOString(),
-      validation_alerts: validationAlerts.filter(alert => alert.type === 'warning').map(alert => alert.message)
+      validation_alerts: validationAlerts.filter(alert => alert.type === 'warning').map(alert => alert.message),
+      doctor_specialty: doctorSpecialty,
+      patient_allergies: patientAllergies
     };
 
-    // Si está offline, guardar en localStorage
+    // ===== MANEJO MEJORADO DE MODO OFFLINE =====
     if (isOffline) {
-      const offlinePrescriptions = JSON.parse(localStorage.getItem('offline_prescriptions') || '[]');
-      offlinePrescriptions.push(prescriptionData);
-      localStorage.setItem('offline_prescriptions', JSON.stringify(offlinePrescriptions));
+      try {
+        const offlinePrescriptions = JSON.parse(localStorage.getItem('offline_prescriptions') || '[]');
+        const prescriptionWithId = {
+          ...prescriptionData,
+          offline_id: Date.now().toString(),
+          created_offline: true,
+          sync_status: 'pending'
+        };
+        offlinePrescriptions.push(prescriptionWithId);
+        localStorage.setItem('offline_prescriptions', JSON.stringify(offlinePrescriptions));
+        
+        alert('✅ Receta guardada localmente. Se sincronizará cuando recupere la conexión.');
+        
+        // Mostrar badge de offline en UI
+        console.log('📱 Modo offline: Receta guardada localmente para sincronización posterior');
+      } catch (error) {
+        console.error('Error guardando offline:', error);
+        alert('❌ Error al guardar la receta en modo offline');
+        return;
+      }
     }
 
     onSave(prescriptionData);
