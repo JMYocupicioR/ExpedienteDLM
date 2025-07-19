@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, GripVertical, Copy, Eye, FileText, Edit, Share2, Download, Upload, Users } from 'lucide-react';
+import { Plus, Save, X, Download, Upload, Share2, Copy, Eye, Settings, Trash2, Edit, ChevronDown, ChevronUp, GripVertical, Users } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { supabase } from '../lib/supabase';
+// ===== IMPORTACIONES PARA VALIDACIÓN CENTRALIZADA =====
+import { SYSTEM_LIMITS } from '../lib/medicalConfig';
+import { validateJSONBSchema } from '../lib/validation';
+import { useValidation } from '../hooks/useValidation';
 import type { Database, PhysicalExamTemplateDefinition, ExamQuestion } from '../lib/database.types';
 
 type PhysicalExamTemplate = Database['public']['Tables']['physical_exam_templates']['Row'];
@@ -167,6 +171,9 @@ export default function PhysicalExamTemplateEditor({
   const [showImportModal, setShowImportModal] = useState(false);
   const [shareableLink, setShareableLink] = useState<string>('');
   const [importData, setImportData] = useState<string>('');
+
+  // ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
+  const { validatePhysicalExamTemplateField } = useValidation();
 
   // Field editor state
   const [fieldForm, setFieldForm] = useState<TemplateField>({
@@ -341,19 +348,66 @@ export default function PhysicalExamTemplateEditor({
     setSections([...sections, newSection]);
   };
 
+  // ===== VALIDACIÓN ROBUSTA USANDO LÍMITES CENTRALIZADOS =====
   const handleSaveTemplate = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
+      // ===== VALIDACIONES MEJORADAS =====
       if (!templateName.trim()) {
         throw new Error('El nombre de la plantilla es requerido');
       }
 
-      if (sections.length === 0 || sections.every(s => s.fields.length === 0)) {
-        throw new Error('La plantilla debe tener al menos un campo');
+      if (templateName.length > SYSTEM_LIMITS.MAX_TEMPLATE_NAME_LENGTH) {
+        throw new Error(`El nombre de la plantilla no puede exceder ${SYSTEM_LIMITS.MAX_TEMPLATE_NAME_LENGTH} caracteres`);
       }
 
+      if (sections.length === 0) {
+        throw new Error('La plantilla debe tener al menos una sección');
+      }
+
+      if (sections.length > SYSTEM_LIMITS.MAX_SECTIONS_PER_TEMPLATE) {
+        throw new Error(`Máximo ${SYSTEM_LIMITS.MAX_SECTIONS_PER_TEMPLATE} secciones permitidas por plantilla`);
+      }
+
+      // Validar cada sección
+      let totalFields = 0;
+      for (const section of sections) {
+        if (!section.title.trim()) {
+          throw new Error('Todas las secciones deben tener un título');
+        }
+
+        if (section.fields.length === 0) {
+          throw new Error(`La sección "${section.title}" debe tener al menos un campo`);
+        }
+
+        if (section.fields.length > SYSTEM_LIMITS.MAX_FIELDS_PER_SECTION) {
+          throw new Error(`La sección "${section.title}" excede el máximo de ${SYSTEM_LIMITS.MAX_FIELDS_PER_SECTION} campos`);
+        }
+
+        totalFields += section.fields.length;
+
+        // Validar campos de la sección
+        for (const field of section.fields) {
+          if (!field.label.trim()) {
+            throw new Error(`Campo en la sección "${section.title}" debe tener una etiqueta`);
+          }
+
+          if (field.label.length > SYSTEM_LIMITS.MAX_FIELD_LABEL_LENGTH) {
+            throw new Error(`Etiqueta del campo "${field.label}" demasiado larga (máximo ${SYSTEM_LIMITS.MAX_FIELD_LABEL_LENGTH} caracteres)`);
+          }
+
+          // Validar opciones para campos de selección
+          if (['select', 'radio', 'checkbox'].includes(field.type)) {
+            if (!field.options || field.options.length === 0) {
+              throw new Error(`Campo "${field.label}" de tipo ${field.type} debe tener opciones`);
+            }
+          }
+        }
+      }
+
+      // Validar estructura de plantilla usando esquema JSONB
       const definition: PhysicalExamTemplateDefinition = {
         version: '1.0',
         sections: sections.map(section => ({
@@ -364,6 +418,17 @@ export default function PhysicalExamTemplateEditor({
           questions: (section.fields || []) as ExamQuestion[],
         })),
       };
+
+      // Usar validación JSONB centralizada
+      const templateValidation = validatePhysicalExamTemplateField(definition, true);
+      if (!templateValidation.isValid) {
+        throw new Error(`Errores de validación: ${templateValidation.errors.join('; ')}`);
+      }
+
+      // Mostrar advertencias si las hay
+      if (templateValidation.warnings.length > 0) {
+        console.warn('Advertencias de plantilla:', templateValidation.warnings);
+      }
 
       if (template) {
         // Update existing template
