@@ -326,7 +326,7 @@ export const JSONB_SCHEMAS: Record<string, JSONBSchema> = {
                 type: 'object',
                 properties: {
                   id: { type: 'string', maxLength: 50 },
-                  text: { type: 'string', maxLength: 200 },
+                  label: { type: 'string', maxLength: 200 },
                   type: { 
                     type: 'string', 
                     enum: ['text', 'textarea', 'select', 'checkbox', 'radio', 'number', 'date'] 
@@ -348,7 +348,7 @@ export const JSONB_SCHEMAS: Record<string, JSONBSchema> = {
                     additionalProperties: false
                   }
                 },
-                required: ['id', 'text', 'type'],
+                required: ['id', 'label', 'type'],
                 additionalProperties: false
               },
               maxItems: SYSTEM_LIMITS.MAX_FIELDS_PER_SECTION
