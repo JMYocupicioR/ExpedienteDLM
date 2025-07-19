@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+// ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
+import { 
+  validateVitalSign, 
+  SYSTEM_LIMITS,
+  VITAL_SIGNS_RANGES 
+} from '../lib/medicalConfig';
+import { validateJSONBSchema } from '../lib/validation';
+import { useValidation } from './useValidation';
 
 interface PhysicalExamFormData {
   examDate: string;
@@ -52,7 +60,7 @@ interface UsePhysicalExamReturn {
   saveDraft: (data: PhysicalExamFormData, templateId?: string) => Promise<void>;
   loadDraft: (templateId: string) => Promise<PhysicalExamFormData | null>;
   deleteDraft: (templateId: string) => Promise<void>;
-  validateExamData: (data: PhysicalExamFormData) => { isValid: boolean; errors: string[] };
+  validateExamData: (data: PhysicalExamFormData) => string[];
   generatePDF: (data: PhysicalExamFormData, patientData: any, doctorData: any) => Promise<Blob>;
   exportToJson: (data: PhysicalExamFormData) => string;
   importFromJson: (jsonString: string) => PhysicalExamFormData | null;
@@ -208,50 +216,61 @@ export function usePhysicalExam({
   const validateExamData = useCallback((data: PhysicalExamFormData) => {
     const errors: string[] = [];
     
-    // Required fields validation
+    // Validaciones básicas
     if (!data.examDate) errors.push('Fecha del examen es requerida');
     if (!data.examTime) errors.push('Hora del examen es requerida');
     
-    // Vital signs validation
+    // Usar validación JSONB centralizada
+    const vitalSignsValidation = validateJSONBSchema(data.vitalSigns, 'vital_signs');
+    if (!vitalSignsValidation.isValid) {
+      errors.push(...vitalSignsValidation.errors);
+    }
+
+    const physicalExamValidation = validateJSONBSchema({
+      exam_date: data.examDate,
+      exam_time: data.examTime,
+      sections: data.sections,
+      generalObservations: data.generalObservations,
+      vital_signs: data.vitalSigns
+    }, 'physical_examination');
+    if (!physicalExamValidation.isValid) {
+      errors.push(...physicalExamValidation.errors);
+    }
+
+    // Validación específica de signos vitales usando sistema centralizado
     const vs = data.vitalSigns;
-    if (!vs.systolic_pressure) errors.push('Presión sistólica es requerida');
-    if (!vs.diastolic_pressure) errors.push('Presión diastólica es requerida');
-    if (!vs.heart_rate) errors.push('Frecuencia cardíaca es requerida');
-    if (!vs.respiratory_rate) errors.push('Frecuencia respiratoria es requerida');
-    if (!vs.temperature) errors.push('Temperatura es requerida');
+    const requiredVitalSigns = ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'];
     
-    // Validate vital signs ranges
-    const systolic = parseInt(vs.systolic_pressure);
-    const diastolic = parseInt(vs.diastolic_pressure);
-    const heartRate = parseInt(vs.heart_rate);
-    const temperature = parseFloat(vs.temperature);
-    
-    if (systolic && (systolic < 60 || systolic > 300)) {
-      errors.push('Presión sistólica fuera del rango normal (60-300 mmHg)');
-    }
-    if (diastolic && (diastolic < 30 || diastolic > 200)) {
-      errors.push('Presión diastólica fuera del rango normal (30-200 mmHg)');
-    }
-    if (heartRate && (heartRate < 30 || heartRate > 200)) {
-      errors.push('Frecuencia cardíaca fuera del rango normal (30-200 lpm)');
-    }
-    if (temperature && (temperature < 30 || temperature > 45)) {
-      errors.push('Temperatura fuera del rango normal (30-45 °C)');
+    requiredVitalSigns.forEach(field => {
+      if (!vs[field as keyof typeof vs]) {
+        errors.push(`${field.replace('_', ' ')} es requerido`);
+        return;
+      }
+
+      // Usar función centralizada de validación
+      const validation = validateVitalSign(field, vs[field as keyof typeof vs] as string | number);
+      if (!validation.isValid) {
+        errors.push(`${field.replace('_', ' ')}: ${validation.message}`);
+      } else if (validation.level === 'critical' && validation.message) {
+        errors.push(`⚠️ CRÍTICO - ${field.replace('_', ' ')}: ${validation.message}`);
+      }
+    });
+
+    // Validar longitud de observaciones generales
+    if (data.generalObservations && data.generalObservations.length > SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH) {
+      errors.push(`Observaciones generales demasiado largas (máximo ${SYSTEM_LIMITS.MAX_GENERAL_OBSERVATIONS_LENGTH} caracteres)`);
     }
     
-    // Validate at least one section has data
+    // Validar que al menos una sección tenga datos
     const hasAnySection = Object.values(data.sections || {}).some(section => 
       section.observations || (section.selectedFindings && section.selectedFindings.length > 0)
     );
     
     if (!hasAnySection && !data.generalObservations) {
-      errors.push('Debe completar al menos una sección del examen físico');
+      errors.push('Debe completar al menos una sección del examen físico o agregar observaciones generales');
     }
-    
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
+
+    return errors;
   }, []);
 
   // Generate PDF
