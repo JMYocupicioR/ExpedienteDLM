@@ -191,7 +191,16 @@ export default function PhysicalExamTemplateEditor({
     if (template?.definition?.sections) {
       const editorSections: TemplateSection[] = template.definition.sections.map(section => ({
         ...section,
-        fields: (section.questions || []) as TemplateField[],
+        fields: section.questions?.map(question => ({
+          id: question.id,
+          label: question.label,
+          type: question.type,
+          required: question.required || false,
+          placeholder: question.placeholder || '',
+          options: question.options || [],
+          defaultValue: question.defaultValue?.toString() || '',
+          helpText: ''
+        })) || [],
       }));
       setSections(editorSections);
     } else if ((template as any)?.fields) {
@@ -340,8 +349,14 @@ export default function PhysicalExamTemplateEditor({
       id: `section_${Date.now()}`,
       title: systemTemplate.title,
       fields: systemTemplate.fields.map(field => ({
-        ...field,
-        id: `${field.id}_${Date.now()}`
+        id: `${field.id}_${Date.now()}`,
+        label: field.label,
+        type: field.type,
+        required: field.required || false,
+        placeholder: field.placeholder || '',
+        options: field.options || [],
+        defaultValue: field.defaultValue || '',
+        helpText: field.helpText || ''
       })),
       order: sections.length
     };
@@ -417,14 +432,12 @@ export default function PhysicalExamTemplateEditor({
           order: section.order,
           questions: section.fields.map(field => ({
             id: field.id,
-            text: field.label,
+            label: field.label,
             type: field.type,
             required: field.required || false,
             placeholder: field.placeholder || '',
             options: field.options || [],
-            defaultValue: field.defaultValue || '',
-            helpText: field.helpText || '',
-            validation: field.validation || {}
+            defaultValue: field.defaultValue || ''
           })) as ExamQuestion[],
         })),
       };
