@@ -338,7 +338,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
       };
     }
 
-    // Convertir de questions a fields para DynamicPhysicalExamForm
+    // ===== CONVERTIR DE QUESTIONS A FIELDS PARA DynamicPhysicalExamForm =====
     return {
       sections: template.definition.sections.map((section: any) => ({
         id: section.id,
@@ -357,6 +357,36 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         })) || [],
         order: section.order || 0
       }))
+    };
+  };
+
+  // ===== NUEVO: Crear plantilla vacía para nueva plantilla =====
+  const createEmptyTemplate = (): PhysicalExamTemplate => {
+    return {
+      id: 'new',
+      name: 'Nueva Plantilla',
+      doctor_id: doctorId,
+      definition: {
+        version: '1.0',
+        sections: [{
+          id: 'main_section',
+          title: 'Exploración General',
+          description: 'Sección principal de exploración física',
+          order: 0,
+                     questions: [
+             {
+               id: 'general_observation',
+               label: 'Observación General',
+               type: 'textarea',
+               required: false,
+               placeholder: 'Escriba sus observaciones...',
+               options: []
+             }
+           ]
+        }]
+      },
+             created_at: new Date().toISOString(),
+       is_active: true
     };
   };
 
