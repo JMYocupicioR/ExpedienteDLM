@@ -270,14 +270,45 @@ INSERT INTO audit_logs (
 
 #### **Rangos Normales Configurados**
 ```typescript
+// ===== RANGOS CENTRALIZADOS ACTUALIZADOS =====
+// NOTA: Estos rangos ahora están centralizados en src/lib/medicalConfig.ts
 const VITAL_SIGNS_RANGES = {
-  systolic_pressure: { min: 60, max: 300, unit: 'mmHg' },
-  diastolic_pressure: { min: 30, max: 200, unit: 'mmHg' },
-  heart_rate: { min: 30, max: 200, unit: 'lpm' },
-  respiratory_rate: { min: 8, max: 40, unit: 'rpm' },
-  temperature: { min: 30, max: 45, unit: '°C' },
-  oxygen_saturation: { min: 70, max: 100, unit: '%' }
+  systolic_pressure: { 
+    min: 70, max: 250, unit: 'mmHg',
+    criticalMin: 60, criticalMax: 180,
+    warningMin: 90, warningMax: 140
+  },
+  diastolic_pressure: { 
+    min: 40, max: 150, unit: 'mmHg',
+    criticalMin: 30, criticalMax: 120,
+    warningMin: 60, warningMax: 90
+  },
+  heart_rate: { 
+    min: 30, max: 220, unit: 'lpm',
+    criticalMin: 40, criticalMax: 150,
+    warningMin: 60, warningMax: 100
+  },
+  respiratory_rate: { 
+    min: 8, max: 50, unit: 'rpm',
+    criticalMin: 10, criticalMax: 30,
+    warningMin: 12, warningMax: 20
+  },
+  temperature: { 
+    min: 30, max: 45, unit: '°C',
+    criticalMin: 35, criticalMax: 40,
+    warningMin: 36, warningMax: 37.5
+  },
+  oxygen_saturation: { 
+    min: 70, max: 100, unit: '%',
+    criticalMin: 85, criticalMax: 100,
+    warningMin: 95, warningMax: 100
+  },
+  weight: { min: 1, max: 300, unit: 'kg' },
+  height: { min: 30, max: 250, unit: 'cm' }
 };
+
+// ✅ VALIDACIÓN CENTRALIZADA IMPLEMENTADA
+// Todos los componentes ahora usan el sistema centralizado de validación
 ```
 
 #### **Alertas Automáticas**
