@@ -132,10 +132,23 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const [canvasSize, setCanvasSize] = useState({ width: 794, height: 1123 }); // Tamaño A4 en píxeles
   const [zoom, setZoom] = useState(0.8);
   const [showGrid, setShowGrid] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [gridSize, setGridSize] = useState(20);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [selectedElements, setSelectedElements] = useState<string[]>([]);
   const [draggedElement, setDraggedElement] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [resizeStartPos, setResizeStartPos] = useState({ x: 0, y: 0 });
+  const [resizeStartSize, setResizeStartSize] = useState({ width: 0, height: 0 });
+  const [showRulers, setShowRulers] = useState(true);
+  const [showGuides, setShowGuides] = useState(true);
+  const [alignmentGuides, setAlignmentGuides] = useState<Array<{type: 'vertical' | 'horizontal', position: number}>>([]);
+  const [copiedElements, setCopiedElements] = useState<Element[]>([]);
+  const [showMeasurements, setShowMeasurements] = useState(false);
+  const [measurementStart, setMeasurementStart] = useState<{x: number, y: number} | null>(null);
+  const [measurementEnd, setMeasurementEnd] = useState<{x: number, y: number} | null>(null);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
 
@@ -157,7 +170,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const [showValidation, setShowValidation] = useState(true);
 
   // Hooks de validación
-  const { validateArrayField, validateJSONBField, hasErrors, getAllErrors } = useValidation();
+  const { validateArrayField, validateJSONBField } = useValidation();
 
   // Estados para tipografía avanzada
   const [fontPresets] = useState([
@@ -522,6 +535,47 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     })));
   };
 
+  // ================= FUNCIONES DE SNAP TO GRID Y ALINEACIÓN =================
+  const snapToGridCoord = useCallback((value: number) => {
+    if (!snapToGrid) return value;
+    return Math.round(value / gridSize) * gridSize;
+  }, [snapToGrid, gridSize]);
+
+  const snapToGridSize = useCallback((value: number) => {
+    if (!snapToGrid) return value;
+    const snapped = Math.round(value / gridSize) * gridSize;
+    return Math.max(gridSize, snapped); // Mínimo una unidad de grid
+  }, [snapToGrid, gridSize]);
+
+  const getAlignmentGuides = useCallback((draggedId: string, newX: number, newY: number) => {
+    if (!showGuides) return [];
+    
+    const guides: Array<{type: 'vertical' | 'horizontal', position: number}> = [];
+    const threshold = 5; // Distancia para mostrar guías
+    
+    elements.forEach(element => {
+      if (element.id === draggedId || !element.isVisible) return;
+      
+      // Guías verticales (alineación horizontal)
+      if (Math.abs(element.position.x - newX) < threshold) {
+        guides.push({ type: 'vertical', position: element.position.x });
+      }
+      if (Math.abs((element.position.x + element.size.width) - newX) < threshold) {
+        guides.push({ type: 'vertical', position: element.position.x + element.size.width });
+      }
+      
+      // Guías horizontales (alineación vertical)  
+      if (Math.abs(element.position.y - newY) < threshold) {
+        guides.push({ type: 'horizontal', position: element.position.y });
+      }
+      if (Math.abs((element.position.y + element.size.height) - newY) < threshold) {
+        guides.push({ type: 'horizontal', position: element.position.y + element.size.height });
+      }
+    });
+    
+    return guides;
+  }, [elements, showGuides]);
+
   // ================= FUNCIONES DE PLANTILLAS =================
   const loadTemplate = (templateId: string) => {
     const template = getTemplateById(templateId);
@@ -601,11 +655,13 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   // Manejadores de eventos
   const handleElementClick = (elementId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    setSelectedElement(elementId);
+    handleMultiSelect(elementId, event.ctrlKey || event.metaKey);
   };
 
   const handleCanvasClick = () => {
     setSelectedElement(null);
+    setSelectedElements([]);
+    setAlignmentGuides([]);
   };
 
   const handleMouseDown = (elementId: string, event: React.MouseEvent) => {
@@ -627,22 +683,93 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   };
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (isResizing && resizeHandle && selectedElement) {
+      // Manejo de redimensionamiento inline
+      const deltaX = event.clientX - resizeStartPos.x;
+      const deltaY = event.clientY - resizeStartPos.y;
+      
+      let newWidth = resizeStartSize.width;
+      let newHeight = resizeStartSize.height;
+      
+      switch (resizeHandle) {
+        case 'se':
+          newWidth = resizeStartSize.width + deltaX / zoom;
+          newHeight = resizeStartSize.height + deltaY / zoom;
+          break;
+        case 'sw':
+          newWidth = resizeStartSize.width - deltaX / zoom;
+          newHeight = resizeStartSize.height + deltaY / zoom;
+          break;
+        case 'ne':
+          newWidth = resizeStartSize.width + deltaX / zoom;
+          newHeight = resizeStartSize.height - deltaY / zoom;
+          break;
+        case 'nw':
+          newWidth = resizeStartSize.width - deltaX / zoom;
+          newHeight = resizeStartSize.height - deltaY / zoom;
+          break;
+        case 'e':
+          newWidth = resizeStartSize.width + deltaX / zoom;
+          break;
+        case 'w':
+          newWidth = resizeStartSize.width - deltaX / zoom;
+          break;
+        case 's':
+          newHeight = resizeStartSize.height + deltaY / zoom;
+          break;
+        case 'n':
+          newHeight = resizeStartSize.height - deltaY / zoom;
+          break;
+      }
+      
+      newWidth = snapToGridSize(Math.max(20, newWidth));
+      newHeight = snapToGridSize(Math.max(20, newHeight));
+      
+      setElements(prev => prev.map(el => 
+        el.id === selectedElement 
+          ? { ...el, size: { width: newWidth, height: newHeight } }
+          : el
+      ));
+      return;
+    }
+    
     if (!draggedElement || !canvasRef.current) return;
     
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / zoom - dragOffset.x;
-    const y = (event.clientY - rect.top) / zoom - dragOffset.y;
+    let x = (event.clientX - rect.left) / zoom - dragOffset.x;
+    let y = (event.clientY - rect.top) / zoom - dragOffset.y;
+    
+    // Aplicar snap to grid
+    x = snapToGridCoord(Math.max(0, x));
+    y = snapToGridCoord(Math.max(0, y));
+    
+    // Obtener guías de alineación
+    const guides = getAlignmentGuides(draggedElement, x, y);
+    setAlignmentGuides(guides);
+    
+    // Aplicar snap a las guías
+    guides.forEach(guide => {
+      if (guide.type === 'vertical' && Math.abs(x - guide.position) < 5) {
+        x = guide.position;
+      }
+      if (guide.type === 'horizontal' && Math.abs(y - guide.position) < 5) {
+        y = guide.position;
+      }
+    });
     
     setElements(prev => prev.map(el => 
       el.id === draggedElement 
-        ? { ...el, position: { x: Math.max(0, x), y: Math.max(0, y) } }
+        ? { ...el, position: { x, y } }
         : el
     ));
-  }, [draggedElement, dragOffset, zoom]);
+  }, [draggedElement, dragOffset, zoom, isResizing, resizeHandle, selectedElement, resizeStartPos, resizeStartSize, snapToGridCoord, snapToGridSize, getAlignmentGuides]);
 
   const handleMouseUp = useCallback(() => {
     setDraggedElement(null);
     setDragOffset({ x: 0, y: 0 });
+    setAlignmentGuides([]);
+    setIsResizing(false);
+    setResizeHandle(null);
   }, []);
 
   // Funciones de manipulación de elementos
@@ -754,6 +881,232 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     setSelectedElement(newElement.id);
   };
 
+  // ================= FUNCIONES DE REDIMENSIONAMIENTO AVANZADO =================
+  const handleResizeStart = useCallback((elementId: string, handle: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    const element = elements.find(el => el.id === elementId);
+    if (!element) return;
+    
+    setIsResizing(true);
+    setResizeHandle(handle);
+    setResizeStartPos({ x: event.clientX, y: event.clientY });
+    setResizeStartSize({ width: element.size.width, height: element.size.height });
+  }, [elements]);
+
+  const handleResizeMove = useCallback((event: MouseEvent) => {
+    if (!isResizing || !resizeHandle || !selectedElement) return;
+    
+    const deltaX = event.clientX - resizeStartPos.x;
+    const deltaY = event.clientY - resizeStartPos.y;
+    
+    let newWidth = resizeStartSize.width;
+    let newHeight = resizeStartSize.height;
+    
+    // Calcular nuevo tamaño basado en el handle
+    switch (resizeHandle) {
+      case 'se': // Esquina sureste
+        newWidth = resizeStartSize.width + deltaX / zoom;
+        newHeight = resizeStartSize.height + deltaY / zoom;
+        break;
+      case 'sw': // Esquina suroeste  
+        newWidth = resizeStartSize.width - deltaX / zoom;
+        newHeight = resizeStartSize.height + deltaY / zoom;
+        break;
+      case 'ne': // Esquina noreste
+        newWidth = resizeStartSize.width + deltaX / zoom;
+        newHeight = resizeStartSize.height - deltaY / zoom;
+        break;
+      case 'nw': // Esquina noroeste
+        newWidth = resizeStartSize.width - deltaX / zoom;
+        newHeight = resizeStartSize.height - deltaY / zoom;
+        break;
+      case 'e': // Lado este
+        newWidth = resizeStartSize.width + deltaX / zoom;
+        break;
+      case 'w': // Lado oeste
+        newWidth = resizeStartSize.width - deltaX / zoom;
+        break;
+      case 's': // Lado sur
+        newHeight = resizeStartSize.height + deltaY / zoom;
+        break;
+      case 'n': // Lado norte
+        newHeight = resizeStartSize.height - deltaY / zoom;
+        break;
+    }
+    
+    // Aplicar snap to grid
+    newWidth = snapToGridSize(Math.max(20, newWidth));
+    newHeight = snapToGridSize(Math.max(20, newHeight));
+    
+    // Actualizar elemento
+    updateElement(selectedElement, {
+      size: { width: newWidth, height: newHeight }
+    });
+  }, [isResizing, resizeHandle, selectedElement, resizeStartPos, resizeStartSize, zoom, snapToGridSize, updateElement]);
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+    setResizeHandle(null);
+  }, []);
+
+  // ================= FUNCIONES DE SELECCIÓN MÚLTIPLE =================
+  const handleMultiSelect = useCallback((elementId: string, ctrlKey: boolean) => {
+    if (ctrlKey) {
+      setSelectedElements(prev => 
+        prev.includes(elementId) 
+          ? prev.filter(id => id !== elementId)
+          : [...prev, elementId]
+      );
+    } else {
+      setSelectedElement(elementId);
+      setSelectedElements([elementId]);
+    }
+  }, []);
+
+  const alignSelectedElements = useCallback((alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+    if (selectedElements.length < 2) return;
+    
+    const elementsToAlign = elements.filter(el => selectedElements.includes(el.id));
+    
+    switch (alignment) {
+      case 'left':
+        const leftmost = Math.min(...elementsToAlign.map(el => el.position.x));
+        elementsToAlign.forEach(el => {
+          updateElement(el.id, { position: { ...el.position, x: leftmost } });
+        });
+        break;
+      case 'right':
+        const rightmost = Math.max(...elementsToAlign.map(el => el.position.x + el.size.width));
+        elementsToAlign.forEach(el => {
+          updateElement(el.id, { position: { ...el.position, x: rightmost - el.size.width } });
+        });
+        break;
+      case 'center':
+        const centerX = (Math.min(...elementsToAlign.map(el => el.position.x)) + 
+                       Math.max(...elementsToAlign.map(el => el.position.x + el.size.width))) / 2;
+        elementsToAlign.forEach(el => {
+          updateElement(el.id, { position: { ...el.position, x: centerX - el.size.width / 2 } });
+        });
+        break;
+      case 'top':
+        const topmost = Math.min(...elementsToAlign.map(el => el.position.y));
+        elementsToAlign.forEach(el => {
+          updateElement(el.id, { position: { ...el.position, y: topmost } });
+        });
+        break;
+      case 'middle':
+        const centerY = (Math.min(...elementsToAlign.map(el => el.position.y)) + 
+                        Math.max(...elementsToAlign.map(el => el.position.y + el.size.height))) / 2;
+        elementsToAlign.forEach(el => {
+          updateElement(el.id, { position: { ...el.position, y: centerY - el.size.height / 2 } });
+        });
+        break;
+      case 'bottom':
+        const bottommost = Math.max(...elementsToAlign.map(el => el.position.y + el.size.height));
+        elementsToAlign.forEach(el => {
+          updateElement(el.id, { position: { ...el.position, y: bottommost - el.size.height } });
+        });
+        break;
+    }
+  }, [selectedElements, elements, updateElement]);
+
+  // ================= SISTEMA DE COPIAR/PEGAR =================
+  const copySelectedElements = useCallback(() => {
+    const elementsToCopy = elements.filter(el => 
+      selectedElements.includes(el.id) || el.id === selectedElement
+    );
+    setCopiedElements(elementsToCopy);
+  }, [elements, selectedElements, selectedElement]);
+
+  const pasteElements = useCallback(() => {
+    if (copiedElements.length === 0) return;
+    
+    const newElements: Element[] = copiedElements.map(el => ({
+      ...el,
+      id: `${el.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      position: { x: el.position.x + 20, y: el.position.y + 20 },
+      zIndex: Math.max(...elements.map(e => e.zIndex)) + 1
+    }));
+    
+    setElements(prev => [...prev, ...newElements]);
+    setSelectedElements(newElements.map(el => el.id));
+    setSelectedElement(newElements[0]?.id || null);
+  }, [copiedElements, elements]);
+
+  // ================= HERRAMIENTAS DE DISTRIBUCIÓN =================
+  const distributeSelectedElements = useCallback((direction: 'horizontal' | 'vertical') => {
+    if (selectedElements.length < 3) return;
+    
+    const elementsToDistribute = elements.filter(el => selectedElements.includes(el.id))
+      .sort((a, b) => direction === 'horizontal' ? a.position.x - b.position.x : a.position.y - b.position.y);
+    
+    if (elementsToDistribute.length < 3) return;
+    
+    const first = elementsToDistribute[0];
+    const last = elementsToDistribute[elementsToDistribute.length - 1];
+    
+    const totalSpace = direction === 'horizontal' 
+      ? (last.position.x + last.size.width) - first.position.x
+      : (last.position.y + last.size.height) - first.position.y;
+    
+    const totalElementSize = elementsToDistribute.reduce((sum, el) => 
+      sum + (direction === 'horizontal' ? el.size.width : el.size.height), 0
+    );
+    
+    const spacing = (totalSpace - totalElementSize) / (elementsToDistribute.length - 1);
+    
+    let currentPosition = direction === 'horizontal' ? first.position.x : first.position.y;
+    
+    elementsToDistribute.forEach((el, index) => {
+      if (index === 0) {
+        currentPosition += direction === 'horizontal' ? el.size.width : el.size.height;
+        return;
+      }
+      if (index === elementsToDistribute.length - 1) return;
+      
+      currentPosition += spacing;
+      
+      updateElement(el.id, {
+        position: direction === 'horizontal' 
+          ? { ...el.position, x: currentPosition }
+          : { ...el.position, y: currentPosition }
+      });
+      
+      currentPosition += direction === 'horizontal' ? el.size.width : el.size.height;
+    });
+  }, [selectedElements, elements, updateElement]);
+
+  // ================= HERRAMIENTAS DE MEDICIÓN =================
+  const startMeasurement = useCallback((x: number, y: number) => {
+    setMeasurementStart({ x, y });
+    setMeasurementEnd(null);
+    setShowMeasurements(true);
+  }, []);
+
+  const updateMeasurement = useCallback((x: number, y: number) => {
+    if (measurementStart) {
+      setMeasurementEnd({ x, y });
+    }
+  }, [measurementStart]);
+
+  const getDistance = useCallback(() => {
+    if (!measurementStart || !measurementEnd) return 0;
+    const dx = measurementEnd.x - measurementStart.x;
+    const dy = measurementEnd.y - measurementStart.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }, [measurementStart, measurementEnd]);
+
+  // ================= ZOOM CON RUEDA DEL MOUSE =================
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? -0.1 : 0.1;
+      setZoom(prev => Math.max(0.25, Math.min(3, prev + delta)));
+    }
+  }, []);
+
   // Generar QR Code
   const generateQRCode = async () => {
     try {
@@ -814,11 +1167,19 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   // Efecto para shortcuts de teclado
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey) {
-        switch (event.key) {
+      // Prevenir atajos cuando se está editando texto
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const { key, ctrlKey, metaKey, shiftKey, altKey } = event;
+      const isCtrl = ctrlKey || metaKey;
+
+      if (isCtrl) {
+        switch (key) {
           case 'z':
             event.preventDefault();
-            if (event.shiftKey) {
+            if (shiftKey) {
               redo();
             } else {
               undo();
@@ -830,7 +1191,17 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
             break;
           case 's':
             event.preventDefault();
-            saveToLocalStorage();
+            handleSave();
+            break;
+          case 'c':
+            if (selectedElement || selectedElements.length > 0) {
+              event.preventDefault();
+              copySelectedElements();
+            }
+            break;
+          case 'v':
+            event.preventDefault();
+            pasteElements();
             break;
           case 'd':
             event.preventDefault();
@@ -838,18 +1209,99 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
               duplicateElement(selectedElement);
             }
             break;
+          case 'a':
+            event.preventDefault();
+            setSelectedElements(elements.filter(el => el.isVisible).map(el => el.id));
+            break;
+          case 'g':
+            event.preventDefault();
+            setShowGrid(!showGrid);
+            break;
+          case 'r':
+            if (altKey) {
+              event.preventDefault();
+              setShowRulers(!showRulers);
+            }
+            break;
+          case 'l':
+            if (altKey) {
+              event.preventDefault();
+              setShowElementPanel(!showElementPanel);
+            }
+            break;
+          case 'h':
+            if (altKey && selectedElements.length >= 3) {
+              event.preventDefault();
+              distributeSelectedElements('horizontal');
+            }
+            break;
+          case 'v':
+            if (altKey && selectedElements.length >= 3) {
+              event.preventDefault();
+              distributeSelectedElements('vertical');
+            }
+            break;
+          case 'm':
+            if (altKey) {
+              event.preventDefault();
+              setShowMeasurements(!showMeasurements);
+            }
+            break;
+          case '=':
+          case '+':
+            event.preventDefault();
+            setZoom(prev => Math.min(3, prev + 0.25));
+            break;
+          case '-':
+            event.preventDefault();
+            setZoom(prev => Math.max(0.25, prev - 0.25));
+            break;
+          case '0':
+            event.preventDefault();
+            setZoom(1);
+            break;
         }
       }
       
-      if (event.key === 'Delete' && selectedElement) {
+      // Teclas sin Ctrl
+      switch (key) {
+        case 'Delete':
+        case 'Backspace':
+          if (selectedElement || selectedElements.length > 0) {
+            event.preventDefault();
+            if (selectedElements.length > 0) {
+              selectedElements.forEach(id => deleteElement(id));
+            } else if (selectedElement) {
+              deleteElement(selectedElement);
+            }
+          }
+          break;
+        case 'Escape':
+          setSelectedElement(null);
+          setSelectedElements([]);
+          setMeasurementStart(null);
+          setMeasurementEnd(null);
+          setShowMeasurements(false);
+          break;
+      }
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
-        deleteElement(selectedElement);
+        const delta = event.deltaY > 0 ? -0.1 : 0.1;
+        setZoom(prev => Math.max(0.25, Math.min(3, prev + delta)));
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElement, undo, redo]);
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('wheel', handleWheel);
+    };
+  }, [selectedElement, selectedElements, undo, redo, copySelectedElements, pasteElements, showGrid, showRulers, showElementPanel, distributeSelectedElements, showMeasurements]);
 
   // Efecto para cargar datos al inicio
   useEffect(() => {
@@ -1709,10 +2161,135 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
               </div>
             )}
 
+            {/* Herramientas de Alineación */}
+            {selectedElements.length > 1 && (
+              <div className="bg-gray-700 p-3 rounded-lg">
+                <h3 className="text-gray-300 font-medium mb-3 flex items-center">
+                  <AlignLeft className="h-4 w-4 mr-2" />
+                  Alineación ({selectedElements.length} elementos)
+                </h3>
+                
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <button
+                    onClick={() => alignSelectedElements('left')}
+                    className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                    title="Alinear a la izquierda"
+                  >
+                    <AlignLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => alignSelectedElements('center')}
+                    className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                    title="Alinear al centro"
+                  >
+                    <AlignCenter className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => alignSelectedElements('right')}
+                    className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                    title="Alinear a la derecha"
+                  >
+                    <AlignRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => alignSelectedElements('top')}
+                    className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                    title="Alinear arriba"
+                  >
+                    <AlignLeft className="h-4 w-4 transform rotate-90" />
+                  </button>
+                  <button
+                    onClick={() => alignSelectedElements('middle')}
+                    className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                    title="Alinear al medio"
+                  >
+                    <AlignCenter className="h-4 w-4 transform rotate-90" />
+                  </button>
+                  <button
+                    onClick={() => alignSelectedElements('bottom')}
+                    className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                    title="Alinear abajo"
+                  >
+                    <AlignRight className="h-4 w-4 transform rotate-90" />
+                  </button>
+                </div>
+
+                {/* Herramientas de Distribución */}
+                {selectedElements.length >= 3 && (
+                  <div className="border-t border-gray-600 pt-3">
+                    <h4 className="text-gray-400 text-xs mb-2">Distribución Equitativa</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => distributeSelectedElements('horizontal')}
+                        className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                        title="Distribuir horizontalmente (Ctrl+Alt+H)"
+                      >
+                        <Move className="h-4 w-4 mr-1" />
+                        Horizontal
+                      </button>
+                      <button
+                        onClick={() => distributeSelectedElements('vertical')}
+                        className="flex items-center justify-center p-2 bg-gray-600 hover:bg-gray-500 rounded text-gray-300 text-sm"
+                        title="Distribuir verticalmente (Ctrl+Alt+V)"
+                      >
+                        <Move className="h-4 w-4 transform rotate-90 mr-1" />
+                        Vertical
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Herramientas de Copiar/Pegar */}
+            <div className="bg-gray-700 p-3 rounded-lg">
+              <h3 className="text-gray-300 font-medium mb-3 flex items-center">
+                <Copy className="h-4 w-4 mr-2" />
+                Copiar/Pegar
+              </h3>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={copySelectedElements}
+                  disabled={!selectedElement && selectedElements.length === 0}
+                  className={`flex items-center justify-center p-2 rounded text-sm ${
+                    selectedElement || selectedElements.length > 0
+                      ? 'bg-gray-600 hover:bg-gray-500 text-gray-300'
+                      : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                  }`}
+                  title="Copiar elementos (Ctrl+C)"
+                >
+                  <Copy className="h-4 w-4 mr-1" />
+                  Copiar
+                </button>
+                <button
+                  onClick={pasteElements}
+                  disabled={copiedElements.length === 0}
+                  className={`flex items-center justify-center p-2 rounded text-sm ${
+                    copiedElements.length > 0
+                      ? 'bg-gray-600 hover:bg-gray-500 text-gray-300'
+                      : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                  }`}
+                  title="Pegar elementos (Ctrl+V)"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Pegar
+                </button>
+              </div>
+              
+              {copiedElements.length > 0 && (
+                <div className="mt-2 text-xs text-gray-400">
+                  📋 {copiedElements.length} elemento(s) copiado(s)
+                </div>
+              )}
+            </div>
+
             {/* Configuración del Canvas */}
             <div>
-              <h3 className="text-gray-300 font-medium mb-2">Canvas</h3>
-              <div className="flex items-center justify-between">
+              <h3 className="text-gray-300 font-medium mb-2">Canvas Avanzado</h3>
+              
+              {/* Grilla */}
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-gray-400 text-sm">Mostrar grilla</span>
                 <button
                   onClick={() => setShowGrid(!showGrid)}
@@ -1726,6 +2303,142 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                     }`}
                   />
                 </button>
+              </div>
+
+              {/* Snap to Grid */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-400 text-sm">Snap to grid</span>
+                <button
+                  onClick={() => setSnapToGrid(!snapToGrid)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    snapToGrid ? 'bg-blue-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      snapToGrid ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Tamaño de grilla */}
+              <div className="mb-2">
+                <label className="block text-gray-400 text-xs mb-1">Tamaño de grilla</label>
+                <select
+                  value={gridSize}
+                  onChange={(e) => setGridSize(Number(e.target.value))}
+                  className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm"
+                >
+                  <option value={10}>10px</option>
+                  <option value={20}>20px</option>
+                  <option value={25}>25px</option>
+                  <option value={50}>50px</option>
+                </select>
+              </div>
+
+              {/* Guías de alineación */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-400 text-sm">Guías inteligentes</span>
+                <button
+                  onClick={() => setShowGuides(!showGuides)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    showGuides ? 'bg-blue-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      showGuides ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Reglas */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-400 text-sm">Mostrar reglas</span>
+                <button
+                  onClick={() => setShowRulers(!showRulers)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    showRulers ? 'bg-blue-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      showRulers ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Herramientas de Medición */}
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 text-sm">Herramientas de medición</span>
+                <button
+                  onClick={() => setShowMeasurements(!showMeasurements)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    showMeasurements ? 'bg-blue-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      showMeasurements ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {showMeasurements && measurementStart && measurementEnd && (
+                <div className="mt-2 p-2 bg-gray-600 rounded text-xs">
+                  <div className="text-gray-300">📏 Distancia: {Math.round(getDistance())}px</div>
+                  <div className="text-gray-400">
+                    ΔX: {Math.round(measurementEnd.x - measurementStart.x)}px | 
+                    ΔY: {Math.round(measurementEnd.y - measurementStart.y)}px
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Atajos de Teclado */}
+            <div className="bg-gray-700 p-3 rounded-lg">
+              <h3 className="text-gray-300 font-medium mb-3 flex items-center">
+                <HelpCircle className="h-4 w-4 mr-2" />
+                Atajos de Teclado
+              </h3>
+              
+              <div className="space-y-1 text-xs text-gray-400">
+                <div className="flex justify-between">
+                  <span>Deshacer/Rehacer</span>
+                  <span>Ctrl+Z / Ctrl+Y</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Copiar/Pegar</span>
+                  <span>Ctrl+C / Ctrl+V</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Seleccionar todo</span>
+                  <span>Ctrl+A</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Duplicar</span>
+                  <span>Ctrl+D</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Eliminar</span>
+                  <span>Del / Backspace</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Zoom</span>
+                  <span>Ctrl + Mouse Wheel</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Grilla</span>
+                  <span>Ctrl+G</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Distribuir H/V</span>
+                  <span>Ctrl+Alt+H/V</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1927,9 +2640,67 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                     linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px),
                     linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px)
                   `,
-                  backgroundSize: '20px 20px'
+                  backgroundSize: `${gridSize}px ${gridSize}px`
                 }}
               />
+            )}
+
+            {/* Guías de alineación */}
+            {alignmentGuides.map((guide, index) => (
+              <div
+                key={index}
+                className="absolute pointer-events-none"
+                style={{
+                  backgroundColor: '#ff0080',
+                  opacity: 0.7,
+                  zIndex: 1000,
+                  ...(guide.type === 'vertical' 
+                    ? { 
+                        left: guide.position, 
+                        top: 0, 
+                        width: '1px', 
+                        height: '100%' 
+                      }
+                    : { 
+                        left: 0, 
+                        top: guide.position, 
+                        width: '100%', 
+                        height: '1px' 
+                      }
+                  )
+                }}
+              />
+            ))}
+
+            {/* Reglas */}
+            {showRulers && (
+              <>
+                {/* Regla horizontal */}
+                <div className="absolute -top-5 left-0 right-0 h-5 bg-gray-200 border-b border-gray-300 text-xs">
+                  {Array.from({ length: Math.ceil(canvasSize.width / 50) }, (_, i) => (
+                    <div
+                      key={i}
+                      className="absolute text-gray-600"
+                      style={{ left: i * 50, top: 2 }}
+                    >
+                      {i * 50}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Regla vertical */}
+                <div className="absolute -left-5 top-0 bottom-0 w-5 bg-gray-200 border-r border-gray-300 text-xs">
+                  {Array.from({ length: Math.ceil(canvasSize.height / 50) }, (_, i) => (
+                    <div
+                      key={i}
+                      className="absolute text-gray-600 transform -rotate-90 origin-left"
+                      style={{ left: 2, top: i * 50 + 10 }}
+                    >
+                      {i * 50}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
 
             {/* Elementos */}
@@ -1946,15 +2717,58 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                 >
                   {renderElement(element)}
                   
-                  {/* Asas de selección */}
+                  {/* Asas de selección avanzadas */}
                   {selectedElement === element.id && (
                     <>
+                      {/* Borde de selección */}
                       <div className="absolute -inset-1 border-2 border-blue-500 pointer-events-none" />
-                      <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 rounded-full" />
-                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
-                      <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 rounded-full" />
-                      <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
+                      
+                      {/* Asas de esquina para redimensionar */}
+                      <div 
+                        className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 rounded-sm cursor-nw-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 'nw', e)}
+                      />
+                      <div 
+                        className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-sm cursor-ne-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 'ne', e)}
+                      />
+                      <div 
+                        className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-sm cursor-sw-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 'sw', e)}
+                      />
+                      <div 
+                        className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-sm cursor-se-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 'se', e)}
+                      />
+                      
+                      {/* Asas de lado para redimensionar */}
+                      <div 
+                        className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-3 h-2 bg-blue-500 rounded-sm cursor-n-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 'n', e)}
+                      />
+                      <div 
+                        className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-2 bg-blue-500 rounded-sm cursor-s-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 's', e)}
+                      />
+                      <div 
+                        className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-3 bg-blue-500 rounded-sm cursor-w-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 'w', e)}
+                      />
+                      <div 
+                        className="absolute -right-1 top-1/2 transform -translate-y-1/2 w-2 h-3 bg-blue-500 rounded-sm cursor-e-resize hover:bg-blue-600"
+                        onMouseDown={(e) => handleResizeStart(element.id, 'e', e)}
+                      />
+                      
+                      {/* Información del elemento */}
+                      <div className="absolute -top-6 left-0 bg-blue-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                        {element.size.width} × {element.size.height}
+                      </div>
                     </>
+                  )}
+                  
+                  {/* Indicador de selección múltiple */}
+                  {selectedElements.includes(element.id) && selectedElement !== element.id && (
+                    <div className="absolute -inset-1 border-2 border-orange-400 pointer-events-none opacity-70" />
                   )}
                 </div>
               ))}
@@ -1962,11 +2776,14 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         </div>
       </div>
 
-      {/* Barra lateral derecha - Capas */}
+      {/* Barra lateral derecha - Capas Avanzadas */}
       {showElementPanel && (
-        <div className="w-64 bg-gray-800 border-l border-gray-700 p-4">
+        <div className="w-72 bg-gray-800 border-l border-gray-700 p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white font-medium">Elementos (Capas)</h3>
+            <h3 className="text-white font-medium flex items-center">
+              <Layers className="h-4 w-4 mr-2" />
+              Capas ({elements.length})
+            </h3>
             <button
               onClick={() => setShowElementPanel(false)}
               className="text-gray-400 hover:text-white"
@@ -1974,53 +2791,153 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Herramientas de Capas */}
+          <div className="mb-4 flex items-center justify-between">
+            <div className="text-xs text-gray-400">
+              {selectedElements.length > 0 ? `${selectedElements.length} seleccionados` : 'Ninguno seleccionado'}
+            </div>
+            <div className="flex space-x-1">
+              <button
+                onClick={() => {
+                  if (selectedElement) {
+                    const element = elements.find(el => el.id === selectedElement);
+                    if (element) {
+                      updateElement(selectedElement, { 
+                        zIndex: Math.max(...elements.map(el => el.zIndex)) + 1 
+                      });
+                    }
+                  }
+                }}
+                disabled={!selectedElement}
+                className={`p-1 rounded text-xs ${
+                  selectedElement ? 'bg-gray-600 hover:bg-gray-500 text-gray-300' : 'bg-gray-700 text-gray-500'
+                }`}
+                title="Traer al frente"
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedElement) {
+                    const element = elements.find(el => el.id === selectedElement);
+                    if (element) {
+                      updateElement(selectedElement, { 
+                        zIndex: Math.min(...elements.map(el => el.zIndex)) - 1 
+                      });
+                    }
+                  }
+                }}
+                disabled={!selectedElement}
+                className={`p-1 rounded text-xs ${
+                  selectedElement ? 'bg-gray-600 hover:bg-gray-500 text-gray-300' : 'bg-gray-700 text-gray-500'
+                }`}
+                title="Enviar atrás"
+              >
+                ↓
+              </button>
+            </div>
+          </div>
           
-          <div className="space-y-1">
+          <div className="space-y-1 max-h-96 overflow-y-auto">
             {elements
               .sort((a, b) => b.zIndex - a.zIndex)
               .map(element => (
                 <div
                   key={element.id}
-                  onClick={() => setSelectedElement(element.id)}
-                  className={`flex items-center justify-between p-2 rounded cursor-pointer ${
+                  onClick={() => handleMultiSelect(element.id, false)}
+                  className={`group flex items-center justify-between p-3 rounded cursor-pointer transition-all ${
                     selectedElement === element.id
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-lg'
+                      : selectedElements.includes(element.id)
+                      ? 'bg-orange-500 text-white'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
                 >
-                  <div className="flex items-center">
-                    {element.type === 'text' && <Type className="h-4 w-4 mr-2" />}
-                    {element.type === 'logo' && <Image className="h-4 w-4 mr-2" />}
-                    {element.type === 'signature' && <FileSignature className="h-4 w-4 mr-2" />}
-                    {element.type === 'qr' && <QrCode className="h-4 w-4 mr-2" />}
-                    {element.type === 'separator' && <Separator className="h-4 w-4 mr-2" />}
-                    {element.type === 'box' && <Square className="h-4 w-4 mr-2" />}
-                    {element.type === 'date' && <Calendar className="h-4 w-4 mr-2" />}
-                    {element.type === 'time' && <Clock className="h-4 w-4 mr-2" />}
-                    {element.type === 'table' && <Table className="h-4 w-4 mr-2" />}
-                    {element.type === 'icon' && <User className="h-4 w-4 mr-2" />}
-                    <span className="text-sm truncate">
-                      {element.id.charAt(0).toUpperCase() + element.id.slice(1)}
-                    </span>
+                  <div className="flex items-center flex-1 min-w-0">
+                    <div className="mr-2 flex-shrink-0">
+                      {element.type === 'text' && <Type className="h-4 w-4" />}
+                      {element.type === 'logo' && <Image className="h-4 w-4" />}
+                      {element.type === 'signature' && <FileSignature className="h-4 w-4" />}
+                      {element.type === 'qr' && <QrCode className="h-4 w-4" />}
+                      {element.type === 'separator' && <Separator className="h-4 w-4" />}
+                      {element.type === 'box' && <Square className="h-4 w-4" />}
+                      {element.type === 'date' && <Calendar className="h-4 w-4" />}
+                      {element.type === 'time' && <Clock className="h-4 w-4" />}
+                      {element.type === 'table' && <Table className="h-4 w-4" />}
+                      {element.type === 'icon' && <User className="h-4 w-4" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {element.type.charAt(0).toUpperCase() + element.type.slice(1)}
+                      </div>
+                      <div className="text-xs opacity-75 truncate">
+                        {element.size.width}×{element.size.height} | Z:{element.zIndex}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-1">
+                  
+                  <div className="flex items-center space-x-1 ml-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateElement(element.id, { isLocked: !element.isLocked });
+                      }}
+                      className={`p-1 rounded transition-colors ${
+                        element.isLocked
+                          ? 'text-red-400 hover:text-red-300'
+                          : 'text-gray-400 hover:text-gray-300'
+                      }`}
+                      title={element.isLocked ? 'Desbloquear' : 'Bloquear'}
+                    >
+                      {element.isLocked ? <Shield className="h-3 w-3" /> : <Target className="h-3 w-3" />}
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         updateElement(element.id, { isVisible: !element.isVisible });
                       }}
-                      className={`p-1 rounded ${
+                      className={`p-1 rounded transition-colors ${
                         element.isVisible
                           ? 'text-gray-300 hover:text-white'
                           : 'text-gray-500 hover:text-gray-400'
                       }`}
+                      title={element.isVisible ? 'Ocultar' : 'Mostrar'}
                     >
                       <Eye className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        duplicateElement(element.id);
+                      }}
+                      className="p-1 rounded text-gray-400 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Duplicar elemento"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteElement(element.id);
+                      }}
+                      className="p-1 rounded text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Eliminar elemento"
+                    >
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
               ))}
           </div>
+
+          {elements.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <Layers className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No hay elementos en el canvas</p>
+              <p className="text-xs">Agrega elementos desde el panel de diseño</p>
+            </div>
+          )}
         </div>
       )}
     </div>
