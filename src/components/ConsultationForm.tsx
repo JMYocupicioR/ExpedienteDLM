@@ -1,10 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, X, FileText, AlertCircle, Clock, CheckCircle, Loader2 } from 'lucide-react';
+import { Save, X, Clock, AlertCircle, CheckCircle, Eye, History, FileText, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { supabase } from '../lib/supabase';
+// ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
+import { 
+  VITAL_SIGNS_RANGES, 
+  validateVitalSign, 
+  SYSTEM_LIMITS 
+} from '../lib/medicalConfig';
+import { validateJSONBSchema } from '../lib/validation';
+import { useValidation } from '../hooks/useValidation';
 import DynamicPhysicalExamForm from './DynamicPhysicalExamForm';
 import PhysicalExamTemplates from './PhysicalExamTemplates';
-import type { Database } from '../lib/database.types';
+import type { 
+  Database 
+} from '../lib/database.types';
 
 type PhysicalExamTemplate = Database['public']['Tables']['physical_exam_templates']['Row'];
 
@@ -62,6 +72,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  // ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
+  const { validateCompleteForm, validateVitalSignsField } = useValidation();
+
   const { register, handleSubmit, setValue, watch, formState: { errors }, reset } = useForm<ConsultationFormData>({
     defaultValues: {
       current_condition: '',
@@ -83,16 +96,27 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
 
   const watchedData = watch();
 
-  // ✅ NUEVO: Auto-save universal con cleanup apropiado
+  // ===== AUTO-SAVE MEJORADO CON VALIDACIÓN CENTRALIZADA =====
   const performAutoSave = useCallback(async (data: ConsultationFormData) => {
     try {
       setSaveState('saving');
+      
+      // Validar usando sistema centralizado antes de guardar
+      const validationResult = validateCompleteForm(data, 'consultation');
+      
+      // Si hay errores críticos, no auto-guardar
+      if (!validationResult.isValid && validationResult.errors.length > 0) {
+        console.warn('Auto-save cancelado debido a errores de validación:', validationResult.errors);
+        setSaveState('error');
+        return;
+      }
       
       // Save to localStorage as backup
       localStorage.setItem(`consultation_draft_${patientId}`, JSON.stringify({
         ...data,
         lastSaved: new Date().toISOString(),
-        physicalExamData
+        physicalExamData,
+        validationWarnings: validationResult.warnings
       }));
       
       setLastAutoSave(new Date());
@@ -106,7 +130,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
       console.error('Auto-save error:', error);
       setSaveState('error');
     }
-  }, [patientId, physicalExamData]);
+  }, [patientId, physicalExamData, validateCompleteForm]);
 
   // ✅ NUEVO: Auto-save effect with debounce
   useEffect(() => {
@@ -391,57 +415,56 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
     }
   };
 
-  // ✅ MEJORADO: Submit with better validation
+  // ===== FUNCIÓN MEJORADA: Submit con validación robusta
   const onSubmit = async (data: ConsultationFormData) => {
     try {
       setLoading(true);
       setError(null);
-      setSaveState('saving');
 
-      // Validation checks
-      if (!data.current_condition.trim()) {
-        throw new Error('El padecimiento actual es requerido');
-      }
-      if (!data.diagnosis.trim()) {
-        throw new Error('El diagnóstico es requerido');
-      }
-      if (!data.treatment.trim()) {
-        throw new Error('El tratamiento es requerido');
+      // Validación completa usando sistema centralizado
+      const validationResult = validateCompleteForm(data, 'consultation');
+      
+      if (!validationResult.isValid) {
+        setError(`Errores de validación: ${validationResult.errors.join('; ')}`);
+        return;
       }
 
-      const { error: insertError } = await supabase
-        .from('consultations')
-        .insert({
-          patient_id: patientId,
-          doctor_id: doctorId,
-          current_condition: data.current_condition,
-          vital_signs: data.vital_signs,
-          physical_examination: data.physical_examination,
-          diagnosis: data.diagnosis,
-          prognosis: data.prognosis,
-          treatment: data.treatment
-        });
+      // Mostrar advertencias si las hay (no bloquear)
+      if (validationResult.warnings.length > 0) {
+        console.warn('Advertencias de consulta:', validationResult.warnings);
+      }
 
-      if (insertError) {
-        if (insertError.code === '42501') {
-          throw new Error('No tienes permisos para crear consultas');
-        } else {
-          throw new Error('Error al guardar la consulta');
+      // Validar signos vitales específicamente si están presentes
+      if (data.vital_signs) {
+        const vitalSignsValidation = validateVitalSignsField(data.vital_signs, false);
+        if (!vitalSignsValidation.isValid) {
+          setError(`Errores en signos vitales: ${vitalSignsValidation.errors.join('; ')}`);
+          return;
         }
       }
 
-      // Clear auto-save draft
+      const consultationData = {
+        patient_id: patientId,
+        doctor_id: doctorId,
+        current_condition: data.current_condition,
+        vital_signs: data.vital_signs || null,
+        physical_examination: data.physical_examination || null,
+        diagnosis: data.diagnosis,
+        prognosis: data.prognosis || null,
+        treatment: data.treatment,
+        physical_exam_data: physicalExamData,
+        created_at: new Date().toISOString(),
+        validation_warnings: validationResult.warnings
+      };
+
+      await onSave(consultationData);
+      
+      // Clear draft after successful save
       localStorage.removeItem(`consultation_draft_${patientId}`);
       
-      setSaveState('saved');
-      setHasUnsavedChanges(false);
-      onSave();
-      onClose();
-
     } catch (err: any) {
       console.error('Error saving consultation:', err);
-      setError(err.message);
-      setSaveState('error');
+      setError(err.message || 'Error al guardar la consulta');
     } finally {
       setLoading(false);
     }
