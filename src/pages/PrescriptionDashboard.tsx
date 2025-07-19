@@ -11,6 +11,16 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import VisualPrescriptionEditor from '../components/VisualPrescriptionEditor';
 import { renderTemplateElement, TemplateElement } from '../components/VisualPrescriptionRenderer';
+// ===== NUEVAS IMPORTACIONES PARA SISTEMA CENTRALIZADO =====
+import { 
+  validateMedication, 
+  checkDrugInteractions, 
+  calculatePrescriptionExpiry,
+  MEDICATION_CONSTRAINTS,
+  SYSTEM_LIMITS
+} from '../lib/medicalConfig';
+import { validateJSONBSchema } from '../lib/validation';
+import { useValidation } from '../hooks/useValidation';
 
 interface Medication {
   name: string;
@@ -149,18 +159,48 @@ export default function PrescriptionDashboard() {
     }
   };
 
-  const validatePrescription = (prescriptionData: any) => {
+  // ===== NUEVA VALIDACIÓN ROBUSTA USANDO SISTEMA CENTRALIZADO =====
+  const { validateCompleteForm, validateMedicationsField } = useValidation();
+
+  const validatePrescriptionRobust = (prescriptionData: any) => {
+    // Usar el sistema de validación centralizado
+    const validation = validateCompleteForm(prescriptionData, 'prescription', {
+      patientAllergies: [], // Se pasaría desde props o estado
+      doctorSpecialty: 'medicina_general' // Se obtendría del perfil del doctor
+    });
+
+    if (!validation.isValid) {
+      throw new Error(validation.errors.join('; '));
+    }
+
+    // Validaciones adicionales específicas
     if (!prescriptionData.patient_id) {
       throw new Error('Debe seleccionar un paciente');
     }
     if (!prescriptionData.diagnosis) {
       throw new Error('Debe ingresar un diagnóstico');
     }
+
+    // Validar medicamentos usando el nuevo sistema
     if (!prescriptionData.medications?.length || prescriptionData.medications.every((m: any) => !m.name)) {
       throw new Error('Debe agregar al menos un medicamento con nombre');
     }
-    if (!prescriptionData.medications.every((m: any) => m.name && m.dosage && m.frequency && m.duration)) {
-      throw new Error('Todos los medicamentos deben tener nombre, dosis, frecuencia y duración');
+
+    // Verificar límite máximo
+    if (prescriptionData.medications.length > SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION) {
+      throw new Error(`Máximo ${SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION} medicamentos permitidos por receta`);
+    }
+
+    // Validar cada medicamento con el sistema centralizado
+    const medicationsValidation = validateMedicationsField(prescriptionData.medications);
+    if (!medicationsValidation.isValid) {
+      throw new Error(`Errores en medicamentos: ${medicationsValidation.errors.join('; ')}`);
+    }
+
+    // Mostrar advertencias si las hay (no bloquear, solo informar)
+    if (medicationsValidation.warnings.length > 0) {
+      console.warn('Advertencias de medicamentos:', medicationsValidation.warnings);
+      // Aquí podrías mostrar un toast o modal con las advertencias
     }
   };
   
@@ -195,7 +235,7 @@ export default function PrescriptionDashboard() {
       setIsLoading(true);
       
       const doctorId = await checkPermissions();
-      validatePrescription(prescriptionData);
+      validatePrescriptionRobust(prescriptionData); // Usar nueva validación
 
       // Verificar que el paciente existe
       const { data: patient, error: patientError } = await supabase
@@ -1095,19 +1135,25 @@ interface EnhancedPrescriptionFormProps {
   saveMessage?: string;
 }
 
-// Base de datos de medicamentos comunes para autocompletado
-const commonMedications = [
-  { name: 'Amoxicilina', dosages: ['250mg', '500mg', '875mg'], frequencies: ['Cada 8 horas', 'Cada 12 horas'] },
-  { name: 'Ibuprofeno', dosages: ['200mg', '400mg', '600mg', '800mg'], frequencies: ['Cada 4-6 horas', 'Cada 6 horas', 'Cada 8 horas'] },
-  { name: 'Paracetamol', dosages: ['500mg', '650mg', '1g'], frequencies: ['Cada 4-6 horas', 'Cada 6 horas', 'Cada 8 horas'] },
-  { name: 'Losartán', dosages: ['25mg', '50mg', '100mg'], frequencies: ['Una vez al día', 'Dos veces al día'] },
-  { name: 'Metformina', dosages: ['500mg', '850mg', '1000mg'], frequencies: ['Una vez al día', 'Dos veces al día', 'Tres veces al día'] },
-  { name: 'Omeprazol', dosages: ['20mg', '40mg'], frequencies: ['Una vez al día', 'Dos veces al día'] },
-  { name: 'Atorvastatina', dosages: ['10mg', '20mg', '40mg', '80mg'], frequencies: ['Una vez al día'] },
-  { name: 'Amlodipino', dosages: ['5mg', '10mg'], frequencies: ['Una vez al día'] },
-  { name: 'Ciprofloxacino', dosages: ['250mg', '500mg', '750mg'], frequencies: ['Cada 12 horas'] },
-  { name: 'Azitromicina', dosages: ['250mg', '500mg'], frequencies: ['Una vez al día'] }
-];
+// ===== MEDICAMENTOS COMUNES USANDO CONFIGURACIÓN CENTRALIZADA =====
+const commonMedications = Object.keys(MEDICATION_CONSTRAINTS).map(name => {
+  const constraint = MEDICATION_CONSTRAINTS[name];
+  return {
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    dosages: [`${constraint.minDosage}mg`, `${constraint.maxDosage}mg`],
+    frequencies: constraint.allowedFrequencies.map(freq => 
+      freq.charAt(0).toUpperCase() + freq.slice(1)
+    ),
+    maxDuration: constraint.maxDurationDays,
+    controlled: constraint.controlledSubstance || false,
+    requiresSpecialist: constraint.requiresSpecialist || false,
+    // Información adicional para autocompletado inteligente
+    category: name.includes('amoxicilina') || name.includes('ciprofloxacino') ? 'antibiótico' :
+             name.includes('ibuprofeno') || name.includes('paracetamol') ? 'analgésico' :
+             name.includes('losartan') || name.includes('atorvastatina') ? 'cardiovascular' :
+             name.includes('tramadol') ? 'controlado' : 'general'
+  };
+});
 
 // Verificador de interacciones medicamentosas (simulado)
 const drugInteractions: { [key: string]: string[] } = {
@@ -1188,18 +1234,54 @@ function EnhancedPrescriptionForm({
     }
   }, [medications, patientName]);
 
-  // Verificar interacciones medicamentosas
+  // ===== VERIFICACIÓN DE INTERACCIONES USANDO SISTEMA CENTRALIZADO =====
   useEffect(() => {
     const alerts: string[] = [];
+    
+    // Obtener nombres de medicamentos válidos
+    const medicationNames = medications
+      .filter(med => med.name && med.name.trim())
+      .map(med => med.name.trim());
+    
+    if (medicationNames.length >= 2) {
+      // Usar función centralizada de verificación de interacciones
+      const interactions = checkDrugInteractions(medicationNames);
+      interactions.forEach(interaction => {
+        alerts.push(`⚠️ ${interaction}`);
+      });
+    }
+
+    // Validaciones adicionales de medicamentos individuales
     medications.forEach((med, index) => {
-      if (med.name && drugInteractions[med.name]) {
-        medications.forEach((otherMed, otherIndex) => {
-          if (index !== otherIndex && drugInteractions[med.name].includes(otherMed.name)) {
-            alerts.push(`⚠️ Posible interacción entre ${med.name} y ${otherMed.name}`);
-          }
+      if (!med.name || !med.dosage || !med.frequency || !med.duration) return;
+
+      // Extraer dosificación numérica para validación
+      const dosageMatch = med.dosage.match(/(\d+(?:\.\d+)?)/);
+      const dosageNum = dosageMatch ? parseFloat(dosageMatch[1]) : 0;
+      
+      // Extraer duración numérica
+      const durationMatch = med.duration.match(/(\d+)/);
+      const durationNum = durationMatch ? parseInt(durationMatch[1]) : 0;
+
+      // Validar medicamento usando configuración centralizada
+      const validation = validateMedication(med.name.toLowerCase(), dosageNum, med.frequency.toLowerCase(), durationNum);
+      
+      if (!validation.isValid) {
+        validation.errors.forEach(error => {
+          alerts.push(`❌ ${med.name}: ${error}`);
         });
       }
+
+      validation.warnings.forEach(warning => {
+        alerts.push(`⚠️ ${med.name}: ${warning}`);
+      });
     });
+
+    // Verificar límite máximo de medicamentos
+    if (medications.filter(m => m.name).length > SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION) {
+      alerts.push(`❌ Excede el límite máximo de ${SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION} medicamentos por receta`);
+    }
+    
     setDrugAlerts(Array.from(new Set(alerts)));
   }, [medications]);
 
