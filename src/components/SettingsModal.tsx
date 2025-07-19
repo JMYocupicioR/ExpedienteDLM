@@ -1627,7 +1627,10 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-medium text-white">Plantillas de Exploración Física</h3>
                       <button
-                        onClick={() => setShowTemplateEditor(true)}
+                        onClick={() => {
+                          setSelectedTemplateToEdit(null);
+                          setShowTemplateEditor(true);
+                        }}
                         className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
                       >
                         <Plus className="h-4 w-4 mr-2" />
