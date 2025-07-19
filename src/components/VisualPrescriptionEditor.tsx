@@ -665,16 +665,28 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   };
 
   const handleMouseDown = (elementId: string, event: React.MouseEvent) => {
-    if (selectedElement !== elementId) return;
-    
+    // Verificar si el elemento está bloqueado
+    const element = elements.find(el => el.id === elementId);
+    if (!element || element.isLocked) return;
+
+    // No procesar si el click es en una asa de redimensionamiento
+    const target = event.target as HTMLElement;
+    if (target.dataset?.resizeHandle) {
+      return;
+    }
+
+    event.stopPropagation();
     event.preventDefault();
+    
+    // Solo permitir arrastre si el elemento está seleccionado o si vamos a seleccionarlo
+    if (selectedElement !== elementId) {
+      setSelectedElement(elementId);
+    }
+    
     setDraggedElement(elementId);
     
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    
-    const element = elements.find(el => el.id === elementId);
-    if (!element) return;
     
     setDragOffset({
       x: (event.clientX - rect.left) / zoom - element.position.x,
@@ -2709,10 +2721,13 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
               .map(element => (
                 <div
                   key={element.id}
-                  style={getElementStyle(element)}
                   onClick={(e) => handleElementClick(element.id, e)}
                   onMouseDown={(e) => handleMouseDown(element.id, e)}
-                  className="select-none"
+                  className={`select-none ${element.isLocked ? 'pointer-events-none' : ''}`}
+                  style={{
+                    ...getElementStyle(element),
+                    cursor: element.isLocked ? 'default' : 'move'
+                  }}
                 >
                   {renderElement(element)}
                   
@@ -2724,38 +2739,70 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                       
                       {/* Asas de esquina para redimensionar */}
                       <div 
-                        className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 rounded-sm cursor-nw-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 'nw', e)}
+                        className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 rounded-sm cursor-nw-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="nw"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 'nw', e);
+                        }}
                       />
                       <div 
-                        className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-sm cursor-ne-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 'ne', e)}
+                        className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-sm cursor-ne-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="ne"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 'ne', e);
+                        }}
                       />
                       <div 
-                        className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-sm cursor-sw-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 'sw', e)}
+                        className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-sm cursor-sw-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="sw"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 'sw', e);
+                        }}
                       />
                       <div 
-                        className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-sm cursor-se-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 'se', e)}
+                        className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-sm cursor-se-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="se"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 'se', e);
+                        }}
                       />
                       
                       {/* Asas de lado para redimensionar */}
                       <div 
-                        className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-3 h-2 bg-blue-500 rounded-sm cursor-n-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 'n', e)}
+                        className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-3 h-2 bg-blue-500 rounded-sm cursor-n-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="n"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 'n', e);
+                        }}
                       />
                       <div 
-                        className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-2 bg-blue-500 rounded-sm cursor-s-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 's', e)}
+                        className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-2 bg-blue-500 rounded-sm cursor-s-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="s"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 's', e);
+                        }}
                       />
                       <div 
-                        className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-3 bg-blue-500 rounded-sm cursor-w-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 'w', e)}
+                        className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-3 bg-blue-500 rounded-sm cursor-w-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="w"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 'w', e);
+                        }}
                       />
                       <div 
-                        className="absolute -right-1 top-1/2 transform -translate-y-1/2 w-2 h-3 bg-blue-500 rounded-sm cursor-e-resize hover:bg-blue-600"
-                        onMouseDown={(e) => handleResizeStart(element.id, 'e', e)}
+                        className="absolute -right-1 top-1/2 transform -translate-y-1/2 w-2 h-3 bg-blue-500 rounded-sm cursor-e-resize hover:bg-blue-600 z-10"
+                        data-resize-handle="e"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(element.id, 'e', e);
+                        }}
                       />
                       
                       {/* Información del elemento */}
