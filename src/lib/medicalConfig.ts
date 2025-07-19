@@ -203,6 +203,465 @@ export const MEDICAL_SPECIALTIES = {
   }
 };
 
+// ================= PLANTILLAS DE RECETAS PREDEFINIDAS =================
+export interface PrescriptionTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: 'general' | 'pediatric' | 'geriatric' | 'specialist' | 'emergency';
+  specialty?: string;
+  elements: any[];
+  canvasSettings: {
+    backgroundColor: string;
+    backgroundImage?: string;
+    canvasSize: { width: number; height: number };
+  };
+}
+
+export const PRESCRIPTION_TEMPLATES: PrescriptionTemplate[] = [
+  {
+    id: 'general-classic',
+    name: 'Clásica General',
+    description: 'Plantilla estándar para medicina general',
+    category: 'general',
+    canvasSettings: {
+      backgroundColor: '#ffffff',
+      canvasSize: { width: 794, height: 1123 }
+    },
+    elements: [
+      {
+        id: 'titulo',
+        type: 'text',
+        position: { x: 50, y: 50 },
+        size: { width: 694, height: 60 },
+        content: 'RECETA MÉDICA',
+        style: {
+          fontSize: 32,
+          fontFamily: 'Times New Roman',
+          color: '#1f2937',
+          fontWeight: 'bold',
+          textAlign: 'center'
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'info-doctor',
+        type: 'text',
+        position: { x: 50, y: 120 },
+        size: { width: 400, height: 100 },
+        content: 'Dr. [NOMBRE DEL MÉDICO]\nMedicina General\nCédula Profesional: [NÚMERO]',
+        style: {
+          fontSize: 14,
+          fontFamily: 'Times New Roman',
+          color: '#374151',
+          textAlign: 'left',
+          lineHeight: 1.5
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'stethoscope-icon',
+        type: 'icon',
+        position: { x: 600, y: 120 },
+        size: { width: 60, height: 60 },
+        content: 'stethoscope',
+        iconType: 'stethoscope',
+        style: {
+          color: '#059669',
+          textAlign: 'center'
+        },
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false
+      }
+    ]
+  },
+  {
+    id: 'pediatric-colorful',
+    name: 'Pediátrica Colorida',
+    description: 'Plantilla amigable para pediatría',
+    category: 'pediatric',
+    specialty: 'pediatria',
+    canvasSettings: {
+      backgroundColor: '#f0f9ff',
+      canvasSize: { width: 794, height: 1123 }
+    },
+    elements: [
+      {
+        id: 'titulo',
+        type: 'text',
+        position: { x: 50, y: 50 },
+        size: { width: 694, height: 60 },
+        content: 'RECETA PEDIÁTRICA',
+        style: {
+          fontSize: 32,
+          fontFamily: 'Arial',
+          color: '#0ea5e9',
+          fontWeight: 'bold',
+          textAlign: 'center'
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'info-doctor',
+        type: 'text',
+        position: { x: 50, y: 120 },
+        size: { width: 400, height: 100 },
+        content: 'Dr. [NOMBRE DEL MÉDICO]\nPediatra\nCédula Profesional: [NÚMERO]',
+        style: {
+          fontSize: 14,
+          fontFamily: 'Arial',
+          color: '#1e40af',
+          textAlign: 'left',
+          lineHeight: 1.5
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'heart-icon',
+        type: 'icon',
+        position: { x: 600, y: 120 },
+        size: { width: 60, height: 60 },
+        content: 'heart',
+        iconType: 'heart',
+        style: {
+          color: '#f87171',
+          textAlign: 'center'
+        },
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'age-warning',
+        type: 'box',
+        position: { x: 50, y: 240 },
+        size: { width: 694, height: 40 },
+        content: '⚠️ DOSIS PEDIÁTRICA - Verificar peso y edad del paciente',
+        style: {
+          fontSize: 12,
+          fontFamily: 'Arial',
+          color: '#dc2626',
+          textAlign: 'center',
+          fontWeight: 'bold'
+        },
+        backgroundColor: '#fef2f2',
+        borderColor: '#fca5a5',
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      }
+    ]
+  },
+  {
+    id: 'geriatric-large',
+    name: 'Geriátrica Letras Grandes',
+    description: 'Plantilla con texto grande para pacientes geriátricos',
+    category: 'geriatric',
+    specialty: 'geriatria',
+    canvasSettings: {
+      backgroundColor: '#fffbeb',
+      canvasSize: { width: 794, height: 1123 }
+    },
+    elements: [
+      {
+        id: 'titulo',
+        type: 'text',
+        position: { x: 50, y: 50 },
+        size: { width: 694, height: 60 },
+        content: 'RECETA GERIÁTRICA',
+        style: {
+          fontSize: 36,
+          fontFamily: 'Arial',
+          color: '#92400e',
+          fontWeight: 'bold',
+          textAlign: 'center'
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'info-doctor',
+        type: 'text',
+        position: { x: 50, y: 120 },
+        size: { width: 400, height: 120 },
+        content: 'Dr. [NOMBRE DEL MÉDICO]\nGeriatra\nCédula Profesional: [NÚMERO]',
+        style: {
+          fontSize: 16,
+          fontFamily: 'Arial',
+          color: '#92400e',
+          textAlign: 'left',
+          lineHeight: 1.6
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'interaction-warning',
+        type: 'box',
+        position: { x: 50, y: 260 },
+        size: { width: 694, height: 60 },
+        content: '⚠️ PACIENTE GERIÁTRICO\nVerificar interacciones medicamentosas y ajuste de dosis',
+        style: {
+          fontSize: 14,
+          fontFamily: 'Arial',
+          color: '#b45309',
+          textAlign: 'center',
+          fontWeight: 'bold',
+          lineHeight: 1.4
+        },
+        backgroundColor: '#fef3c7',
+        borderColor: '#f59e0b',
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      }
+    ]
+  },
+  {
+    id: 'cardiology-specialist',
+    name: 'Cardiología Especializada',
+    description: 'Plantilla para recetas cardiológicas',
+    category: 'specialist',
+    specialty: 'cardiologia',
+    canvasSettings: {
+      backgroundColor: '#fef2f2',
+      canvasSize: { width: 794, height: 1123 }
+    },
+    elements: [
+      {
+        id: 'titulo',
+        type: 'text',
+        position: { x: 50, y: 50 },
+        size: { width: 694, height: 60 },
+        content: 'PRESCRIPCIÓN CARDIOLÓGICA',
+        style: {
+          fontSize: 30,
+          fontFamily: 'Helvetica',
+          color: '#dc2626',
+          fontWeight: 'bold',
+          textAlign: 'center'
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'info-doctor',
+        type: 'text',
+        position: { x: 50, y: 120 },
+        size: { width: 400, height: 100 },
+        content: 'Dr. [NOMBRE DEL MÉDICO]\nCardiólogo\nCédula Profesional: [NÚMERO]',
+        style: {
+          fontSize: 14,
+          fontFamily: 'Helvetica',
+          color: '#991b1b',
+          textAlign: 'left',
+          lineHeight: 1.5
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'heart-icon',
+        type: 'icon',
+        position: { x: 600, y: 120 },
+        size: { width: 80, height: 80 },
+        content: 'heart',
+        iconType: 'heart',
+        style: {
+          color: '#dc2626',
+          textAlign: 'center'
+        },
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'cardiac-warning',
+        type: 'box',
+        position: { x: 50, y: 240 },
+        size: { width: 694, height: 50 },
+        content: '❤️ MEDICACIÓN CARDIOLÓGICA - Monitoreo continuo requerido',
+        style: {
+          fontSize: 13,
+          fontFamily: 'Helvetica',
+          color: '#dc2626',
+          textAlign: 'center',
+          fontWeight: 'bold'
+        },
+        backgroundColor: '#fee2e2',
+        borderColor: '#fca5a5',
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      }
+    ]
+  },
+  {
+    id: 'emergency-urgent',
+    name: 'Urgencias',
+    description: 'Plantilla para recetas de urgencias',
+    category: 'emergency',
+    specialty: 'urgencias',
+    canvasSettings: {
+      backgroundColor: '#ffffff',
+      canvasSize: { width: 794, height: 1123 }
+    },
+    elements: [
+      {
+        id: 'urgent-header',
+        type: 'box',
+        position: { x: 50, y: 30 },
+        size: { width: 694, height: 50 },
+        content: '🚨 RECETA DE URGENCIAS 🚨',
+        style: {
+          fontSize: 24,
+          fontFamily: 'Arial',
+          color: '#ffffff',
+          fontWeight: 'bold',
+          textAlign: 'center'
+        },
+        backgroundColor: '#dc2626',
+        borderColor: '#dc2626',
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'info-doctor',
+        type: 'text',
+        position: { x: 50, y: 100 },
+        size: { width: 400, height: 100 },
+        content: 'Dr. [NOMBRE DEL MÉDICO]\nMedicina de Urgencias\nCédula Profesional: [NÚMERO]',
+        style: {
+          fontSize: 14,
+          fontFamily: 'Arial',
+          color: '#374151',
+          textAlign: 'left',
+          lineHeight: 1.5
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'emergency-date',
+        type: 'text',
+        position: { x: 500, y: 100 },
+        size: { width: 244, height: 40 },
+        content: 'URGENTE - [FECHA]\nHora: [HORA]',
+        style: {
+          fontSize: 12,
+          fontFamily: 'Arial',
+          color: '#dc2626',
+          textAlign: 'right',
+          fontWeight: 'bold'
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      }
+    ]
+  },
+  {
+    id: 'modern-minimal',
+    name: 'Moderna Minimalista',
+    description: 'Diseño limpio y moderno',
+    category: 'general',
+    canvasSettings: {
+      backgroundColor: '#fafafa',
+      canvasSize: { width: 794, height: 1123 }
+    },
+    elements: [
+      {
+        id: 'header-line',
+        type: 'separator',
+        position: { x: 50, y: 80 },
+        size: { width: 694, height: 3 },
+        content: '',
+        borderColor: '#3b82f6',
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'titulo',
+        type: 'text',
+        position: { x: 50, y: 30 },
+        size: { width: 694, height: 40 },
+        content: 'PRESCRIPCIÓN MÉDICA',
+        style: {
+          fontSize: 28,
+          fontFamily: 'Helvetica',
+          color: '#1f2937',
+          fontWeight: 'normal',
+          textAlign: 'left'
+        },
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'info-doctor',
+        type: 'text',
+        position: { x: 50, y: 100 },
+        size: { width: 350, height: 80 },
+        content: 'Dr. [NOMBRE DEL MÉDICO]\n[ESPECIALIDAD]\nCédula Prof: [NÚMERO]',
+        style: {
+          fontSize: 12,
+          fontFamily: 'Helvetica',
+          color: '#6b7280',
+          textAlign: 'left',
+          lineHeight: 1.4
+        },
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false
+      },
+      {
+        id: 'qr-code',
+        type: 'qr',
+        position: { x: 650, y: 30 },
+        size: { width: 90, height: 90 },
+        content: 'QR',
+        style: {
+          textAlign: 'center'
+        },
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false
+      }
+    ]
+  }
+];
+
+// Función para obtener plantillas por categoría
+export const getTemplatesByCategory = (category: PrescriptionTemplate['category']): PrescriptionTemplate[] => {
+  return PRESCRIPTION_TEMPLATES.filter(template => template.category === category);
+};
+
+// Función para obtener plantillas por especialidad
+export const getTemplatesBySpecialty = (specialty: string): PrescriptionTemplate[] => {
+  return PRESCRIPTION_TEMPLATES.filter(template => template.specialty === specialty);
+};
+
+// Función para obtener una plantilla por ID
+export const getTemplateById = (id: string): PrescriptionTemplate | undefined => {
+  return PRESCRIPTION_TEMPLATES.find(template => template.id === id);
+};
+
 // ===== FUNCIONES DE VALIDACIÓN =====
 
 export function validateVitalSign(field: string, value: string | number): {
