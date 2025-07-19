@@ -1200,8 +1200,13 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
             }
             break;
           case 'v':
-            event.preventDefault();
-            pasteElements();
+            if (altKey && selectedElements.length >= 3) {
+              event.preventDefault();
+              distributeSelectedElements('vertical');
+            } else {
+              event.preventDefault();
+              pasteElements();
+            }
             break;
           case 'd':
             event.preventDefault();
@@ -1233,12 +1238,6 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
             if (altKey && selectedElements.length >= 3) {
               event.preventDefault();
               distributeSelectedElements('horizontal');
-            }
-            break;
-          case 'v':
-            if (altKey && selectedElements.length >= 3) {
-              event.preventDefault();
-              distributeSelectedElements('vertical');
             }
             break;
           case 'm':
