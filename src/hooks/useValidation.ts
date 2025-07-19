@@ -26,6 +26,21 @@ export function useValidation() {
   const [validationState, setValidationState] = useState<ValidationState>({});
   const [isValidating, setIsValidating] = useState(false);
 
+  // ===== FUNCIONES DE UTILIDAD PARA ERRORES =====
+  const hasErrors = useCallback(() => {
+    return Object.values(validationState).some((result: any) => result.errors?.length > 0);
+  }, [validationState]);
+
+  const getAllErrors = useCallback(() => {
+    const allErrors: string[] = [];
+    Object.values(validationState).forEach((result: any) => {
+      if (result.errors) {
+        allErrors.push(...result.errors);
+      }
+    });
+    return allErrors;
+  }, [validationState]);
+
   // ===== VALIDACIÓN DE ARRAYS MEJORADA =====
   const validateArrayField = useCallback((
     value: string | string[], 
