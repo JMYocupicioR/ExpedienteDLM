@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, Clock, Heart, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
+// ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
+import { 
+  VITAL_SIGNS_RANGES, 
+  validateVitalSign, 
+  SYSTEM_LIMITS 
+} from '../lib/medicalConfig';
+import { validateJSONBSchema } from '../lib/validation';
 
 interface TemplateField {
   id: string;
@@ -56,17 +63,8 @@ interface DynamicPhysicalExamFormProps {
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-// Validaciones médicas para signos vitales
-const VITAL_SIGNS_RANGES = {
-  systolic_pressure: { min: 70, max: 250, unit: 'mmHg' },
-  diastolic_pressure: { min: 40, max: 150, unit: 'mmHg' },
-  heart_rate: { min: 30, max: 220, unit: 'lpm' },
-  respiratory_rate: { min: 8, max: 50, unit: 'rpm' },
-  temperature: { min: 30, max: 45, unit: '°C' },
-  oxygen_saturation: { min: 70, max: 100, unit: '%' },
-  weight: { min: 1, max: 300, unit: 'kg' },
-  height: { min: 30, max: 250, unit: 'cm' }
-};
+// ===== USAR RANGOS CENTRALIZADOS EN LUGAR DE HARDCODED =====
+// ELIMINADO: const VITAL_SIGNS_RANGES hardcoded - ahora usa el centralizado
 
 export default function DynamicPhysicalExamForm({
   templateName,
@@ -103,9 +101,62 @@ export default function DynamicPhysicalExamForm({
 
   const watchedData = watch();
 
-  // Auto-save con cleanup apropiado
-  const stableAutoSave = useCallback((data: PhysicalExamFormData) => {
-    onAutoSave(data);
+  // ===== VALIDACIÓN DE SIGNOS VITALES USANDO SISTEMA CENTRALIZADO =====
+  const validateVitalSignField = (field: keyof VitalSigns, value: string): string | null => {
+    if (!value) return null;
+    
+    // Usar función centralizada de validación
+    const validation = validateVitalSign(field, value);
+    if (!validation.isValid) {
+      return validation.message || 'Valor inválido';
+    }
+    
+    return null;
+  };
+
+  // ===== ALERTAS CRÍTICAS MEJORADAS =====
+  const checkCriticalAlerts = useCallback((vitalSigns: VitalSigns) => {
+    const alerts: string[] = [];
+    
+    // Usar validaciones centralizadas para detectar valores críticos
+    Object.entries(vitalSigns).forEach(([field, value]) => {
+      if (field === 'bmi' || !value) return;
+      
+      const validation = validateVitalSign(field, value as string | number);
+      
+      if (validation.level === 'critical') {
+        if (validation.isValid) {
+          // Valor crítico pero válido (dentro de límites, pero alarmante)
+          alerts.push(`🚨 CRÍTICO - ${field.replace('_', ' ')}: ${validation.message}`);
+        } else {
+          // Valor inválido y crítico
+          alerts.push(`❌ INVÁLIDO - ${field.replace('_', ' ')}: ${validation.message}`);
+        }
+      }
+    });
+    
+    setCriticalAlerts(alerts);
+  }, []);
+
+  // ===== AUTO-SAVE MEJORADO CON VALIDACIÓN =====
+  const stableAutoSave = useCallback(async (data: PhysicalExamFormData) => {
+    try {
+      // Validar datos antes del auto-save usando esquemas JSONB
+      const vitalSignsValidation = validateJSONBSchema(data.vitalSigns, 'vital_signs');
+      const physicalExamValidation = validateJSONBSchema({
+        exam_date: data.examDate,
+        exam_time: data.examTime,
+        sections: data.sections,
+        generalObservations: data.generalObservations,
+        vital_signs: data.vitalSigns
+      }, 'physical_examination');
+
+      if (vitalSignsValidation.isValid && physicalExamValidation.isValid) {
+        onAutoSave(data);
+      }
+    } catch (error) {
+      console.error('Error en auto-save:', error);
+    }
   }, [onAutoSave]);
 
   useEffect(() => {
@@ -125,46 +176,7 @@ export default function DynamicPhysicalExamForm({
     return () => clearTimeout(timer);
   }, [watchedData, stableAutoSave]);
 
-  // Validación de signos vitales
-  const validateVitalSign = (field: keyof VitalSigns, value: string): string | null => {
-    if (!value) return null;
-    
-    const numValue = parseFloat(value);
-    const range = VITAL_SIGNS_RANGES[field];
-    
-    if (isNaN(numValue)) {
-      return 'Valor inválido';
-    }
-    
-    if (numValue < range.min || numValue > range.max) {
-      return `Valor fuera del rango normal (${range.min}-${range.max} ${range.unit})`;
-    }
-    
-    return null;
-  };
-
-  // Alertas críticas automáticas
-  const checkCriticalAlerts = useCallback((vitalSigns: VitalSigns) => {
-    const alerts: string[] = [];
-    
-    const systolic = parseFloat(vitalSigns.systolic_pressure);
-    const diastolic = parseFloat(vitalSigns.diastolic_pressure);
-    const heartRate = parseFloat(vitalSigns.heart_rate);
-    const temperature = parseFloat(vitalSigns.temperature);
-    const oxygenSat = parseFloat(vitalSigns.oxygen_saturation);
-    
-    if (systolic > 180 || diastolic > 110) alerts.push('🚨 CRISIS HIPERTENSIVA');
-    if (systolic < 90 || diastolic < 60) alerts.push('⚠️ HIPOTENSIÓN SEVERA');
-    if (heartRate > 120) alerts.push('🚨 TAQUICARDIA SEVERA');
-    if (heartRate < 50) alerts.push('⚠️ BRADICARDIA SEVERA');
-    if (temperature > 39.5) alerts.push('🚨 FIEBRE ALTA');
-    if (temperature < 35) alerts.push('🚨 HIPOTERMIA');
-    if (oxygenSat < 90) alerts.push('🚨 SATURACIÓN CRÍTICA');
-    
-    setCriticalAlerts(alerts);
-  }, []);
-
-  // Calcular IMC automáticamente
+  // ===== CÁLCULO AUTOMÁTICO DE IMC =====
   useEffect(() => {
     const weight = parseFloat(watchedData.vitalSigns?.weight || '0');
     const height = parseFloat(watchedData.vitalSigns?.height || '0') / 100;
@@ -174,6 +186,13 @@ export default function DynamicPhysicalExamForm({
       setValue('vitalSigns.bmi', bmi);
     }
   }, [watchedData.vitalSigns?.weight, watchedData.vitalSigns?.height, setValue]);
+
+  // ===== VALIDACIÓN EN TIEMPO REAL DE SIGNOS VITALES =====
+  useEffect(() => {
+    if (watchedData.vitalSigns) {
+      checkCriticalAlerts(watchedData.vitalSigns);
+    }
+  }, [watchedData.vitalSigns, checkCriticalAlerts]);
 
   // Verificar alertas de signos vitales
   useEffect(() => {
@@ -533,7 +552,7 @@ export default function DynamicPhysicalExamForm({
               const fieldKey = field as keyof VitalSigns;
               const isRequired = ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'].includes(field);
               const fieldValue = watchedData.vitalSigns?.[fieldKey] || '';
-              const validationError = fieldValue ? validateVitalSign(fieldKey, fieldValue) : null;
+              const validationError = fieldValue ? validateVitalSignField(fieldKey, fieldValue) : null;
               
               return (
                 <div key={field}>
