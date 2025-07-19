@@ -206,7 +206,7 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
   }
 
   const createTemplateFromPredefined = (predefinedTemplate: any) => {
-    // Convertir la estructura de plantilla predefinida al formato estándar
+    // ===== CORREGIR CONVERSIÓN PARA USAR STRUCTURE CONSISTENTE =====
     const sectionData = predefinedTemplate.fields.main;
     
     return {
@@ -220,12 +220,12 @@ export default function PhysicalExamTemplates({ onSelectTemplate, doctorId }: Ph
           description: predefinedTemplate.description,
           questions: sectionData.fields.map((field: any, index: number) => ({
             id: field.id || `${predefinedTemplate.id}_${index}`,
-            text: field.label || '',
+            label: field.label || '',
             type: field.type || 'text',
             required: field.required || false,
             options: field.options || [],
             placeholder: field.placeholder || '',
-            helpText: field.helpText || ''
+            defaultValue: field.defaultValue || ''
           })),
           order: 0
         }],
