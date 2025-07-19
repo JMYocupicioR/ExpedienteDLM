@@ -308,7 +308,7 @@ export function useValidation() {
         }
 
         section.questions.forEach((question: any, questionIndex: number) => {
-          if (!question.id || !question.text || !question.type) {
+          if (!question.id || !question.label || !question.type) {
             errors.push(`Sección ${sectionIndex + 1}, Campo ${questionIndex + 1}: Faltan campos requeridos`);
           }
 
@@ -316,8 +316,8 @@ export function useValidation() {
             errors.push(`Sección ${sectionIndex + 1}, Campo ${questionIndex + 1}: Tipo de campo inválido`);
           }
 
-          if (question.text && question.text.length > 200) {
-            warnings.push(`Sección ${sectionIndex + 1}, Campo ${questionIndex + 1}: Texto muy largo`);
+          if (question.label && question.label.length > 200) {
+            warnings.push(`Sección ${sectionIndex + 1}, Campo ${questionIndex + 1}: Etiqueta muy larga`);
           }
         });
       }
