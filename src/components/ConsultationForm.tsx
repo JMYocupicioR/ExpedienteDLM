@@ -22,7 +22,7 @@ interface ConsultationFormProps {
   patientId: string;
   doctorId: string;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (data: any) => void;
 }
 
 interface ConsultationFormData {
@@ -346,14 +346,13 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         description: section.description || '',
         fields: section.questions?.map((question: any) => ({
           id: question.id,
-          label: question.text,
+          label: question.label,
           type: question.type,
           required: question.required || false,
           placeholder: question.placeholder || '',
           options: question.options || [],
           defaultValue: question.defaultValue || '',
-          helpText: question.helpText || '',
-          validation: question.validation || {}
+          helpText: question.helpText || ''
         })) || [],
         order: section.order || 0
       }))
