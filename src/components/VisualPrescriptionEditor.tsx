@@ -360,7 +360,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   });
 
   // Estado de la interfaz
-  const [activeTab, setActiveTab] = useState<'design' | 'content' | 'preview'>('design');
+
   const [showElementPanel, setShowElementPanel] = useState(true);
 
   // ================= FUNCIONES DE HISTORIAL (DESHACER/REHACER) =================
@@ -1555,6 +1555,13 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
             >
               <Database className="h-3 w-3" />
             </button>
+            <button
+              onClick={() => setShowElementPanel(!showElementPanel)}
+              className="p-1 rounded text-xs text-gray-400 hover:text-white"
+              title="Panel de Capas"
+            >
+              <Layers className="h-3 w-3" />
+            </button>
           </div>
         </div>
 
@@ -1594,26 +1601,15 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
           </div>
         )}
 
-        {/* Pestañas */}
-        <div className="flex mb-4 bg-gray-700 rounded-lg p-1">
-          {(['design', 'content', 'preview'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === tab
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:text-white'
-              }`}
-            >
-              {tab === 'design' ? 'Diseño' : tab === 'content' ? 'Contenido' : 'Vista Previa'}
-            </button>
-          ))}
+        {/* Panel de Diseño */}
+        <div className="mb-4">
+          <h2 className="text-white font-medium text-lg mb-3 flex items-center">
+            <Type className="h-5 w-5 mr-2" />
+            Panel de Diseño
+          </h2>
         </div>
 
-        {/* Pestaña de Diseño */}
-        {activeTab === 'design' && (
-          <div className="space-y-4">
+        <div className="space-y-4">
             {/* Plantillas Predefinidas */}
             <div className="bg-gray-700 p-3 rounded-lg">
               <div className="flex items-center justify-between mb-3">
@@ -2452,144 +2448,32 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Pestaña de Contenido */}
-        {activeTab === 'content' && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-gray-300 text-sm mb-1">Diagnóstico</label>
-              <textarea
-                value={prescriptionData.diagnosis}
-                onChange={(e) => setPrescriptionData(prev => ({ ...prev, diagnosis: e.target.value }))}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-                rows={2}
-                placeholder="Diagnóstico del paciente"
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-300 text-sm mb-1">Medicamentos</label>
-              {prescriptionData.medications.map((med, index) => (
-                <div key={index} className="mb-3 p-2 bg-gray-800 rounded">
-                  <div className="grid grid-cols-1 gap-2">
-                    <input
-                      type="text"
-                      value={med.name}
-                      onChange={(e) => {
-                        const newMeds = [...prescriptionData.medications];
-                        newMeds[index].name = e.target.value;
-                        setPrescriptionData(prev => ({ ...prev, medications: newMeds }));
-                      }}
-                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="Medicamento"
-                    />
-                    <input
-                      type="text"
-                      value={med.dosage}
-                      onChange={(e) => {
-                        const newMeds = [...prescriptionData.medications];
-                        newMeds[index].dosage = e.target.value;
-                        setPrescriptionData(prev => ({ ...prev, medications: newMeds }));
-                      }}
-                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="Dosis"
-                    />
-                    <input
-                      type="text"
-                      value={med.frequency}
-                      onChange={(e) => {
-                        const newMeds = [...prescriptionData.medications];
-                        newMeds[index].frequency = e.target.value;
-                        setPrescriptionData(prev => ({ ...prev, medications: newMeds }));
-                      }}
-                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="Frecuencia"
-                    />
-                    <input
-                      type="text"
-                      value={med.duration}
-                      onChange={(e) => {
-                        const newMeds = [...prescriptionData.medications];
-                        newMeds[index].duration = e.target.value;
-                        setPrescriptionData(prev => ({ ...prev, medications: newMeds }));
-                      }}
-                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="Duración"
-                    />
-                    <textarea
-                      value={med.instructions}
-                      onChange={(e) => {
-                        const newMeds = [...prescriptionData.medications];
-                        newMeds[index].instructions = e.target.value;
-                        setPrescriptionData(prev => ({ ...prev, medications: newMeds }));
-                      }}
-                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="Instrucciones"
-                      rows={2}
-                    />
-                  </div>
-                  {prescriptionData.medications.length > 1 && (
-                    <button
-                      onClick={() => {
-                        const newMeds = prescriptionData.medications.filter((_, i) => i !== index);
-                        setPrescriptionData(prev => ({ ...prev, medications: newMeds }));
-                      }}
-                      className="mt-2 text-red-400 hover:text-red-300 text-sm"
-                    >
-                      Eliminar medicamento
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => setPrescriptionData(prev => ({
-                  ...prev,
-                  medications: [...prev.medications, { name: '', dosage: '', frequency: '', duration: '', instructions: '', warnings: '', contraindications: '' }]
-                }))}
-                className="w-full py-2 border border-dashed border-gray-600 text-gray-400 hover:border-blue-400 hover:text-blue-400 rounded text-sm"
-              >
-                + Agregar medicamento
-              </button>
-            </div>
-
-            <div>
-              <label className="block text-gray-300 text-sm mb-1">Notas adicionales</label>
-              <textarea
-                value={prescriptionData.notes}
-                onChange={(e) => setPrescriptionData(prev => ({ ...prev, notes: e.target.value }))}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-                rows={3}
-                placeholder="Instrucciones especiales, recomendaciones..."
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Pestaña de Vista Previa */}
-        {activeTab === 'preview' && (
-          <div className="space-y-4">
-            <div className="text-center">
-              <p className="text-gray-400 text-sm mb-4">Vista previa de la receta</p>
+            {/* Acciones Rápidas */}
+            <div className="bg-gray-700 p-3 rounded-lg">
+              <h3 className="text-gray-300 font-medium mb-3 flex items-center">
+                <Save className="h-4 w-4 mr-2" />
+                Acciones Rápidas
+              </h3>
+              
               <div className="space-y-2">
                 <button
-                  onClick={handlePrint}
-                  className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
-                >
-                  <Printer className="h-4 w-4 mr-2" />
-                  Imprimir Receta
-                </button>
-                <button 
                   onClick={handleSave}
-                  className="w-full flex items-center justify-center px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white"
+                  className="w-full flex items-center justify-center px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white text-sm"
                 >
                   <Save className="h-4 w-4 mr-2" />
                   Guardar Receta
                 </button>
-                <button 
+                <button
+                  onClick={handlePrint}
+                  className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm"
+                >
+                  <Printer className="h-4 w-4 mr-2" />
+                  Imprimir
+                </button>
+                <button
                   onClick={generateQRCode}
-                  className="w-full flex items-center justify-center px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white"
+                  className="w-full flex items-center justify-center px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm"
                 >
                   <QrCode className="h-4 w-4 mr-2" />
                   Actualizar QR
@@ -2597,7 +2481,6 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
               </div>
             </div>
           </div>
-        )}
       </div>
 
       {/* Área Principal del Canvas */}
