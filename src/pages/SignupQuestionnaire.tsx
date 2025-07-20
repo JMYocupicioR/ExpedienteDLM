@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Phone, Award, Building, Users, Stethoscope, ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Phone, Award, Building, Users, Stethoscope, ArrowLeft, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface QuestionnaireData {
@@ -16,7 +16,6 @@ interface QuestionnaireData {
 }
 
 export default function SignupQuestionnaire() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -261,9 +260,9 @@ export default function SignupQuestionnaire() {
         navigate('/dashboard');
       }, 1000);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error completing profile:', err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
