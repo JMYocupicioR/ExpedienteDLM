@@ -1,9 +1,9 @@
+/* Importar estilos específicos para tablas médicas accesibles */
+@import url('./styles/medical-tables.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Importar estilos específicos para tablas médicas accesibles */
-@import url('./styles/medical-tables.css');
 
 /* Mejoras globales de accesibilidad para el sistema médico */
 
