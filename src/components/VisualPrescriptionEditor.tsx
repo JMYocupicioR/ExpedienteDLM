@@ -115,9 +115,10 @@ interface DrugInteraction {
 interface VisualPrescriptionEditorProps {
   patientId: string;
   patientName: string;
-  onSave: (prescription: any) => void;
+  onSave: (prescriptionStyle: any) => Promise<void>;
   onClose?: () => void;
   initialData?: Partial<PrescriptionData>;
+  existingTemplate?: any;
 }
 
 const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
@@ -125,7 +126,8 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   patientName,
   onSave,
   onClose,
-  initialData
+  initialData,
+  existingTemplate
 }) => {
   // Estados del canvas y editor
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -1277,9 +1279,19 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
 
   // Efecto para cargar datos al inicio
   useEffect(() => {
-    loadFromLocalStorage();
+    if (existingTemplate && existingTemplate.template_elements) {
+      setElements(existingTemplate.template_elements);
+      if (existingTemplate.canvas_settings) {
+        setBackgroundColor(existingTemplate.canvas_settings.backgroundColor || '#ffffff');
+        setBackgroundImage(existingTemplate.canvas_settings.backgroundImage || null);
+        setCanvasSize(existingTemplate.canvas_settings.canvasSize || { width: 794, height: 1123 });
+        setZoom(existingTemplate.canvas_settings.zoom || 0.8);
+      }
+    } else {
+      loadFromLocalStorage();
+    }
     generateQRCode();
-  }, []);
+  }, [existingTemplate]);
 
   // Efecto para validación automática
   useEffect(() => {
@@ -1305,10 +1317,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       }
     };
 
-    // Aquí llamarías a la función onSave con el estilo
-    // onSave({ prescription_style: prescriptionStyleData });
-    
-    alert("Estilo de receta guardado (simulado)");
+    await onSave(prescriptionStyleData);
   };
 
   const handlePrint = () => {
