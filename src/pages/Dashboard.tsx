@@ -173,8 +173,24 @@ export default function Dashboard() {
 
   const handleSignOut = async () => {
     try {
+      // Limpiar localStorage
+      localStorage.clear();
+      
+      // Limpiar sessionStorage
+      sessionStorage.clear();
+      
+      // Limpiar caché del navegador
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => caches.delete(cacheName))
+        );
+      }
+      
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      
+      console.log('✅ Sesión cerrada y caché limpiado');
       navigate('/auth');
     } catch (error: any) {
       console.error('Error signing out:', error);

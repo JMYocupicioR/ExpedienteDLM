@@ -33,6 +33,68 @@ export const setSessionInfo = async (sessionId: string) => {
 };
 
 /**
+ * Función utilitaria para limpiar completamente el caché y sesiones
+ */
+export const clearAllCache = async () => {
+  try {
+    console.log('🧹 Iniciando limpieza completa...');
+    
+    // 1. Cerrar sesión en Supabase
+    await supabase.auth.signOut();
+    
+    // 2. Limpiar localStorage
+    const localStorageKeys = Object.keys(localStorage);
+    localStorageKeys.forEach(key => {
+      localStorage.removeItem(key);
+    });
+    console.log(`📦 localStorage limpiado: ${localStorageKeys.length} items removidos`);
+    
+    // 3. Limpiar sessionStorage
+    const sessionStorageKeys = Object.keys(sessionStorage);
+    sessionStorageKeys.forEach(key => {
+      sessionStorage.removeItem(key);
+    });
+    console.log(`📦 sessionStorage limpiado: ${sessionStorageKeys.length} items removidos`);
+    
+    // 4. Limpiar caché del navegador
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => caches.delete(cacheName))
+      );
+      console.log(`🗂️ Cache del navegador limpiado: ${cacheNames.length} cachés removidos`);
+    }
+    
+    // 5. Limpiar IndexedDB de Supabase
+    if ('indexedDB' in window) {
+      try {
+        const databases = ['supabase-auth-token', 'supabase-cache'];
+        for (const dbName of databases) {
+          const deleteReq = indexedDB.deleteDatabase(dbName);
+          await new Promise((resolve, reject) => {
+            deleteReq.onsuccess = () => resolve(true);
+            deleteReq.onerror = () => reject(deleteReq.error);
+          });
+        }
+        console.log('🗃️ IndexedDB limpiado');
+      } catch (error) {
+        console.warn('⚠️ No se pudo limpiar IndexedDB:', error);
+      }
+    }
+    
+    console.log('✅ Limpieza completa exitosa');
+    
+    // 6. Recargar la página para asegurar estado limpio
+    setTimeout(() => {
+      window.location.href = '/auth';
+    }, 500);
+    
+  } catch (error) {
+    console.error('❌ Error durante la limpieza:', error);
+  }
+};
+
+/**
  * Una función de ejemplo para envolver una llamada a Supabase que requiere auditoría.
  * Primero establece la información de la sesión y luego realiza la operación.
  * 
