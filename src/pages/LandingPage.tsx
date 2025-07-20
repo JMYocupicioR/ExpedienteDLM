@@ -1,8 +1,24 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Shield, Users, Clock, ArrowRight, Activity, FileText, Stethoscope } from 'lucide-react';
+import { Heart, Shield, Users, Clock, ArrowRight, Activity, FileText, Stethoscope, User, LogOut } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 const LandingPage = () => {
+  const { user, profile, loading, signOut, isAuthenticated } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  // Mostrar loading mientras se verifica la autenticación
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-black">
       {/* Navigation */}
@@ -14,18 +30,48 @@ const LandingPage = () => {
               <span className="ml-2 text-lg sm:text-xl font-bold text-white">Expediente DLM</span>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <Link 
-                to="/auth" 
-                className="text-gray-300 hover:text-white transition-colors text-sm sm:text-base touch-target"
-              >
-                Iniciar Sesión
-              </Link>
-              <Link 
-                to="/auth" 
-                className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-3 py-2 sm:px-6 sm:py-2 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 shadow-lg text-sm sm:text-base touch-target"
-              >
-                Comenzar
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 bg-cyan-400 rounded-full flex items-center justify-center">
+                        <User className="h-4 w-4 text-gray-900" />
+                      </div>
+                      <span className="text-gray-300 text-sm sm:text-base hidden sm:block">
+                        {profile?.full_name || user?.email || 'Usuario'}
+                      </span>
+                    </div>
+                    <Link 
+                      to="/dashboard" 
+                      className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-3 py-2 sm:px-6 sm:py-2 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 shadow-lg text-sm sm:text-base touch-target"
+                    >
+                      Dashboard
+                    </Link>
+                    <button
+                      onClick={handleSignOut}
+                      className="text-gray-300 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-gray-800"
+                      title="Cerrar sesión"
+                    >
+                      <LogOut className="h-5 w-5" />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link 
+                    to="/auth" 
+                    className="text-gray-300 hover:text-white transition-colors text-sm sm:text-base touch-target"
+                  >
+                    Iniciar Sesión
+                  </Link>
+                  <Link 
+                    to="/auth" 
+                    className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-3 py-2 sm:px-6 sm:py-2 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 shadow-lg text-sm sm:text-base touch-target"
+                  >
+                    Comenzar
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -48,19 +94,31 @@ const LandingPage = () => {
             con tecnología de última generación, seguridad avanzada y una experiencia de usuario excepcional.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link 
-              to="/auth" 
-              className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 text-lg font-medium shadow-xl"
-            >
-              Iniciar Prueba Gratuita
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
-            <Link 
-              to="/about" 
-              className="inline-flex items-center px-8 py-4 bg-transparent border-2 border-cyan-400 text-cyan-400 rounded-lg hover:bg-cyan-400 hover:text-gray-900 transition-all duration-300 text-lg font-medium"
-            >
-              Conocer Más
-            </Link>
+            {isAuthenticated ? (
+              <Link 
+                to="/dashboard" 
+                className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 text-lg font-medium shadow-xl"
+              >
+                Ir al Dashboard
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            ) : (
+              <>
+                <Link 
+                  to="/auth" 
+                  className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 text-lg font-medium shadow-xl"
+                >
+                  Iniciar Prueba Gratuita
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+                <Link 
+                  to="/about" 
+                  className="inline-flex items-center px-8 py-4 bg-transparent border-2 border-cyan-400 text-cyan-400 rounded-lg hover:bg-cyan-400 hover:text-gray-900 transition-all duration-300 text-lg font-medium"
+                >
+                  Conocer Más
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
