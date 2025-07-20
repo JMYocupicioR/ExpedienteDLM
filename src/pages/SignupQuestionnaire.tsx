@@ -104,32 +104,15 @@ export default function SignupQuestionnaire() {
         .eq('id', session.user.id)
         .single();
 
-      if (profileError && profileError.code === 'PGRST116') {
-        // No existe perfil, crear uno básico
-        console.log('Creando perfil básico para usuario:', session.user.email);
-        const { error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            id: session.user.id,
-            email: session.user.email,
-            role: 'doctor',
-            full_name: '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-
-        if (createError) {
-          console.error('Error creando perfil:', createError);
-          setError('Error al crear perfil. Por favor, contacta soporte.');
-          return;
-        }
-      } else if (profile && profile.full_name) {
-        // Si ya tiene perfil completo, ir al dashboard
-        navigate('/dashboard');
-        return;
-      } else if (profileError) {
+      if (profileError) {
         console.error('Error verificando perfil:', profileError);
         setError('Error al verificar perfil. Por favor, contacta soporte.');
+        return;
+      }
+      
+      if (profile && profile.full_name) {
+        // Si ya tiene perfil completo, ir al dashboard
+        navigate('/dashboard');
         return;
       }
     };
