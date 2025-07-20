@@ -1,18 +1,10 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Heart, Shield, Users, Clock, ArrowRight, Activity, FileText, Stethoscope, User, LogOut } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { useEffect } from 'react';
 
 const LandingPage = () => {
   const { user, profile, loading, signOut, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!loading && isAuthenticated) {
-      navigate('/dashboard');
-    }
-  }, [isAuthenticated, loading, navigate]);
 
   const handleSignOut = async () => {
     await signOut();
