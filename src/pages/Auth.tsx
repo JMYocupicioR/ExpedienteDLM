@@ -1,51 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Stethoscope, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-// Función para limpiar caché y sesiones
-const clearAllSessions = async () => {
-  try {
-    // Limpiar localStorage
-    localStorage.clear();
-    
-    // Limpiar sessionStorage
-    sessionStorage.clear();
-    
-    // Cerrar sesión en Supabase
-    await supabase.auth.signOut();
-    
-    // Limpiar caché del navegador
-    if ('caches' in window) {
-      const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames.map(cacheName => caches.delete(cacheName))
-      );
+// Función para esperar la creación del perfil con reintentos
+const waitForProfile = async (userId: string, retries = 5, interval = 1000): Promise<boolean> => {
+  for (let i = 0; i < retries; i++) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error(`Error checking profile (attempt ${i + 1}):`, error.message);
     }
     
-    console.log('✅ Caché y sesiones limpiadas exitosamente');
-  } catch (error) {
-    console.error('Error limpiando caché:', error);
+    if (data) {
+      return true; // Perfil encontrado
+    }
+    
+    // Esperar antes del siguiente reintento
+    await new Promise(resolve => setTimeout(resolve, interval));
   }
+  return false; // Perfil no encontrado después de todos los reintentos
 };
+
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Limpiar caché al cargar la página de auth
-  React.useEffect(() => {
-    // Forzar limpieza completa en cada carga
-    const forceCleanup = async () => {
-      console.log('🧹 Iniciando limpieza forzada...');
-      await clearAllSessions();
-      // Adicional: limpiar cualquier dato residual
-      window.sessionStorage.clear();
-      window.localStorage.clear();
-      console.log('✅ Limpieza forzada completada');
+  // Limpieza de sesión al cargar, menos agresiva
+  useEffect(() => {
+    const cleanup = async () => {
+      // Opcional: Desconectar sesión si hay alguna inconsistencia
+      // await supabase.auth.signOut();
+      console.log('Auth page loaded. Session state is managed by Supabase.');
     };
-    forceCleanup();
+    cleanup();
   }, []);
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -75,6 +69,7 @@ export default function Auth() {
           if (error.message?.includes('User already registered')) {
             setError('Este correo ya está registrado. Por favor inicia sesión.');
             setIsLogin(true);
+            setLoading(false); // Detener loading
             return;
           }
           throw error;
@@ -84,36 +79,16 @@ export default function Auth() {
         if (data.user) {
           console.log('Usuario registrado exitosamente:', data.user.email);
           
-          // Verificar que el perfil se haya creado antes de continuar
-          const checkProfile = async () => {
-            try {
-              const { data: profile, error: profileError } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('id', data.user.id)
-                .maybeSingle();
-              
-              if (profileError) {
-                console.error('Error verificando perfil:', profileError);
-                throw new Error('Error al verificar el perfil creado');
-              }
-              
-              if (profile) {
-                console.log('✅ Perfil creado exitosamente, redirigiendo...');
-                navigate('/signup-questionnaire');
-              } else {
-                // Si no existe el perfil después de 3 segundos, mostrar error
-                console.error('❌ No se pudo crear el perfil automáticamente');
-                throw new Error('Error al crear el perfil. Por favor, contacta soporte.');
-              }
-            } catch (err: any) {
-              setError(err.message);
-              setLoading(false);
-            }
-          };
-          
-          // Esperar hasta 3 segundos para que el trigger cree el perfil
-          setTimeout(checkProfile, 2000);
+          // Esperar a que el perfil se cree con reintentos
+          const profileExists = await waitForProfile(data.user.id);
+
+          if (profileExists) {
+            console.log('✅ Perfil creado exitosamente, redirigiendo...');
+            navigate('/signup-questionnaire');
+          } else {
+            console.error('❌ No se pudo crear el perfil automáticamente tras varios intentos.');
+            setError('Error al crear el perfil. Por favor, recarga la página o contacta a soporte.');
+          }
         } else {
           throw new Error('No se pudo crear el usuario');
         }
