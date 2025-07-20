@@ -1,22 +1,46 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, X, Clock, AlertCircle, CheckCircle, Eye, History, FileText, Loader2 } from 'lucide-react';
+import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Mic } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { supabase } from '../lib/supabase';
 // ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
-import { 
-  VITAL_SIGNS_RANGES, 
-  validateVitalSign, 
-  SYSTEM_LIMITS 
-} from '../lib/medicalConfig';
-import { validateJSONBSchema } from '../lib/validation';
 import { useValidation } from '../hooks/useValidation';
 import DynamicPhysicalExamForm from './DynamicPhysicalExamForm';
 import PhysicalExamTemplates from './PhysicalExamTemplates';
+import MedicalTranscription from './MedicalTranscription'; // ✅ NUEVO: Importar el componente de transcripción
 import type { 
   Database 
 } from '../lib/database.types';
 
 type PhysicalExamTemplate = Database['public']['Tables']['physical_exam_templates']['Row'];
+
+// ✅ NUEVO: Tipos para la definición de la plantilla
+interface Question {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'number';
+  required?: boolean;
+  placeholder?: string;
+  options?: string[];
+  defaultValue?: string;
+  helpText?: string;
+  text?: string; // Para la vista previa
+  validation?: {
+    min?: number;
+    max?: number;
+  };
+}
+
+interface Section {
+  id: string;
+  title: string;
+  description?: string;
+  order?: number;
+  questions?: Question[];
+}
+
+interface TemplateDefinition {
+  version: string;
+  sections: Section[];
+}
 
 interface ConsultationFormProps {
   patientId: string;
@@ -40,6 +64,12 @@ interface ConsultationFormData {
   diagnosis: string;
   prognosis: string;
   treatment: string;
+}
+
+interface ConsultationDraft extends ConsultationFormData {
+  lastSaved: string;
+  physicalExamData?: PhysicalExamFormData | null;
+  validationWarnings?: string[];
 }
 
 interface PhysicalExamFormData {
@@ -71,6 +101,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isTranscriptionModalOpen, setIsTranscriptionModalOpen] = useState(false); // ✅ NUEVO: Estado para el modal
 
   // ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
   const { validateCompleteForm, validateVitalSignsField } = useValidation();
@@ -154,7 +185,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
       try {
         const draft = localStorage.getItem(`consultation_draft_${patientId}`);
         if (draft) {
-          const parsedDraft = JSON.parse(draft);
+          const parsedDraft: ConsultationDraft = JSON.parse(draft);
           
           // Check if draft is recent (within 24 hours)
           const draftAge = new Date().getTime() - new Date(parsedDraft.lastSaved).getTime();
@@ -198,153 +229,24 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
     setShowPhysicalExam(true);
   };
 
-  // ✅ NUEVO: Render dynamic fields from template
-  const renderTemplateField = (field: any, sectionId: string) => {
-    const fieldName = `physicalExam.${sectionId}.${field.id}`;
-
-    switch (field.type) {
-      case 'text':
-        return (
-          <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              {field.label} {field.required && <span className="text-red-400">*</span>}
-            </label>
-            <input
-              type="text"
-              placeholder={field.placeholder}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-            {field.helpText && (
-              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
-            )}
-          </div>
-        );
-
-      case 'textarea':
-        return (
-          <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              {field.label} {field.required && <span className="text-red-400">*</span>}
-            </label>
-            <textarea
-              rows={3}
-              placeholder={field.placeholder}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-            {field.helpText && (
-              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
-            )}
-          </div>
-        );
-
-      case 'select':
-        return (
-          <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              {field.label} {field.required && <span className="text-red-400">*</span>}
-            </label>
-            <select className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-              <option value="">Seleccionar...</option>
-              {field.options?.map((option: string) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            {field.helpText && (
-              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
-            )}
-          </div>
-        );
-
-      case 'checkbox':
-        return (
-          <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              {field.label} {field.required && <span className="text-red-400">*</span>}
-            </label>
-            <div className="space-y-2">
-              {field.options?.map((option: string) => (
-                <label key={option} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    value={option}
-                    className="rounded border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
-                  />
-                  <span className="text-gray-300">{option}</span>
-                </label>
-              ))}
-            </div>
-            {field.helpText && (
-              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
-            )}
-          </div>
-        );
-
-      case 'radio':
-        return (
-          <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              {field.label} {field.required && <span className="text-red-400">*</span>}
-            </label>
-            <div className="space-y-2">
-              {field.options?.map((option: string) => (
-                <label key={option} className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    name={fieldName}
-                    value={option}
-                    className="rounded-full border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
-                  />
-                  <span className="text-gray-300">{option}</span>
-                </label>
-              ))}
-            </div>
-            {field.helpText && (
-              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
-            )}
-          </div>
-        );
-
-      case 'number':
-        return (
-          <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              {field.label} {field.required && <span className="text-red-400">*</span>}
-            </label>
-            <input
-              type="number"
-              min={field.validation?.min}
-              max={field.validation?.max}
-              placeholder={field.placeholder}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-            {field.helpText && (
-              <p className="mt-1 text-xs text-gray-400">{field.helpText}</p>
-            )}
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
   // ✅ FUNCIÓN: Convertir plantilla al formato esperado por DynamicPhysicalExamForm
-  const convertTemplateDefinition = (template: PhysicalExamTemplate): any => {
-    if (!template?.definition?.sections) {
+  const convertTemplateDefinition = (template: PhysicalExamTemplate): { sections: any[] } => {
+    const definition = template.definition as TemplateDefinition | null;
+
+    if (!definition?.sections) {
       return {
         sections: []
       };
     }
-
+    
     // ===== CONVERTIR DE QUESTIONS A FIELDS PARA DynamicPhysicalExamForm =====
     return {
-      sections: template.definition.sections.map((section: any) => ({
+      sections: definition.sections.map((section: Section) => ({
         id: section.id,
         title: section.title,
         description: section.description || '',
-        fields: section.questions?.map((question: any) => ({
+        order: section.order || 0,
+        fields: section.questions?.map((question: Question) => ({
           id: question.id,
           label: question.label,
           type: question.type,
@@ -353,39 +255,8 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
           options: question.options || [],
           defaultValue: question.defaultValue || '',
           helpText: question.helpText || ''
-        })) || [],
-        order: section.order || 0
+        })) || []
       }))
-    };
-  };
-
-  // ===== NUEVO: Crear plantilla vacía para nueva plantilla =====
-  const createEmptyTemplate = (): PhysicalExamTemplate => {
-    return {
-      id: 'new',
-      name: 'Nueva Plantilla',
-      doctor_id: doctorId,
-      definition: {
-        version: '1.0',
-        sections: [{
-          id: 'main_section',
-          title: 'Exploración General',
-          description: 'Sección principal de exploración física',
-          order: 0,
-                     questions: [
-             {
-               id: 'general_observation',
-               label: 'Observación General',
-               type: 'textarea',
-               required: false,
-               placeholder: 'Escriba sus observaciones...',
-               options: []
-             }
-           ]
-        }]
-      },
-             created_at: new Date().toISOString(),
-       is_active: true
     };
   };
 
@@ -417,9 +288,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         general_observations: data.generalObservations
       });
 
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error saving physical exam:', err);
-      setError('Error al guardar el examen físico');
+      setError(err instanceof Error ? err.message : 'Error al guardar el examen físico');
     }
   };
 
@@ -439,7 +310,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         lastSaved: new Date().toISOString()
       }));
       
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error in auto-save:', err);
     }
   };
@@ -491,12 +362,18 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
       // Clear draft after successful save
       localStorage.removeItem(`consultation_draft_${patientId}`);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving consultation:', err);
-      setError(err.message || 'Error al guardar la consulta');
+      setError(err instanceof Error ? err.message : 'Error al guardar la consulta');
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ NUEVO: Manejar el texto aplicado desde el modal de transcripción
+  const handleApplyTranscription = (text: string) => {
+    setValue('current_condition', text, { shouldValidate: true, shouldDirty: true });
+    setHasUnsavedChanges(true);
   };
 
   // ✅ NUEVO: Clear draft
@@ -539,9 +416,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error generating PDF:', err);
-      setError('Error al generar el PDF');
+      setError(err instanceof Error ? err.message : 'Error al generar el PDF');
     }
   };
 
@@ -614,373 +491,391 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-auto max-h-[90vh] overflow-y-auto border border-gray-700">
-      <div className="p-6 border-b border-gray-700 flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Nueva Consulta</h2>
-          {hasUnsavedChanges && (
-            <p className="text-sm text-yellow-400 mt-1">• Hay cambios sin guardar</p>
-          )}
-        </div>
-        <div className="flex items-center space-x-4">
-          {renderSaveStatus()}
-          <button
-            onClick={generatePDF}
-            className="flex items-center px-3 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors"
-            disabled={loading}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Generar PDF
-          </button>
-          <button
-            onClick={clearDraft}
-            className="flex items-center px-3 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
-            disabled={loading}
-          >
-            Limpiar
-          </button>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="p-6">
-        {error && (
-          <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm flex items-center">
-            <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-            <span>{error}</span>
+    <>
+      <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-auto max-h-[90vh] overflow-y-auto border border-gray-700">
+        <div className="p-6 border-b border-gray-700 flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Nueva Consulta</h2>
+            {hasUnsavedChanges && (
+              <p className="text-sm text-yellow-400 mt-1">• Hay cambios sin guardar</p>
+            )}
+          </div>
+          <div className="flex items-center space-x-4">
+            {renderSaveStatus()}
             <button
-              onClick={() => setError(null)}
-              className="ml-auto text-red-400 hover:text-red-300"
+              onClick={generatePDF}
+              className="flex items-center px-3 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors"
+              disabled={loading}
             >
-              <X className="h-4 w-4" />
+              <FileText className="h-4 w-4 mr-2" />
+              Generar PDF
+            </button>
+            <button
+              onClick={clearDraft}
+              className="flex items-center px-3 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+              disabled={loading}
+            >
+              Limpiar
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              <X className="h-5 w-5" />
             </button>
           </div>
-        )}
+        </div>
 
-        <div className="space-y-6">
-          {/* ✅ MEJORADO: Padecimiento Actual con validación */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Padecimiento Actual *
-            </label>
-            <textarea
-              {...register('current_condition', { 
-                required: 'El padecimiento actual es requerido',
-                minLength: { value: 10, message: 'Mínimo 10 caracteres' },
-                maxLength: { value: 1000, message: 'Máximo 1000 caracteres' }
-              })}
-              rows={4}
-              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-              placeholder="Describe el motivo de consulta y síntomas principales..."
-            />
-            {errors.current_condition && (
-              <p className="mt-1 text-sm text-red-400">{errors.current_condition.message}</p>
-            )}
-            <p className="mt-1 text-xs text-gray-400">
-              {watchedData.current_condition?.length || 0}/1000 caracteres
-            </p>
-          </div>
-
-          {/* ✅ MEJORADO: Exploración Física */}
-          <div>
-            <h3 className="text-lg font-medium text-white mb-4">Exploración Física</h3>
-            
-            {!selectedTemplate ? (
-              <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 bg-gray-750">
-                <PhysicalExamTemplates
-                  onSelectTemplate={handleTemplateSelect}
-                  doctorId={doctorId}
-                />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-medium text-green-300">Plantilla Seleccionada:</h4>
-                      <p className="text-green-200">{selectedTemplate.name}</p>
-                      {physicalExamData && (
-                        <p className="text-sm text-green-400 mt-1">
-                          ✓ Examen físico completado - {physicalExamData.examDate} {physicalExamData.examTime}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowPhysicalExam(true)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                      >
-                        {physicalExamData ? 'Editar Examen' : 'Realizar Examen'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedTemplate(null);
-                          setPhysicalExamData(null);
-                        }}
-                        className="px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors text-sm"
-                      >
-                        Cambiar Plantilla
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Vista previa de campos de la plantilla */}
-                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-300 mb-3">Vista Previa de la Exploración:</h4>
-                  <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {selectedTemplate.definition?.sections?.map((section: any) => (
-                      <div key={section.id} className="border border-gray-600 rounded-lg p-3 bg-gray-800/50">
-                        <h5 className="font-medium text-white mb-2">{section.title}</h5>
-                        {section.description && (
-                          <p className="text-sm text-gray-400 mb-3">{section.description}</p>
-                        )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {section.questions?.map((question: any) => (
-                            <div key={question.id} className="text-sm">
-                              <span className="text-gray-300">• {question.text}</span>
-                              {question.required && <span className="text-red-400"> *</span>}
-                              <span className="text-gray-500 ml-2">({question.type})</span>
-                              {question.options && question.options.length > 0 && (
-                                <div className="ml-4 text-xs text-gray-400 mt-1">
-                                  Opciones: {question.options.slice(0, 3).join(', ')}{question.options.length > 3 ? '...' : ''}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )) || (
-                      <div className="text-center text-gray-400 py-4">
-                        No hay campos configurados en esta plantilla
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-3 text-xs text-gray-400">
-                    💡 Haz clic en "Realizar Examen" para completar todos estos campos de forma interactiva
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ✅ MEJORADO: Signos Vitales */}
-          {physicalExamData ? (
-            <div className="bg-blue-900/30 border border-blue-700 p-4 rounded-lg">
-              <h3 className="text-lg font-medium text-white mb-4">Signos Vitales (del Examen Físico)</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <dt className="text-sm text-gray-400">Presión Arterial</dt>
-                  <dd className="text-sm font-medium text-white">
-                    {physicalExamData.vitalSigns.systolic_pressure}/{physicalExamData.vitalSigns.diastolic_pressure} mmHg
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-gray-400">Frecuencia Cardíaca</dt>
-                  <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.heart_rate} lpm</dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-gray-400">Temperatura</dt>
-                  <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.temperature} °C</dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-gray-400">Frecuencia Respiratoria</dt>
-                  <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.respiratory_rate} rpm</dd>
-                </div>
-                {physicalExamData.vitalSigns.oxygen_saturation && (
-                  <div>
-                    <dt className="text-sm text-gray-400">Saturación O₂</dt>
-                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.oxygen_saturation}%</dd>
-                  </div>
-                )}
-                {physicalExamData.vitalSigns.weight && (
-                  <div>
-                    <dt className="text-sm text-gray-400">Peso</dt>
-                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.weight} kg</dd>
-                  </div>
-                )}
-                {physicalExamData.vitalSigns.height && (
-                  <div>
-                    <dt className="text-sm text-gray-400">Altura</dt>
-                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.height} cm</dd>
-                  </div>
-                )}
-                {physicalExamData.vitalSigns.bmi && (
-                  <div>
-                    <dt className="text-sm text-gray-400">IMC</dt>
-                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.bmi}</dd>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div>
-              <h3 className="text-lg font-medium text-white mb-4">Signos Vitales Básicos</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300">
-                    Temperatura (°C)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    {...register('vital_signs.temperature', {
-                      min: { value: 30, message: 'Temperatura muy baja' },
-                      max: { value: 45, message: 'Temperatura muy alta' }
-                    })}
-                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    placeholder="36.5"
-                  />
-                  {errors.vital_signs?.temperature && (
-                    <p className="mt-1 text-xs text-red-400">{errors.vital_signs.temperature.message}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300">
-                    Frecuencia Cardíaca (lpm)
-                  </label>
-                  <input
-                    type="number"
-                    {...register('vital_signs.heart_rate', {
-                      min: { value: 30, message: 'Frecuencia muy baja' },
-                      max: { value: 220, message: 'Frecuencia muy alta' }
-                    })}
-                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    placeholder="70"
-                  />
-                  {errors.vital_signs?.heart_rate && (
-                    <p className="mt-1 text-xs text-red-400">{errors.vital_signs.heart_rate.message}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300">
-                    Presión Arterial (mmHg)
-                  </label>
-                  <input
-                    type="text"
-                    {...register('vital_signs.blood_pressure', {
-                      pattern: {
-                        value: /^\d{2,3}\/\d{2,3}$/,
-                        message: 'Formato: 120/80'
-                      }
-                    })}
-                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    placeholder="120/80"
-                  />
-                  {errors.vital_signs?.blood_pressure && (
-                    <p className="mt-1 text-xs text-red-400">{errors.vital_signs.blood_pressure.message}</p>
-                  )}
-                </div>
-              </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6">
+          {error && (
+            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm flex items-center">
+              <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span>{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="ml-auto text-red-400 hover:text-red-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           )}
 
-          {/* ✅ MEJORADO: Diagnóstico con validación */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Diagnóstico *
-            </label>
-            <textarea
-              {...register('diagnosis', { 
-                required: 'El diagnóstico es requerido',
-                minLength: { value: 5, message: 'Mínimo 5 caracteres' },
-                maxLength: { value: 500, message: 'Máximo 500 caracteres' }
-              })}
-              rows={3}
-              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-              placeholder="Diagnóstico principal y diferenciales..."
-            />
-            {errors.diagnosis && (
-              <p className="mt-1 text-sm text-red-400">{errors.diagnosis.message}</p>
-            )}
-            <p className="mt-1 text-xs text-gray-400">
-              {watchedData.diagnosis?.length || 0}/500 caracteres
-            </p>
-          </div>
+          <div className="space-y-6">
+            {/* ✅ MEJORADO: Padecimiento Actual con validación y botón de IA */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Padecimiento Actual *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsTranscriptionModalOpen(true)}
+                  className="flex items-center px-3 py-1 text-xs font-medium text-cyan-300 bg-cyan-900/50 rounded-md hover:bg-cyan-800/70 transition-colors"
+                  title="Usar Asistente de Transcripción con IA"
+                >
+                  <Mic className="h-4 w-4 mr-2" />
+                  Asistente IA
+                </button>
+              </div>
+              <textarea
+                {...register('current_condition', { 
+                  required: 'El padecimiento actual es requerido',
+                  minLength: { value: 10, message: 'Mínimo 10 caracteres' },
+                  maxLength: { value: 1000, message: 'Máximo 1000 caracteres' }
+                })}
+                rows={4}
+                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                placeholder="Describe el motivo de consulta y síntomas principales..."
+              />
+              {errors.current_condition && (
+                <p className="mt-1 text-sm text-red-400">{errors.current_condition.message}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-400">
+                {watchedData.current_condition?.length || 0}/1000 caracteres
+              </p>
+            </div>
 
-          {/* ✅ MEJORADO: Pronóstico con validación */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Pronóstico *
-            </label>
-            <textarea
-              {...register('prognosis', { 
-                required: 'El pronóstico es requerido',
-                minLength: { value: 5, message: 'Mínimo 5 caracteres' },
-                maxLength: { value: 300, message: 'Máximo 300 caracteres' }
-              })}
-              rows={2}
-              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-              placeholder="Pronóstico esperado..."
-            />
-            {errors.prognosis && (
-              <p className="mt-1 text-sm text-red-400">{errors.prognosis.message}</p>
-            )}
-            <p className="mt-1 text-xs text-gray-400">
-              {watchedData.prognosis?.length || 0}/300 caracteres
-            </p>
-          </div>
+            {/* ✅ MEJORADO: Exploración Física */}
+            <div>
+              <h3 className="text-lg font-medium text-white mb-4">Exploración Física</h3>
+              
+              {!selectedTemplate ? (
+                <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 bg-gray-750">
+                  <PhysicalExamTemplates
+                    onSelectTemplate={handleTemplateSelect}
+                    doctorId={doctorId}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="font-medium text-green-300">Plantilla Seleccionada:</h4>
+                        <p className="text-green-200">{selectedTemplate.name}</p>
+                        {physicalExamData && (
+                          <p className="text-sm text-green-400 mt-1">
+                            ✓ Examen físico completado - {physicalExamData.examDate} {physicalExamData.examTime}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowPhysicalExam(true)}
+                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                        >
+                          {physicalExamData ? 'Editar Examen' : 'Realizar Examen'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplate(null);
+                            setPhysicalExamData(null);
+                          }}
+                          className="px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors text-sm"
+                        >
+                          Cambiar Plantilla
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-          {/* ✅ MEJORADO: Tratamiento con validación */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Tratamiento *
-            </label>
-            <textarea
-              {...register('treatment', { 
-                required: 'El tratamiento es requerido',
-                minLength: { value: 10, message: 'Mínimo 10 caracteres' },
-                maxLength: { value: 1000, message: 'Máximo 1000 caracteres' }
-              })}
-              rows={4}
-              className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-              placeholder="Plan de tratamiento, medicamentos, recomendaciones..."
-            />
-            {errors.treatment && (
-              <p className="mt-1 text-sm text-red-400">{errors.treatment.message}</p>
-            )}
-            <p className="mt-1 text-xs text-gray-400">
-              {watchedData.treatment?.length || 0}/1000 caracteres
-            </p>
-          </div>
-        </div>
+                  {/* Vista previa de campos de la plantilla */}
+                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+                    <h4 className="font-medium text-blue-300 mb-3">Vista Previa de la Exploración:</h4>
+                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                      {(selectedTemplate.definition as TemplateDefinition)?.sections?.map((section: Section) => (
+                        <div key={section.id} className="border border-gray-600 rounded-lg p-3 bg-gray-800/50">
+                          <h5 className="font-medium text-white mb-2">{section.title}</h5>
+                          {section.description && (
+                            <p className="text-sm text-gray-400 mb-3">{section.description}</p>
+                          )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {section.questions?.map((question: Question) => (
+                              <div key={question.id} className="text-sm">
+                                <span className="text-gray-300">• {question.text || question.label}</span>
+                                {question.required && <span className="text-red-400"> *</span>}
+                                <span className="text-gray-500 ml-2">({question.type})</span>
+                                {question.options && question.options.length > 0 && (
+                                  <div className="ml-4 text-xs text-gray-400 mt-1">
+                                    Opciones: {question.options.slice(0, 3).join(', ')}{question.options.length > 3 ? '...' : ''}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )) || (
+                        <div className="text-center text-gray-400 py-4">
+                          No hay campos configurados en esta plantilla
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 text-xs text-gray-400">
+                      💡 Haz clic en "Realizar Examen" para completar todos estos campos de forma interactiva
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-        {/* ✅ MEJORADO: Submit buttons */}
-        <div className="mt-6 flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
-            disabled={loading}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading || !selectedTemplate || !physicalExamData}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Guardando...
-              </>
+            {/* ✅ MEJORADO: Signos Vitales */}
+            {physicalExamData ? (
+              <div className="bg-blue-900/30 border border-blue-700 p-4 rounded-lg">
+                <h3 className="text-lg font-medium text-white mb-4">Signos Vitales (del Examen Físico)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <dt className="text-sm text-gray-400">Presión Arterial</dt>
+                    <dd className="text-sm font-medium text-white">
+                      {physicalExamData.vitalSigns.systolic_pressure}/{physicalExamData.vitalSigns.diastolic_pressure} mmHg
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-gray-400">Frecuencia Cardíaca</dt>
+                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.heart_rate} lpm</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-gray-400">Temperatura</dt>
+                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.temperature} °C</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-gray-400">Frecuencia Respiratoria</dt>
+                    <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.respiratory_rate} rpm</dd>
+                  </div>
+                  {physicalExamData.vitalSigns.oxygen_saturation && (
+                    <div>
+                      <dt className="text-sm text-gray-400">Saturación O₂</dt>
+                      <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.oxygen_saturation}%</dd>
+                    </div>
+                  )}
+                  {physicalExamData.vitalSigns.weight && (
+                    <div>
+                      <dt className="text-sm text-gray-400">Peso</dt>
+                      <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.weight} kg</dd>
+                    </div>
+                  )}
+                  {physicalExamData.vitalSigns.height && (
+                    <div>
+                      <dt className="text-sm text-gray-400">Altura</dt>
+                      <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.height} cm</dd>
+                    </div>
+                  )}
+                  {physicalExamData.vitalSigns.bmi && (
+                    <div>
+                      <dt className="text-sm text-gray-400">IMC</dt>
+                      <dd className="text-sm font-medium text-white">{physicalExamData.vitalSigns.bmi}</dd>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Guardar Consulta
-              </>
+              <div>
+                <h3 className="text-lg font-medium text-white mb-4">Signos Vitales Básicos</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300">
+                      Temperatura (°C)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      {...register('vital_signs.temperature', {
+                        min: { value: 30, message: 'Temperatura muy baja' },
+                        max: { value: 45, message: 'Temperatura muy alta' }
+                      })}
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      placeholder="36.5"
+                    />
+                    {errors.vital_signs?.temperature && (
+                      <p className="mt-1 text-xs text-red-400">{errors.vital_signs.temperature.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300">
+                      Frecuencia Cardíaca (lpm)
+                    </label>
+                    <input
+                      type="number"
+                      {...register('vital_signs.heart_rate', {
+                        min: { value: 30, message: 'Frecuencia muy baja' },
+                        max: { value: 220, message: 'Frecuencia muy alta' }
+                      })}
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      placeholder="70"
+                    />
+                    {errors.vital_signs?.heart_rate && (
+                      <p className="mt-1 text-xs text-red-400">{errors.vital_signs.heart_rate.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300">
+                      Presión Arterial (mmHg)
+                    </label>
+                    <input
+                      type="text"
+                      {...register('vital_signs.blood_pressure', {
+                        pattern: {
+                          value: /^\d{2,3}\/\d{2,3}$/,
+                          message: 'Formato: 120/80'
+                        }
+                      })}
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      placeholder="120/80"
+                    />
+                    {errors.vital_signs?.blood_pressure && (
+                      <p className="mt-1 text-xs text-red-400">{errors.vital_signs.blood_pressure.message}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
-          </button>
-        </div>
-      </form>
-    </div>
+
+            {/* ✅ MEJORADO: Diagnóstico con validación */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Diagnóstico *
+              </label>
+              <textarea
+                {...register('diagnosis', { 
+                  required: 'El diagnóstico es requerido',
+                  minLength: { value: 5, message: 'Mínimo 5 caracteres' },
+                  maxLength: { value: 500, message: 'Máximo 500 caracteres' }
+                })}
+                rows={3}
+                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                placeholder="Diagnóstico principal y diferenciales..."
+              />
+              {errors.diagnosis && (
+                <p className="mt-1 text-sm text-red-400">{errors.diagnosis.message}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-400">
+                {watchedData.diagnosis?.length || 0}/500 caracteres
+              </p>
+            </div>
+
+            {/* ✅ MEJORADO: Pronóstico con validación */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Pronóstico *
+              </label>
+              <textarea
+                {...register('prognosis', { 
+                  required: 'El pronóstico es requerido',
+                  minLength: { value: 5, message: 'Mínimo 5 caracteres' },
+                  maxLength: { value: 300, message: 'Máximo 300 caracteres' }
+                })}
+                rows={2}
+                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                placeholder="Pronóstico esperado..."
+              />
+              {errors.prognosis && (
+                <p className="mt-1 text-sm text-red-400">{errors.prognosis.message}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-400">
+                {watchedData.prognosis?.length || 0}/300 caracteres
+              </p>
+            </div>
+
+            {/* ✅ MEJORADO: Tratamiento con validación */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Tratamiento *
+              </label>
+              <textarea
+                {...register('treatment', { 
+                  required: 'El tratamiento es requerido',
+                  minLength: { value: 10, message: 'Mínimo 10 caracteres' },
+                  maxLength: { value: 1000, message: 'Máximo 1000 caracteres' }
+                })}
+                rows={4}
+                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                placeholder="Plan de tratamiento, medicamentos, recomendaciones..."
+              />
+              {errors.treatment && (
+                <p className="mt-1 text-sm text-red-400">{errors.treatment.message}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-400">
+                {watchedData.treatment?.length || 0}/1000 caracteres
+              </p>
+            </div>
+          </div>
+
+          {/* ✅ MEJORADO: Submit buttons */}
+          <div className="mt-6 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+              disabled={loading}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || !selectedTemplate || !physicalExamData}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Guardar Consulta
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+      <MedicalTranscription
+          isOpen={isTranscriptionModalOpen}
+          onClose={() => setIsTranscriptionModalOpen(false)}
+          onApplyText={handleApplyTranscription}
+        />
+    </>
   );
 }
