@@ -36,7 +36,16 @@ export default function Auth() {
 
   // Limpiar caché al cargar la página de auth
   React.useEffect(() => {
-    clearAllSessions();
+    // Forzar limpieza completa en cada carga
+    const forceCleanup = async () => {
+      console.log('🧹 Iniciando limpieza forzada...');
+      await clearAllSessions();
+      // Adicional: limpiar cualquier dato residual
+      window.sessionStorage.clear();
+      window.localStorage.clear();
+      console.log('✅ Limpieza forzada completada');
+    };
+    forceCleanup();
   }, []);
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
