@@ -172,7 +172,7 @@ export default function PrescriptionDashboard() {
 
       const { data, error } = await supabase
         .from('prescription_templates')
-        .select('style_definition')
+        .select('style_definition, logo_url')
         .eq('user_id', user.id)
         .single();
       
@@ -182,6 +182,11 @@ export default function PrescriptionDashboard() {
 
       if (data) {
         setPrescriptionTemplate(data.style_definition);
+        if (data.logo_url) {
+          // Asumimos que `setLogoPreview` existe en tu dashboard o se pasará al editor
+          // Por ahora, lo guardamos en el estado de la plantilla.
+          setPrescriptionTemplate(prev => ({ ...prev, logo_url: data.logo_url }));
+        }
       }
     } catch (err: any) {
       console.error('Error fetching prescription template:', err.message);
@@ -191,7 +196,7 @@ export default function PrescriptionDashboard() {
     }
   };
 
-  const handleSavePrescriptionTemplate = async (styleDefinition: any) => {
+  const handleSavePrescriptionTemplate = async (styleDefinition: any, newLogoFile?: File) => {
     try {
       setSaveStatus('saving');
       setSaveMessage('Guardando plantilla...');
@@ -199,10 +204,32 @@ export default function PrescriptionDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
 
+      let logoUrlToSave = prescriptionTemplate?.logo_url || null;
+
+      if (newLogoFile) {
+        const filePath = `${user.id}/${newLogoFile.name}-${Date.now()}`;
+        const { error: uploadError } = await supabase.storage
+          .from('logos')
+          .upload(filePath, newLogoFile, {
+            cacheControl: '3600',
+            upsert: true,
+          });
+        
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage.from('logos').getPublicUrl(filePath);
+        logoUrlToSave = urlData.publicUrl;
+      }
+
       const { data, error } = await supabase
         .from('prescription_templates')
         .upsert(
-          { user_id: user.id, style_definition: styleDefinition, updated_at: new Date().toISOString() },
+          { 
+            user_id: user.id, 
+            style_definition: styleDefinition, 
+            logo_url: logoUrlToSave,
+            updated_at: new Date().toISOString() 
+          },
           { onConflict: 'user_id' }
         )
         .select()
@@ -210,7 +237,7 @@ export default function PrescriptionDashboard() {
       
       if (error) throw error;
 
-      setPrescriptionTemplate(data.style_definition);
+      setPrescriptionTemplate({ ...data.style_definition, logo_url: data.logo_url });
       setSaveStatus('success');
       setSaveMessage('Plantilla guardada exitosamente.');
       setTimeout(() => setActiveTab('dashboard'), 1500);
