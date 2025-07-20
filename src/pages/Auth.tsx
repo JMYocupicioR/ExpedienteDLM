@@ -84,10 +84,36 @@ export default function Auth() {
         if (data.user) {
           console.log('Usuario registrado exitosamente:', data.user.email);
           
-          // Esperar un momento para que el trigger cree el perfil
-          setTimeout(() => {
-            navigate('/signup-questionnaire');
-          }, 1000);
+          // Verificar que el perfil se haya creado antes de continuar
+          const checkProfile = async () => {
+            try {
+              const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('id', data.user.id)
+                .maybeSingle();
+              
+              if (profileError) {
+                console.error('Error verificando perfil:', profileError);
+                throw new Error('Error al verificar el perfil creado');
+              }
+              
+              if (profile) {
+                console.log('✅ Perfil creado exitosamente, redirigiendo...');
+                navigate('/signup-questionnaire');
+              } else {
+                // Si no existe el perfil después de 3 segundos, mostrar error
+                console.error('❌ No se pudo crear el perfil automáticamente');
+                throw new Error('Error al crear el perfil. Por favor, contacta soporte.');
+              }
+            } catch (err: any) {
+              setError(err.message);
+              setLoading(false);
+            }
+          };
+          
+          // Esperar hasta 3 segundos para que el trigger cree el perfil
+          setTimeout(checkProfile, 2000);
         } else {
           throw new Error('No se pudo crear el usuario');
         }
