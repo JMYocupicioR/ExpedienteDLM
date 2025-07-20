@@ -312,7 +312,7 @@ export default function Auth() {
                         type="text"
                         value={signupData.fullName}
                         onChange={(e) => updateSignupData('fullName', e.target.value)}
-                        placeholder="Dr. Juan Pérez Martínez"
+                        placeholder="Tu Nombre Completo"
                         required
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
                       />
@@ -328,7 +328,7 @@ export default function Auth() {
                         type="email"
                         value={signupData.email}
                         onChange={(e) => updateSignupData('email', e.target.value)}
-                        placeholder="ejemplo@deepluxmed.com"
+                        placeholder="ejemplo@correo.com"
                         required
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
                       />
