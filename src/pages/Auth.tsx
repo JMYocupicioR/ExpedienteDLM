@@ -3,12 +3,41 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Stethoscope, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+// Función para limpiar caché y sesiones
+const clearAllSessions = async () => {
+  try {
+    // Limpiar localStorage
+    localStorage.clear();
+    
+    // Limpiar sessionStorage
+    sessionStorage.clear();
+    
+    // Cerrar sesión en Supabase
+    await supabase.auth.signOut();
+    
+    // Limpiar caché del navegador
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => caches.delete(cacheName))
+      );
+    }
+    
+    console.log('✅ Caché y sesiones limpiadas exitosamente');
+  } catch (error) {
+    console.error('Error limpiando caché:', error);
+  }
+};
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // Limpiar caché al cargar la página de auth
+  React.useEffect(() => {
+    clearAllSessions();
+  }, []);
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
