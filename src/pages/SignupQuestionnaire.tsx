@@ -268,40 +268,6 @@ export default function SignupQuestionnaire() {
       setLoading(false);
     }
   };
-        .from('profiles')
-        .upsert({
-          id: userId,
-          email: userEmail,
-          full_name: formData.fullName,
-          role: formData.role,
-          specialty: formData.role === 'doctor' ? formData.specialty : null,
-          license_number: formData.licenseNumber,
-          phone: formData.phone,
-          schedule: formData.workSchedule ? {
-            type: formData.workSchedule,
-            notes: formData.additionalInfo
-          } : null,
-          prescription_style: {},
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'email' });
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
-        throw new Error(`Error al guardar el perfil: ${profileError.message}`);
-      }
-
-      // Redirigir al dashboard
-      navigate('/dashboard');
-      
-    } catch (err: any) {
-      console.error('Error completing profile:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const getStepTitle = (step: number): string => {
     switch (step) {
       case 1: return 'Información Personal';
