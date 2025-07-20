@@ -23,6 +23,7 @@ import {
   type PrescriptionTemplate
 } from '../lib/medicalConfig';
 import QRCodeLib from 'qrcode';
+import throttle from 'lodash.throttle';
 
 interface Position {
   x: number;
@@ -1138,21 +1139,33 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       }
     } catch (error) {
       console.error('Error generating QR code:', error);
+      setValidationErrors(prev => [...prev, {
+        field: 'qr',
+        message: 'Error al generar código QR. Verifique los datos.',
+        severity: 'error'
+      }]);
     }
   };
+
+  const throttledMouseMove = useCallback(
+    throttle((event: MouseEvent) => {
+      handleMouseMove(event);
+    }, 16), // Aproximadamente 60fps
+    [handleMouseMove]
+  );
 
   // ================= EFECTOS =================
   // Efecto para eventos del mouse
   useEffect(() => {
-    if (draggedElement) {
-      document.addEventListener('mousemove', handleMouseMove);
+    if (draggedElement || isResizing) {
+      document.addEventListener('mousemove', throttledMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mousemove', throttledMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [draggedElement, handleMouseMove, handleMouseUp]);
+  }, [draggedElement, isResizing, throttledMouseMove, handleMouseUp]);
 
   // Efecto para agregar al historial
   useEffect(() => {
@@ -1502,6 +1515,13 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       default:
         return element.content;
     }
+  };
+
+  // ================= FUNCIONES DE LÍMITES Y VALIDACIÓN DE POSICIÓN =================
+  const constrainToCanvas = (x: number, y: number, width: number, height: number) => {
+    const newX = Math.max(0, Math.min(x, canvasSize.width - width));
+    const newY = Math.max(0, Math.min(y, canvasSize.height - height));
+    return { x: newX, y: newY };
   };
 
   return (
@@ -1906,7 +1926,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                     type="file"
                     accept="image/*"
                     onChange={handleBackgroundImageUpload}
-                    className="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-gray-300"
+                    className="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-600 file:text-gray-300"
                   />
                   {backgroundImage && (
                     <button
