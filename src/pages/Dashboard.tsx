@@ -13,6 +13,7 @@ import { es } from 'date-fns/locale';
 import SettingsModal from '../components/SettingsModal';
 import { PatientTable } from '../components/MedicalDataTable';
 import type { PatientTableRow } from '../components/MedicalDataTable';
+import { useAuth } from '../hooks/useAuth';
 
 interface Patient {
   id: string;
@@ -33,10 +34,17 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { 
+    user, 
+    profile: userProfile, 
+    loading: authLoading, 
+    signOut, 
+    isAuthenticated 
+  } = useAuth();
+  
   const [patients, setPatients] = useState<Patient[]>([]);
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
-  const [userProfile, setUserProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
@@ -66,8 +74,18 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    checkSession();
-  }, []);
+    // Si la autenticación ha terminado y no hay usuario, redirigir
+    if (!authLoading && !isAuthenticated) {
+      navigate('/auth');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    // Si el perfil está disponible, cargar los datos del dashboard
+    if (userProfile) {
+      fetchDashboardData();
+    }
+  }, [userProfile]);
 
   useEffect(() => {
     const filtered = patients.filter(patient =>
@@ -96,42 +114,9 @@ export default function Dashboard() {
     };
   }, []);
 
-  const checkSession = async () => {
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-      if (!session) {
-        navigate('/auth');
-        return;
-      }
-
-      // Get user profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
-      if (profileError) throw profileError;
-      
-      // If no profile exists, redirect to questionnaire
-      if (!profile) {
-        navigate('/signup-questionnaire');
-        return;
-      }
-      
-      setUserProfile(profile);
-
-      await fetchDashboardData();
-    } catch (err) {
-      console.error('Session check error:', err);
-      navigate('/auth');
-    }
-  };
-
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
+      setDashboardLoading(true);
       setError(null);
 
       // Fetch patients
@@ -167,40 +152,19 @@ export default function Dashboard() {
       console.error('Error fetching dashboard data:', error);
       setError(error.message);
     } finally {
-      setLoading(false);
+      setDashboardLoading(false);
     }
   };
 
   const handleSignOut = async () => {
-    try {
-      // Limpiar localStorage
-      localStorage.clear();
-      
-      // Limpiar sessionStorage
-      sessionStorage.clear();
-      
-      // Limpiar caché del navegador
-      if ('caches' in window) {
-        const cacheNames = await caches.keys();
-        await Promise.all(
-          cacheNames.map(cacheName => caches.delete(cacheName))
-        );
-      }
-      
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
-      console.log('✅ Sesión cerrada y caché limpiado');
-      navigate('/auth');
-    } catch (error: any) {
-      console.error('Error signing out:', error);
-    }
+    await signOut();
+    navigate('/auth');
   };
 
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setLoading(true);
+      setDashboardLoading(true);
       setError(null);
 
       const { error } = await supabase
@@ -227,7 +191,7 @@ export default function Dashboard() {
       console.error('Error creating patient:', error);
       setError(error.message);
     } finally {
-      setLoading(false);
+      setDashboardLoading(false);
     }
   };
 
@@ -250,7 +214,7 @@ export default function Dashboard() {
     }
 
     try {
-      setLoading(true);
+      setDashboardLoading(true);
       const { error } = await supabase
         .from('patients')
         .delete()
@@ -264,7 +228,7 @@ export default function Dashboard() {
       console.error('Error deleting patient:', error);
       setError(error.message);
     } finally {
-      setLoading(false);
+      setDashboardLoading(false);
     }
   };
 
@@ -438,7 +402,7 @@ export default function Dashboard() {
     return content;
   };
 
-  if (loading && !userProfile) {
+  if (authLoading || dashboardLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
@@ -693,7 +657,7 @@ export default function Dashboard() {
           <PatientTable
             patients={filteredPatients as PatientTableRow[]}
             onPatientClick={(patient) => navigate(`/expediente/${patient.id}`)}
-            loading={loading}
+            loading={dashboardLoading}
             error={error}
           />
         </div>
@@ -876,11 +840,11 @@ export default function Dashboard() {
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={dashboardLoading}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                   aria-label="Guardar nuevo paciente en el sistema"
                 >
-                  {loading ? (
+                  {dashboardLoading ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Creando...
@@ -906,7 +870,8 @@ export default function Dashboard() {
           userProfile={userProfile}
           onUpdate={(updatedProfile) => {
             if (updatedProfile) {
-              setUserProfile(updatedProfile);
+              // Assuming useAuth handles state updates for profile
+              // No need to setUserProfile here directly, as useAuth will manage it
               console.log('Profile updated:', updatedProfile);
             }
           }}
