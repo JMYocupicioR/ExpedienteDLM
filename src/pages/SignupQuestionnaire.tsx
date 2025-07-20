@@ -212,7 +212,7 @@ export default function SignupQuestionnaire() {
           prescription_style: {},
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        }, { onConflict: 'email' });
 
       if (profileError) {
         console.error('Error creating profile:', profileError);
