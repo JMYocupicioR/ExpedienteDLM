@@ -42,8 +42,17 @@ export default function Auth() {
           throw error;
         }
         
-        // Redirigir al cuestionario para completar perfil
-        navigate('/signup-questionnaire');
+        // Verificar si el usuario se creó correctamente
+        if (data.user) {
+          console.log('Usuario registrado exitosamente:', data.user.email);
+          
+          // Esperar un momento para que el trigger cree el perfil
+          setTimeout(() => {
+            navigate('/signup-questionnaire');
+          }, 1000);
+        } else {
+          throw new Error('No se pudo crear el usuario');
+        }
       }
     } catch (err: any) {
       if (err.message === 'Invalid login credentials') {
