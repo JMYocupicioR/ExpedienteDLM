@@ -110,9 +110,16 @@ export default function Dashboard() {
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) throw profileError;
+      
+      // If no profile exists, redirect to questionnaire
+      if (!profile) {
+        navigate('/signup-questionnaire');
+        return;
+      }
+      
       setUserProfile(profile);
 
       await fetchDashboardData();
