@@ -41,6 +41,7 @@ interface Prescription {
   expires_at: string;
   status: 'active' | 'expired' | 'dispensed';
   doctor_signature?: string;
+  prescription_style?: any;
   patients?: {
     full_name: string;
   };
@@ -67,10 +68,13 @@ export default function PrescriptionDashboard() {
   const [prescriptionHistory, setPrescriptionHistory] = useState<Prescription[]>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = useState('');
+  const [prescriptionTemplate, setPrescriptionTemplate] = useState<any>(null);
+  const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
 
   useEffect(() => {
     fetchPrescriptions();
     fetchPatients();
+    fetchPrescriptionTemplate();
     
     // Verificar si hay un paciente preseleccionado en la URL
     const pacienteId = searchParams.get('paciente');
@@ -109,6 +113,7 @@ export default function PrescriptionDashboard() {
           status,
           created_at,
           expires_at,
+          prescription_style,
           patients (
             full_name
           )
@@ -156,6 +161,63 @@ export default function PrescriptionDashboard() {
       setPrescriptionHistory(formattedHistory);
     } catch (err) {
       console.error('Error fetching prescription history:', err);
+    }
+  };
+
+  const fetchPrescriptionTemplate = async () => {
+    try {
+      setIsLoadingTemplate(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('prescription_templates')
+        .select('style_definition')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') { // Ignore 'no rows found'
+        throw error;
+      }
+
+      if (data) {
+        setPrescriptionTemplate(data.style_definition);
+      }
+    } catch (err: any) {
+      console.error('Error fetching prescription template:', err.message);
+      setError('No se pudo cargar la plantilla de receta.');
+    } finally {
+      setIsLoadingTemplate(false);
+    }
+  };
+
+  const handleSavePrescriptionTemplate = async (styleDefinition: any) => {
+    try {
+      setSaveStatus('saving');
+      setSaveMessage('Guardando plantilla...');
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuario no autenticado');
+
+      const { data, error } = await supabase
+        .from('prescription_templates')
+        .upsert(
+          { user_id: user.id, style_definition: styleDefinition, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        )
+        .select()
+        .single();
+      
+      if (error) throw error;
+
+      setPrescriptionTemplate(data.style_definition);
+      setSaveStatus('success');
+      setSaveMessage('Plantilla guardada exitosamente.');
+      setTimeout(() => setActiveTab('dashboard'), 1500);
+    } catch (err: any) {
+      console.error('Error saving template:', err.message);
+      setSaveStatus('error');
+      setSaveMessage('Error al guardar la plantilla.');
     }
   };
 
@@ -932,39 +994,19 @@ export default function PrescriptionDashboard() {
         {/* Editor Visual */}
         {activeTab === 'visual' && (
           <>
-            {!selectedPatientId ? (
-              <div className="dark-card p-8 text-center">
-                <User className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                <h3 className="text-lg font-medium text-gray-100 mb-2">Selecciona un paciente</h3>
-                <p className="text-gray-400 mb-4">Necesitas seleccionar un paciente antes de usar el editor visual</p>
-                <div className="max-w-md mx-auto">
-                  <select
-                    value={selectedPatientId}
-                    onChange={(e) => setSelectedPatientId(e.target.value)}
-                    className="w-full dark-input mb-3"
-                  >
-                    <option value="">Seleccione un paciente</option>
-                    {patients.map((patient) => (
-                      <option key={patient.id} value={patient.id}>
-                        {patient.full_name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => navigate('/patients?action=new')}
-                    className="w-full dark-button-secondary"
-                  >
-                    + Registrar nuevo paciente
-                  </button>
-                </div>
+            {isLoadingTemplate ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+                <p className="ml-4 text-gray-300">Cargando plantilla...</p>
               </div>
             ) : (
               <div className="fixed inset-0 z-50">
                 <VisualPrescriptionEditor
-                  patientId={selectedPatientId}
-                  patientName={selectedPatientName}
-                  onSave={handleNewPrescription}
+                  patientId={selectedPatientId || 'preview'}
+                  patientName={selectedPatientName || 'Vista Previa'}
+                  onSave={handleSavePrescriptionTemplate}
                   onClose={() => setActiveTab('dashboard')}
+                  existingTemplate={prescriptionTemplate}
                 />
               </div>
             )}
