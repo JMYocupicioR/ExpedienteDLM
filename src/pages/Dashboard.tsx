@@ -11,6 +11,8 @@ import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import SettingsModal from '../components/SettingsModal';
+import { PatientTable } from '../components/MedicalDataTable';
+import type { PatientTableRow } from '../components/MedicalDataTable';
 
 interface Patient {
   id: string;
@@ -442,8 +444,8 @@ export default function Dashboard() {
                   <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
                 </button>
                 
-                                 {showNotifications && (
-                   <div className="notifications-menu absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-20">
+                {showNotifications && (
+                  <div className="notifications-menu absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-20">
                     <div className="p-4 border-b border-gray-700">
                       <h3 className="text-sm font-medium text-white">Notificaciones</h3>
                     </div>
@@ -591,23 +593,33 @@ export default function Dashboard() {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    aria-label="Buscar pacientes por nombre, email o teléfono"
                   />
                 </div>
                 <div className="relative">
                   <button
                     onClick={handleExportMenuToggle}
                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center mr-3"
+                    aria-label="Exportar lista de pacientes"
+                    aria-expanded={showExportMenu}
+                    aria-haspopup="menu"
                   >
                     <FileDown className="h-4 w-4 mr-2" />
                     Exportar
                   </button>
                   
                   {showExportMenu && (
-                    <div className="export-menu absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-10">
+                    <div 
+                      className="export-menu absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-10"
+                      role="menu"
+                      aria-labelledby="export-menu-button"
+                    >
                       <div className="py-1">
                         <button
                           onClick={handlePrint}
                           className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                          role="menuitem"
+                          aria-label="Imprimir lista de pacientes"
                         >
                           <Printer className="h-4 w-4 mr-3" />
                           Imprimir
@@ -615,6 +627,8 @@ export default function Dashboard() {
                         <button
                           onClick={handleExportPDF}
                           className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                          role="menuitem"
+                          aria-label="Exportar como archivo PDF"
                         >
                           <FileDown className="h-4 w-4 mr-3" />
                           Exportar como PDF
@@ -622,6 +636,8 @@ export default function Dashboard() {
                         <button
                           onClick={handleExportTXT}
                           className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                          role="menuitem"
+                          aria-label="Exportar como archivo de texto"
                         >
                           <FileTextIcon className="h-4 w-4 mr-3" />
                           Exportar como TXT
@@ -634,6 +650,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setShowNewPatientForm(true)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                  aria-label="Registrar nuevo paciente en el sistema"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Nuevo Paciente
@@ -643,163 +660,45 @@ export default function Dashboard() {
           </div>
 
           {error && (
-            <div className="p-4 bg-red-900/50 border-b border-red-700 text-red-300 flex items-center">
+            <div className="p-4 bg-red-900/50 border-b border-red-700 text-red-300 flex items-center" role="alert">
               <AlertCircle className="h-5 w-5 mr-2" />
               {error}
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            {filteredPatients.length > 0 ? (
-              <table className="w-full">
-                <thead className="bg-gray-900">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Paciente
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Edad
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Contacto
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Registro
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {filteredPatients.map((patient) => (
-                    <tr key={patient.id} className="hover:bg-gray-750 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
-                            <span className="text-white text-sm font-medium">
-                              {patient.full_name.charAt(0)}
-                            </span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-white">{patient.full_name}</div>
-                            <div className="text-sm text-gray-400 capitalize">{patient.gender}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {calculateAge(patient.birth_date)} años
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-300">{patient.email}</div>
-                        <div className="text-sm text-gray-400">{patient.phone}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                        {format(new Date(patient.created_at), 'dd/MM/yyyy')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => navigate(`/expediente/${patient.id}`)}
-                          className="text-blue-400 hover:text-blue-300 mr-3 transition-colors"
-                          title="Ver expediente"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <div className="relative inline-block">
-                          <button 
-                            onClick={() => handlePatientActionsToggle(patient.id)}
-                            className="text-gray-400 hover:text-white transition-colors"
-                            title="Más opciones"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                          
-                                                     {showPatientActions === patient.id && (
-                             <div className="patient-actions-menu absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-10">
-                              <div className="py-1">
-                                <button
-                                  onClick={() => {
-                                    navigate(`/recetas?paciente=${patient.id}`);
-                                    setShowPatientActions(null);
-                                  }}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-cyan-300 hover:bg-gray-700 hover:text-cyan-200 transition-colors"
-                                >
-                                  <FileText className="h-4 w-4 mr-3" />
-                                  Emitir Receta
-                                </button>
-                                <button
-                                  onClick={() => handleNewConsultation(patient.id)}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-green-300 hover:bg-gray-700 hover:text-green-200 transition-colors"
-                                >
-                                  <Plus className="h-4 w-4 mr-3" />
-                                  Nueva Consulta
-                                </button>
-                                <button
-                                  onClick={() => navigate(`/expediente/${patient.id}`)}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-blue-300 hover:bg-gray-700 hover:text-blue-200 transition-colors"
-                                >
-                                  <Eye className="h-4 w-4 mr-3" />
-                                  Ver Expediente
-                                </button>
-                                <button
-                                  onClick={() => handleEditPatient(patient)}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                                >
-                                  <Edit className="h-4 w-4 mr-3" />
-                                  Editar Paciente
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePatient(patient.id)}
-                                  className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 transition-colors"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-3" />
-                                  Eliminar Paciente
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="text-center py-12">
-                <Users className="mx-auto h-12 w-12 text-gray-500" />
-                <h3 className="mt-2 text-sm font-medium text-white">No hay pacientes</h3>
-                <p className="mt-1 text-sm text-gray-400">
-                  {searchTerm ? 'No se encontraron pacientes que coincidan con tu búsqueda.' : 'Comienza agregando un nuevo paciente.'}
-                </p>
-                {!searchTerm && (
-                  <div className="mt-6">
-                    <button
-                      onClick={() => setShowNewPatientForm(true)}
-                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Nuevo Paciente
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Usar tabla accesible mejorada */}
+          <PatientTable
+            patients={filteredPatients as PatientTableRow[]}
+            onPatientClick={(patient) => navigate(`/expediente/${patient.id}`)}
+            loading={loading}
+            error={error}
+          />
         </div>
       </main>
 
       {/* New Patient Modal */}
       {showNewPatientForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50"
+          role="dialog"
+          aria-labelledby="new-patient-title"
+          aria-describedby="new-patient-description"
+        >
           <div className="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-700">
             <div className="p-6 border-b border-gray-700 flex justify-between items-center">
-              <h3 className="text-lg font-medium text-white">Nuevo Paciente</h3>
+              <h3 id="new-patient-title" className="text-lg font-medium text-white">Registrar Nuevo Paciente</h3>
               <button
                 onClick={() => setShowNewPatientForm(false)}
                 className="text-gray-400 hover:text-white transition-colors"
+                aria-label="Cerrar formulario de nuevo paciente"
               >
                 <X className="h-5 w-5" />
               </button>
+            </div>
+
+            <div id="new-patient-description" className="sr-only">
+              Formulario para registrar un nuevo paciente en el sistema de expedientes médicos.
+              Complete todos los campos obligatorios marcados con asterisco.
             </div>
 
             <form onSubmit={handleCreatePatient} className="p-6">
@@ -814,7 +713,12 @@ export default function Dashboard() {
                     value={newPatient.full_name}
                     onChange={(e) => setNewPatient(prev => ({ ...prev, full_name: e.target.value }))}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    aria-required="true"
+                    aria-describedby="full-name-help"
                   />
+                  <div id="full-name-help" className="sr-only">
+                    Ingrese el nombre completo del paciente incluyendo apellidos
+                  </div>
                 </div>
 
                 <div>
@@ -827,7 +731,12 @@ export default function Dashboard() {
                     value={newPatient.birth_date}
                     onChange={(e) => setNewPatient(prev => ({ ...prev, birth_date: e.target.value }))}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    aria-required="true"
+                    aria-describedby="birth-date-help"
                   />
+                  <div id="birth-date-help" className="sr-only">
+                    Seleccione la fecha de nacimiento del paciente para calcular la edad automáticamente
+                  </div>
                 </div>
 
                 <div>
@@ -839,6 +748,7 @@ export default function Dashboard() {
                     value={newPatient.gender}
                     onChange={(e) => setNewPatient(prev => ({ ...prev, gender: e.target.value }))}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    aria-required="true"
                   >
                     <option value="masculino">Masculino</option>
                     <option value="femenino">Femenino</option>
@@ -856,7 +766,12 @@ export default function Dashboard() {
                     value={newPatient.email}
                     onChange={(e) => setNewPatient(prev => ({ ...prev, email: e.target.value }))}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    aria-required="true"
+                    aria-describedby="email-help"
                   />
+                  <div id="email-help" className="sr-only">
+                    Dirección de correo electrónico para comunicaciones médicas importantes
+                  </div>
                 </div>
 
                 <div>
@@ -869,7 +784,13 @@ export default function Dashboard() {
                     value={newPatient.phone}
                     onChange={(e) => setNewPatient(prev => ({ ...prev, phone: e.target.value }))}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    aria-required="true"
+                    aria-describedby="phone-help"
+                    placeholder="Ej: +52 555 123 4567"
                   />
+                  <div id="phone-help" className="sr-only">
+                    Número de teléfono de contacto principal del paciente
+                  </div>
                 </div>
 
                 <div>
@@ -926,6 +847,7 @@ export default function Dashboard() {
                   type="button"
                   onClick={() => setShowNewPatientForm(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                  aria-label="Cancelar registro de nuevo paciente"
                 >
                   Cancelar
                 </button>
@@ -933,6 +855,7 @@ export default function Dashboard() {
                   type="submit"
                   disabled={loading}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  aria-label="Guardar nuevo paciente en el sistema"
                 >
                   {loading ? (
                     <>

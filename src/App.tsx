@@ -7,6 +7,7 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import PatientRecord from './pages/PatientRecord';
 import PrescriptionDashboard from './pages/PrescriptionDashboard';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 function App() {
@@ -36,28 +37,38 @@ function App() {
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route 
-          path="/auth" 
-          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Auth />} 
-        />
-        <Route 
-          path="/dashboard" 
-          element={isAuthenticated ? <Dashboard /> : <Navigate to="/auth" />} 
-        />
-        <Route 
-          path="/expediente/:id" 
-          element={isAuthenticated ? <PatientRecord /> : <Navigate to="/auth" />} 
-        />
-        <Route 
-          path="/recetas" 
-          element={isAuthenticated ? <PrescriptionDashboard /> : <Navigate to="/auth" />} 
-        />
-      </Routes>
-    </Router>
+    <ErrorBoundary>
+      {/* Skip links para navegación accesible */}
+      <a href="#main-content" className="skip-link">
+        Saltar al contenido principal
+      </a>
+      <a href="#navigation" className="skip-link">
+        Saltar a la navegación
+      </a>
+      
+      <Router>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route 
+            path="/auth" 
+            element={isAuthenticated ? <Navigate to="/dashboard" /> : <Auth />} 
+          />
+          <Route 
+            path="/dashboard" 
+            element={isAuthenticated ? <Dashboard /> : <Navigate to="/auth" />} 
+          />
+          <Route 
+            path="/expediente/:id" 
+            element={isAuthenticated ? <PatientRecord /> : <Navigate to="/auth" />} 
+          />
+          <Route 
+            path="/recetas" 
+            element={isAuthenticated ? <PrescriptionDashboard /> : <Navigate to="/auth" />} 
+          />
+        </Routes>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

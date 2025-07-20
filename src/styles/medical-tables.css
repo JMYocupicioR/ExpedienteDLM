@@ -1,0 +1,222 @@
+/* Estilos específicos para tablas médicas accesibles */
+
+/* Mejoras de contraste para datos médicos críticos */
+.medical-patients-table [data-medical-priority="urgent"] {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 4px solid #ef4444;
+}
+
+.medical-consultations-table [data-consultation-status="pending"] {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-left: 4px solid #f59e0b;
+}
+
+.medical-prescriptions-table [data-prescription-status="discontinued"] {
+  background-color: rgba(239, 68, 68, 0.1);
+  opacity: 0.8;
+}
+
+/* Indicadores visuales para signos vitales anormales */
+.medical-vital-signs-table [data-vital-status="abnormal"] {
+  background-color: rgba(239, 68, 68, 0.1);
+  font-weight: 600;
+}
+
+.medical-vital-signs-table [data-vital-status="critical"] {
+  background-color: rgba(220, 38, 38, 0.2);
+  border: 2px solid #dc2626;
+  font-weight: 700;
+  animation: pulse 2s infinite;
+}
+
+/* Mejoras de accesibilidad para navegación por teclado */
+.medical-table-container table:focus {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.medical-table-container th:focus {
+  background-color: rgba(59, 130, 246, 0.2);
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+.medical-table-container td:focus {
+  background-color: rgba(59, 130, 246, 0.1);
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+/* Indicadores visuales para elementos seleccionados */
+.medical-table-container tr[aria-selected="true"] {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-left: 4px solid #3b82f6;
+}
+
+/* Estilos para impresión - mantener legibilidad */
+@media print {
+  .medical-table-container {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .medical-table-container table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  
+  .medical-table-container th,
+  .medical-table-container td {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+  }
+  
+  .medical-table-container th {
+    background-color: #f0f0f0 !important;
+    font-weight: bold;
+  }
+  
+  /* Ocultar controles de interfaz en impresión */
+  .medical-table-container .table-controls,
+  .medical-table-container .pagination-controls {
+    display: none !important;
+  }
+}
+
+/* Indicadores específicos para contexto médico */
+.medical-context-urgent::before {
+  content: "🚨";
+  margin-right: 4px;
+}
+
+.medical-context-warning::before {
+  content: "⚠️";
+  margin-right: 4px;
+}
+
+.medical-context-normal::before {
+  content: "✅";
+  margin-right: 4px;
+}
+
+/* Mejoras de legibilidad para datos médicos numéricos */
+.medical-numeric-data {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+}
+
+/* Estilos para diferentes tipos de datos médicos */
+.medical-data-medication {
+  color: #10b981; /* Verde para medicamentos */
+}
+
+.medical-data-diagnosis {
+  color: #f59e0b; /* Amarillo para diagnósticos */
+}
+
+.medical-data-vital-sign {
+  color: #ef4444; /* Rojo para signos vitales */
+}
+
+.medical-data-test-result {
+  color: #8b5cf6; /* Púrpura para resultados de exámenes */
+}
+
+/* Animaciones para cambios importantes */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes highlight {
+  0% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Clase para destacar cambios recientes */
+.medical-data-updated {
+  animation: highlight 1s ease-in-out;
+}
+
+/* Mejoras de accesibilidad para usuarios con discapacidades motoras */
+.medical-table-container button,
+.medical-table-container input,
+.medical-table-container select {
+  min-height: 44px; /* Área de toque mínima recomendada */
+  min-width: 44px;
+}
+
+/* Alto contraste para usuarios con deficiencias visuales */
+@media (prefers-contrast: high) {
+  .medical-table-container {
+    background: #000000;
+    color: #ffffff;
+  }
+  
+  .medical-table-container th {
+    background: #ffffff;
+    color: #000000;
+    border: 2px solid #ffffff;
+  }
+  
+  .medical-table-container td {
+    border: 1px solid #ffffff;
+  }
+  
+  .medical-table-container tr:hover {
+    background: #333333;
+  }
+}
+
+/* Reducción de movimiento para usuarios sensibles */
+@media (prefers-reduced-motion: reduce) {
+  .medical-table-container *,
+  .medical-table-container *::before,
+  .medical-table-container *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Estilos para lectores de pantalla */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Mostrar contenido sr-only cuando tiene foco (para debugging) */
+.sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0.5rem;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  background: #1f2937;
+  color: #f3f4f6;
+  border: 2px solid #3b82f6;
+  border-radius: 0.375rem;
+}
