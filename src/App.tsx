@@ -7,6 +7,7 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import PatientRecord from './pages/PatientRecord';
 import PrescriptionDashboard from './pages/PrescriptionDashboard';
+import SignupQuestionnaire from './pages/SignupQuestionnaire';
 import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
