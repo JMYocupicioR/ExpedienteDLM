@@ -1,40 +1,56 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from './database.types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: {
-      getItem: (key) => {
-        try {
-          const value = localStorage.getItem(key);
-          return value ? JSON.parse(value) : null;
-        } catch (error) {
-          console.error('Error reading from localStorage:', error);
-          return null;
-        }
-      },
-      setItem: (key, value) => {
-        try {
-          localStorage.setItem(key, JSON.stringify(value));
-        } catch (error) {
-          console.error('Error writing to localStorage:', error);
-        }
-      },
-      removeItem: (key) => {
-        try {
-          localStorage.removeItem(key);
-        } catch (error) {
-          console.error('Error removing from localStorage:', error);
-        }
-      },
-    },
-  },
-});
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+
+/**
+ * Establece la información de la sesión para la auditoría en la base de datos.
+ * Esta información es utilizada por los triggers de auditoría para registrar
+ * la dirección IP y el agente de usuario que realizan una operación.
+ * 
+ * @param {string} sessionId - Un identificador para la sesión actual.
+ */
+export const setSessionInfo = async (sessionId: string) => {
+  const sessionInfo = {
+    ip_address: '127.0.0.1', // En un entorno real, esto debería obtenerse del servidor.
+    user_agent: navigator.userAgent,
+    session_id: sessionId,
+  };
+
+  // El 'BEGIN' y 'COMMIT' aseguran que el setting solo dure para la transacción.
+  const { error } = await supabase.rpc('execute_as_transaction', {
+    sql: `
+      SET LOCAL app.session_info = '${JSON.stringify(sessionInfo)}';
+    `
+  });
+
+  if (error) {
+    console.error('Error setting session info for audit:', error);
+  }
+};
+
+/**
+ * Una función de ejemplo para envolver una llamada a Supabase que requiere auditoría.
+ * Primero establece la información de la sesión y luego realiza la operación.
+ * 
+ * @param {object} profileData - Los datos del perfil a actualizar.
+ * @param {string} userId - El ID del usuario a actualizar.
+ */
+export const updateUserProfileWithAudit = async (profileData: any, userId: string) => {
+  const sessionId = crypto.randomUUID(); // Generar un ID de sesión único para esta operación
+  
+  // Establecer la información de la sesión para la auditoría
+  await setSessionInfo(sessionId);
+
+  // Realizar la operación de actualización
+  return supabase
+    .from('profiles')
+    .update(profileData)
+    .eq('id', userId);
+};
 
 // Listen for auth state changes
 supabase.auth.onAuthStateChange((event, session) => {
