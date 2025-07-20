@@ -102,7 +102,7 @@ export default function SignupQuestionnaire() {
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
         console.error('Error verificando perfil:', profileError);
@@ -110,11 +110,15 @@ export default function SignupQuestionnaire() {
         return;
       }
       
-      if (profile && profile.full_name) {
+      if (profile && profile.full_name && profile.full_name.trim()) {
         // Si ya tiene perfil completo, ir al dashboard
         navigate('/dashboard');
         return;
       }
+      
+      // Si llegamos aquí, mostrar el cuestionario
+      setUserId(session.user.id);
+      setUserEmail(session.user.email || '');
     };
 
     checkAuthState();
