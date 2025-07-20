@@ -8,6 +8,9 @@ CREATE TABLE "public"."prescription_templates" (
 
 ALTER TABLE "public"."prescription_templates" ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE "public"."prescription_templates"
+ADD COLUMN "logo_url" text;
+
 CREATE POLICY "Allow users to manage their own templates"
 ON "public"."prescription_templates"
 FOR ALL
