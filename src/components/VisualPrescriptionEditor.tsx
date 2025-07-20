@@ -87,7 +87,6 @@ interface PrescriptionData {
 
 interface HistoryState {
   elements: Element[];
-  prescriptionData: PrescriptionData;
   timestamp: number;
 }
 
@@ -186,6 +185,37 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+
+  const previewData: PrescriptionData = {
+    patientName: 'Nombre del Paciente de Ejemplo',
+    doctorName: 'Dr. Nombre de Ejemplo',
+    doctorLicense: '12345678',
+    clinicName: 'Clínica de Ejemplo',
+    diagnosis: 'Diagnóstico de ejemplo para visualización.',
+    medications: [
+      {
+        name: 'Medicamento A',
+        dosage: '10mg',
+        frequency: 'Cada 8 horas',
+        duration: '7 días',
+        instructions: 'Tomar con alimentos.',
+      },
+      {
+        name: 'Medicamento B',
+        dosage: '500mg',
+        frequency: 'Cada 12 horas',
+        duration: '10 días',
+        instructions: 'Evitar la exposición al sol.',
+      },
+    ],
+    notes: 'Notas adicionales y recomendaciones para el paciente.',
+    date: new Date().toLocaleDateString(),
+    patientAge: '30',
+    patientWeight: '70kg',
+    patientAllergies: 'Ninguna conocida',
+    followUpDate: '01/01/2025',
+    prescriptionId: `RX-PREVIEW-${Date.now()}`
+  };
 
   // Elementos de la receta con plantilla inicial
   const [elements, setElements] = useState<Element[]>([
@@ -370,7 +400,6 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     
     const newState: HistoryState = {
       elements: [...elements],
-      prescriptionData: { ...prescriptionData },
       timestamp: Date.now()
     };
 
@@ -381,14 +410,13 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     });
     
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [elements, prescriptionData, historyIndex, isUndoRedo]);
+  }, [elements, historyIndex, isUndoRedo]);
 
   const undo = () => {
     if (historyIndex > 0) {
       setIsUndoRedo(true);
       const prevState = history[historyIndex - 1];
       setElements(prevState.elements);
-      setPrescriptionData(prevState.prescriptionData);
       setHistoryIndex(prev => prev - 1);
       setTimeout(() => setIsUndoRedo(false), 100);
     }
@@ -399,94 +427,15 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       setIsUndoRedo(true);
       const nextState = history[historyIndex + 1];
       setElements(nextState.elements);
-      setPrescriptionData(nextState.prescriptionData);
       setHistoryIndex(prev => prev + 1);
       setTimeout(() => setIsUndoRedo(false), 100);
     }
-  };
-
-  // ================= FUNCIONES DE VALIDACIÓN MÉDICA =================
-  const validatePrescription = () => {
-    const errors: ValidationError[] = [];
-    
-    // Validación de campos obligatorios
-    if (!prescriptionData.patientName.trim()) {
-      errors.push({ field: 'patientName', message: 'El nombre del paciente es obligatorio', severity: 'error' });
-    }
-    
-    if (!prescriptionData.doctorName.trim()) {
-      errors.push({ field: 'doctorName', message: 'El nombre del médico es obligatorio', severity: 'error' });
-    }
-    
-    if (!prescriptionData.doctorLicense.trim()) {
-      errors.push({ field: 'doctorLicense', message: 'La cédula profesional es obligatoria', severity: 'error' });
-    }
-
-    // Validación de medicamentos usando la configuración centralizada
-    prescriptionData.medications.forEach((med, index) => {
-      if (!med.name.trim()) {
-        errors.push({ field: `medication-${index}`, message: `Medicamento ${index + 1}: Nombre requerido`, severity: 'error' });
-      } else {
-        const validation = validateMedication(med.name, med.dosage, med.frequency, med.duration);
-        if (!validation.isValid) {
-          validation.errors.forEach(error => {
-            errors.push({ field: `medication-${index}`, message: `Medicamento ${index + 1}: ${error}`, severity: 'warning' });
-          });
-        }
-      }
-    });
-
-    // Validación de edad vs medicamentos
-    if (prescriptionData.patientAge) {
-      const age = parseInt(prescriptionData.patientAge);
-      if (age < 18) {
-        errors.push({ field: 'patientAge', message: 'Paciente menor de edad - verificar dosis pediátricas', severity: 'warning' });
-      }
-      if (age > 65) {
-        errors.push({ field: 'patientAge', message: 'Paciente geriátrico - considerar ajuste de dosis', severity: 'info' });
-      }
-    }
-
-    setValidationErrors(errors);
-    return errors;
-  };
-
-  const checkDrugInteractionsAdvanced = () => {
-    const interactions: DrugInteraction[] = [];
-    const medications = prescriptionData.medications.map(m => m.name.toLowerCase());
-
-    medications.forEach((med1, i) => {
-      medications.slice(i + 1).forEach(med2 => {
-        const interactionResult = checkDrugInteractions(med1);
-        if (interactionResult && interactionResult.length > 0) {
-          // Simulación básica de interacciones
-          const interaction: DrugInteraction = {
-            drug1: med1,
-            drug2: med2,
-            severity: 'moderate',
-            description: 'Posible interacción medicamentosa - revisar'
-          };
-          interactions.push(interaction);
-        }
-      });
-    });
-
-    setDrugInteractions(interactions);
-    return interactions;
   };
 
   // ================= FUNCIONES DE GUARDADO AUTOMÁTICO =================
   const saveToLocalStorage = () => {
     const data = {
       elements,
-      prescriptionData,
-      canvasSettings: {
-        backgroundColor,
-        backgroundImage,
-        canvasSize,
-        zoom,
-        showGrid
-      },
       timestamp: Date.now()
     };
     
@@ -500,10 +449,9 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       try {
         const data = JSON.parse(saved);
         setElements(data.elements);
-        setPrescriptionData(data.prescriptionData);
         if (data.canvasSettings) {
           setBackgroundColor(data.canvasSettings.backgroundColor);
-          setBackgroundImage(data.canvasSettings.backgroundImage);
+          setBackgroundImage(data.canvasSettings.backgroundImage || null);
           setCanvasSize(data.canvasSettings.canvasSize);
           setZoom(data.canvasSettings.zoom);
           setShowGrid(data.canvasSettings.showGrid);
@@ -1124,10 +1072,10 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const generateQRCode = async () => {
     try {
       const qrData = {
-        prescriptionId: prescriptionData.prescriptionId,
-        patientName: prescriptionData.patientName,
-        doctorName: prescriptionData.doctorName,
-        date: prescriptionData.date
+        prescriptionId: previewData.prescriptionId,
+        patientName: previewData.patientName,
+        doctorName: previewData.doctorName,
+        date: previewData.date
       };
       const qrCodeDataURL = await QRCodeLib.toDataURL(JSON.stringify(qrData));
       setQrCodeUrl(qrCodeDataURL);
@@ -1169,14 +1117,14 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
 
   // Efecto para agregar al historial
   useEffect(() => {
-    if (!isUndoRedo && (elements.length > 0 || Object.keys(prescriptionData).length > 0)) {
+    if (!isUndoRedo && (elements.length > 0)) {
       const timeoutId = setTimeout(() => {
         addToHistory();
       }, 1000);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [elements, prescriptionData, addToHistory, isUndoRedo]);
+  }, [elements, addToHistory, isUndoRedo]);
 
   // Efecto para guardado automático
   useEffect(() => {
@@ -1187,7 +1135,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       
       return () => clearTimeout(timeoutId);
     }
-  }, [elements, prescriptionData, autoSave, isUndoRedo]);
+  }, [elements, autoSave, isUndoRedo]);
 
   // Efecto para shortcuts de teclado
   useEffect(() => {
@@ -1347,36 +1295,20 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
 
   // Funciones de exportación y acciones
   const handleSave = async () => {
-    const medicationValidation = validateArrayField(
-      prescriptionData.medications.map(m => m.name),
-      'medications',
-      true
-    );
-
-    if (!medicationValidation.isValid) {
-      alert('Error en medicamentos: ' + medicationValidation.errors.join(', '));
-      return;
-    }
-
-    const prescriptionDataToSave = {
-      patient_id: patientId,
-      medications: prescriptionData.medications.filter(m => m.name),
-      diagnosis: prescriptionData.diagnosis,
-      notes: prescriptionData.notes,
-      created_at: new Date().toISOString(),
-      expires_at: calculatePrescriptionExpiry(prescriptionData.medications).toISOString(),
-      prescription_style: {
-        template_elements: elements,
-        canvas_settings: {
-          backgroundColor,
-          backgroundImage,
-          canvasSize,
-          zoom
-        }
+    const prescriptionStyleData = {
+      template_elements: elements,
+      canvas_settings: {
+        backgroundColor,
+        backgroundImage,
+        canvasSize,
+        zoom
       }
     };
 
-    await onSave(prescriptionDataToSave);
+    // Aquí llamarías a la función onSave con el estilo
+    // onSave({ prescription_style: prescriptionStyleData });
+    
+    alert("Estilo de receta guardado (simulado)");
   };
 
   const handlePrint = () => {
@@ -1429,7 +1361,28 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
 
   const selectedElementData = elements.find(el => el.id === selectedElement);
 
+  const replacePlaceholders = (content: string) => {
+    return content
+      .replace(/\[PACIENTE\]/g, previewData.patientName)
+      .replace(/\[EDAD\]/g, previewData.patientAge || '')
+      .replace(/\[PESO\]/g, previewData.patientWeight || '')
+      .replace(/\[ALERGIAS\]/g, previewData.patientAllergies || '')
+      .replace(/\[MÉDICO\]/g, previewData.doctorName)
+      .replace(/\[CÉDULA\]/g, previewData.doctorLicense)
+      .replace(/\[CLÍNICA\]/g, previewData.clinicName)
+      .replace(/\[DIAGNÓSTICO\]/g, previewData.diagnosis)
+      .replace(/\[FECHA\]/g, previewData.date)
+      .replace(/\[PRÓXIMA_CITA\]/g, previewData.followUpDate || '')
+      .replace(/\[ID_RECETA\]/g, previewData.prescriptionId || '')
+      .replace(/\[NOTAS\]/g, previewData.notes)
+      .replace(/\[MEDICAMENTOS\]/g, previewData.medications.map(med => 
+        `- ${med.name} (${med.dosage}) - ${med.frequency} por ${med.duration}. ${med.instructions}`
+      ).join('\n'));
+  };
+
   const renderElement = (element: Element) => {
+    const contentWithData = replacePlaceholders(element.content);
+
     switch (element.type) {
       case 'logo':
         if (element.content === 'LOGO') {
@@ -1468,13 +1421,13 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         return null;
       
       case 'date':
-        return new Date().toLocaleDateString();
+        return previewData.date;
       
       case 'time':
-        return new Date().toLocaleTimeString();
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       
       case 'table':
-        const rows = element.content.split('\n');
+        const rows = contentWithData.split('\n');
         return (
           <table className="w-full text-xs border-collapse">
             {rows.map((row, index) => {
@@ -1513,7 +1466,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         );
       
       default:
-        return element.content;
+        return contentWithData;
     }
   };
 
