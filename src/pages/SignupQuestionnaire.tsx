@@ -194,8 +194,80 @@ export default function SignupQuestionnaire() {
         throw new Error('No se encontró información del usuario');
       }
 
-      // Crear el perfil completo
-      const { error: profileError } = await supabase
+      // Verificar si ya existe el perfil
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking existing profile:', checkError);
+        throw new Error(`Error al verificar perfil: ${checkError.message}`);
+      }
+
+      const profileData = {
+        id: userId,
+        email: userEmail,
+        full_name: formData.fullName,
+        role: formData.role,
+        specialty: formData.role === 'doctor' ? formData.specialty : null,
+        license_number: formData.licenseNumber,
+        phone: formData.phone,
+        schedule: formData.workSchedule ? {
+          type: formData.workSchedule,
+          notes: formData.additionalInfo
+        } : null,
+        prescription_style: {},
+        updated_at: new Date().toISOString()
+      };
+
+      let result;
+      if (existingProfile) {
+        // Actualizar perfil existente
+        console.log('Actualizando perfil existente...');
+        result = await supabase
+          .from('profiles')
+          .update(profileData)
+          .eq('id', userId)
+          .select()
+          .single();
+      } else {
+        // Crear nuevo perfil
+        console.log('Creando nuevo perfil...');
+        result = await supabase
+          .from('profiles')
+          .insert({
+            ...profileData,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+      }
+
+      if (result.error) {
+        console.error('Error saving profile:', result.error);
+        throw new Error(`Error al guardar el perfil: ${result.error.message}`);
+      }
+
+      console.log('✅ Perfil guardado exitosamente:', result.data);
+
+      // Mostrar mensaje de éxito antes de redirigir
+      setError(null);
+      
+      // Pequeña pausa para que el usuario vea que se completó
+      setTimeout(() => {
+        console.log('🔄 Redirigiendo al dashboard...');
+        navigate('/dashboard');
+      }, 1000);
+      
+    } catch (err: any) {
+      console.error('Error completing profile:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
         .from('profiles')
         .upsert({
           id: userId,
