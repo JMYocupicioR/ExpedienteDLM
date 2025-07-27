@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Users, Calendar, Activity, FileText, Plus, Search, Filter, 
-  MoreVertical, Edit, Trash2, Eye, Settings, LogOut, Bell,
-  TrendingUp, Clock, Heart, Brain, Stethoscope, AlertCircle,
-  CheckCircle, RefreshCw, Download, Upload, BarChart3, X,
-  FileDown, Printer, FileText as FileTextIcon
+  Users, Calendar, Plus, Search, Settings, LogOut, Bell,
+  Clock, Stethoscope, AlertCircle, X, FileDown, Printer, 
+  FileText as FileTextIcon
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
@@ -38,8 +36,7 @@ export default function Dashboard() {
     user, 
     profile: userProfile, 
     loading: authLoading, 
-    signOut, 
-    isAuthenticated 
+    signOut
   } = useAuth();
   
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -50,8 +47,7 @@ export default function Dashboard() {
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [showPatientActions, setShowPatientActions] = useState<string | null>(null);
+
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     totalPatients: 0,
@@ -84,21 +80,22 @@ export default function Dashboard() {
   // El App.tsx ya maneja la redirección basada en isAuthenticated
 
   useEffect(() => {
-    const filtered = patients.filter(patient =>
-      patient.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.phone?.includes(searchTerm)
-    );
+    const filtered = patients.filter(patient => {
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        patient.full_name?.toLowerCase().includes(searchLower) ||
+        patient.email?.toLowerCase().includes(searchLower) ||
+        (patient.phone && patient.phone.toString().includes(searchTerm))
+      );
+    });
     setFilteredPatients(filtered);
   }, [patients, searchTerm]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
-      if (!target.closest('.patient-actions-menu') && 
-          !target.closest('.notifications-menu') && 
+      if (!target.closest('.notifications-menu') && 
           !target.closest('.export-menu')) {
-        setShowPatientActions(null);
         setShowNotifications(false);
         setShowExportMenu(false);
       }
@@ -140,13 +137,13 @@ export default function Dashboard() {
       setStats({
         totalPatients: patientsData?.length || 0,
         totalConsultations: consultationsData?.length || 0,
-        pendingTasks: Math.floor(Math.random() * 10), // Mock data
+        pendingTasks: 0, // TODO: Implementar lógica real para tareas pendientes
         todayAppointments: todayConsultations
       });
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      setError(error.message);
+      setError(error instanceof Error ? error.message : 'Error desconocido');
     } finally {
       setDashboardLoading(false);
     }
@@ -183,9 +180,9 @@ export default function Dashboard() {
       });
       
       await fetchDashboardData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating patient:', error);
-      setError(error.message);
+      setError(error instanceof Error ? error.message : 'Error desconocido');
     } finally {
       setDashboardLoading(false);
     }
@@ -204,50 +201,8 @@ export default function Dashboard() {
     return age;
   };
 
-  const handleDeletePatient = async (patientId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este paciente? Esta acción no se puede deshacer.')) {
-      return;
-    }
-
-    try {
-      setDashboardLoading(true);
-      const { error } = await supabase
-        .from('patients')
-        .delete()
-        .eq('id', patientId);
-
-      if (error) throw error;
-      
-      await fetchDashboardData();
-      setShowPatientActions(null);
-    } catch (error: any) {
-      console.error('Error deleting patient:', error);
-      setError(error.message);
-    } finally {
-      setDashboardLoading(false);
-    }
-  };
-
-  const handleEditPatient = (patient: Patient) => {
-    // Aquí podrías abrir un modal de edición o navegar a una página de edición
-    setSelectedPatient(patient);
-    setShowPatientActions(null);
-    // Por ahora, navegar al expediente del paciente
-    navigate(`/expediente/${patient.id}`);
-  };
-
-  const handlePatientActionsToggle = (patientId: string) => {
-    setShowPatientActions(showPatientActions === patientId ? null : patientId);
-  };
-
   const handleNotificationsToggle = () => {
     setShowNotifications(!showNotifications);
-  };
-
-  const handleNewConsultation = (patientId: string) => {
-    // Navegar al expediente del paciente con parámetro para abrir nueva consulta
-    navigate(`/expediente/${patientId}?nueva-consulta=true`);
-    setShowPatientActions(null);
   };
 
   const handleExportMenuToggle = () => {
@@ -432,9 +387,12 @@ export default function Dashboard() {
                 <button 
                   onClick={handleNotificationsToggle}
                   className="p-2 text-gray-400 hover:text-white transition-colors relative"
+                  aria-label="Notificaciones (3 nuevas)"
+                  aria-expanded={showNotifications}
+                  aria-haspopup="menu"
                 >
                   <Bell className="h-5 w-5" />
-                  <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
+                  <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full" aria-hidden="true"></span>
                 </button>
                 
                 {showNotifications && (
@@ -593,9 +551,10 @@ export default function Dashboard() {
                   <button
                     onClick={handleExportMenuToggle}
                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center mr-3"
-                    aria-label="Exportar lista de pacientes"
+                    aria-label="Opciones de exportación de lista de pacientes"
                     aria-expanded={showExportMenu}
                     aria-haspopup="menu"
+                    id="export-menu-button"
                   >
                     <FileDown className="h-4 w-4 mr-2" />
                     Exportar
