@@ -4,7 +4,36 @@ import { Database } from './database.types';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+// Verificar si las variables de entorno están configuradas
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+// Crear cliente solo si está configurado, usar valores por defecto si no
+const url = supabaseUrl || 'https://placeholder.supabase.co';
+const key = supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw';
+
+export const supabase = createClient<Database>(url, key);
+
+// Función para verificar conectividad con Supabase
+export const checkSupabaseConnection = async (timeoutMs = 5000): Promise<boolean> => {
+  if (!isSupabaseConfigured) {
+    console.warn('⚠️ Supabase no está configurado. Variables de entorno faltantes.');
+    return false;
+  }
+
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+    );
+
+    const connectionPromise = supabase.auth.getSession();
+
+    await Promise.race([connectionPromise, timeoutPromise]);
+    return true;
+  } catch (error) {
+    console.warn('⚠️ No se pudo conectar a Supabase:', error);
+    return false;
+  }
+};
 
 /**
  * Establece la información de la sesión para la auditoría en la base de datos.
@@ -101,7 +130,7 @@ export const clearAllCache = async () => {
  * @param {object} profileData - Los datos del perfil a actualizar.
  * @param {string} userId - El ID del usuario a actualizar.
  */
-export const updateUserProfileWithAudit = async (profileData: any, userId: string) => {
+export const updateUserProfileWithAudit = async (profileData: Record<string, unknown>, userId: string) => {
   const sessionId = crypto.randomUUID(); // Generar un ID de sesión único para esta operación
   
   // Establecer la información de la sesión para la auditoría
