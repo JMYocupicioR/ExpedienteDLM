@@ -15,6 +15,34 @@
   --table-transition-duration: 0.2s;
   --table-animation-duration: 0.3s;
   --min-touch-target: 44px;
+  
+  /* Variables para gradientes consistentes */
+  --gradient-primary: linear-gradient(to right, #06b6d4, #3b82f6);
+  --gradient-bg: linear-gradient(to bottom, #111827, #1f2937, #000000);
+  --gradient-text: linear-gradient(to right, #06b6d4, #3b82f6);
+}
+
+/* Fallbacks para gradientes que pueden fallar */
+.gradient-text {
+  background: var(--gradient-text);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Fallback si los gradientes no funcionan */
+.gradient-text:not(:has(*)) {
+  color: #06b6d4;
+}
+
+/* Asegurar que los touch targets funcionen en todos los dispositivos */
+.touch-target {
+  min-height: var(--min-touch-target);
+  min-width: var(--min-touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Estilos globales de foco mejorados */
