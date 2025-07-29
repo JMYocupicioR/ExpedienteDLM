@@ -3,44 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Stethoscope, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-// Función para esperar la creación del perfil con reintentos
-const waitForProfile = async (userId: string, retries = 5, interval = 1000): Promise<boolean> => {
-  for (let i = 0; i < retries; i++) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (error) {
-      console.error(`Error checking profile (attempt ${i + 1}):`, error.message);
-    }
-    
-    if (data) {
-      return true; // Perfil encontrado
-    }
-    
-    // Esperar antes del siguiente reintento
-    await new Promise(resolve => setTimeout(resolve, interval));
-  }
-  return false; // Perfil no encontrado después de todos los reintentos
-};
-
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Limpieza de sesión al cargar, menos agresiva
   useEffect(() => {
-    const cleanup = async () => {
-      // Opcional: Desconectar sesión si hay alguna inconsistencia
-      // await supabase.auth.signOut();
-      console.log('Auth page loaded. Session state is managed by Supabase.');
-    };
-    cleanup();
+    console.log('🔍 Auth component mounted');
   }, []);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -50,54 +22,69 @@ export default function Auth() {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
+    console.log(`🔑 Attempting ${isLogin ? 'login' : 'signup'} for:`, email);
+
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        console.log('🔐 Logging in...');
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
+        
         if (error) throw error;
+        
+        console.log('✅ Login successful:', data.user?.email);
         navigate('/dashboard');
+        
       } else {
-        // Signup simple - solo crear cuenta básica
+        console.log('📝 Signing up...');
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: 'Usuario' // Nombre por defecto
+            }
+          }
         });
         
         if (error) {
           if (error.message?.includes('User already registered')) {
             setError('Este correo ya está registrado. Por favor inicia sesión.');
             setIsLogin(true);
-            setLoading(false); // Detener loading
             return;
           }
           throw error;
         }
         
-        // Verificar si el usuario se creó correctamente
         if (data.user) {
-          console.log('Usuario registrado exitosamente:', data.user.email);
+          console.log('✅ Signup successful:', data.user.email);
           
-          // Esperar a que el perfil se cree con reintentos
-          const profileExists = await waitForProfile(data.user.id);
-
-          if (profileExists) {
-            console.log('✅ Perfil creado exitosamente, redirigiendo...');
-            navigate('/signup-questionnaire');
+          // Verificar si necesita confirmación por email
+          if (data.user.email_confirmed_at) {
+            console.log('📧 Email ya confirmado, redirigiendo al dashboard...');
+            navigate('/dashboard');
           } else {
-            console.error('❌ No se pudo crear el perfil automáticamente tras varios intentos.');
-            setError('Error al crear el perfil. Por favor, recarga la página o contacta a soporte.');
+            console.log('📧 Email pendiente de confirmación');
+            setError('Revisa tu correo electrónico para confirmar tu cuenta.');
           }
         } else {
           throw new Error('No se pudo crear el usuario');
         }
       }
     } catch (err: any) {
+      console.error(`❌ ${isLogin ? 'Login' : 'Signup'} error:`, err);
+      
+      // Manejo de errores mejorado
       if (err.message === 'Invalid login credentials') {
-        setError('Credenciales inválidas');
+        setError('Credenciales inválidas. Verifica tu email y contraseña.');
+      } else if (err.message?.includes('Email not confirmed')) {
+        setError('Por favor confirma tu correo electrónico antes de iniciar sesión.');
+      } else if (err.message?.includes('Too many requests')) {
+        setError('Demasiados intentos. Espera unos minutos antes de intentar de nuevo.');
       } else {
-        setError(err.message);
+        setError(err.message || 'Error desconocido');
       }
     } finally {
       setLoading(false);
@@ -216,6 +203,7 @@ export default function Auth() {
                       name="password"
                       placeholder="••••••••"
                       required
+                      minLength={6}
                       className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
                     />
                     <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
@@ -226,7 +214,7 @@ export default function Auth() {
 
               <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
                 <p className="text-blue-300 text-sm">
-                  📋 Después de crear tu cuenta, completarás un cuestionario con tu información profesional y médica.
+                  ✅ Tu perfil se creará automáticamente tras el registro.
                 </p>
               </div>
 
@@ -241,7 +229,10 @@ export default function Auth() {
               <div className="text-center">
                 <button
                   type="button"
-                  onClick={() => setIsLogin(true)}
+                  onClick={() => {
+                    setIsLogin(true);
+                    setError(null);
+                  }}
                   className="text-cyan-400 text-sm hover:text-cyan-300 transition-colors"
                 >
                   ¿Ya tienes una cuenta? Iniciar sesión
