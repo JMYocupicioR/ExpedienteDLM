@@ -35,7 +35,8 @@ export default function Auth() {
         if (error) throw error;
         
         console.log('✅ Login successful:', data.user?.email);
-        navigate('/dashboard');
+        // NO navegar inmediatamente - dejar que useAuth maneje la navegación
+        // navigate('/dashboard') se manejará automáticamente en App.tsx
         
       } else {
         console.log('📝 Signing up...');
@@ -63,8 +64,8 @@ export default function Auth() {
           
           // Verificar si necesita confirmación por email
           if (data.user.email_confirmed_at) {
-            console.log('📧 Email ya confirmado, redirigiendo al dashboard...');
-            navigate('/dashboard');
+            console.log('📧 Email ya confirmado, useAuth manejará la navegación...');
+            // NO navegar inmediatamente - dejar que useAuth maneje el estado
           } else {
             console.log('📧 Email pendiente de confirmación');
             setError('Revisa tu correo electrónico para confirmar tu cuenta.');
