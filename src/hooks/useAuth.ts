@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/database.types';
 import { User } from '@supabase/supabase-js';
@@ -10,74 +10,27 @@ export const useAuth = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Refs para evitar llamadas duplicadas
+  const fetchingProfile = useRef(false);
+  const mounted = useRef(true);
 
-  useEffect(() => {
-    // Obtener sesión inicial
-    const getInitialSession = async () => {
-      try {
-        setError(null);
-        console.log('🔍 Obteniendo sesión inicial...');
-        
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error('❌ Error obteniendo sesión:', error);
-          throw error;
-        }
-        
-        console.log('✅ Sesión obtenida:', session ? 'Sí' : 'No');
-        
-        if (session?.user) {
-          console.log('👤 Usuario encontrado:', session.user.id);
-          setUser(session.user);
-          await fetchProfile(session.user.id);
-        } else {
-          console.log('👤 No hay usuario autenticado');
-          setUser(null);
-          setProfile(null);
-        }
-      } catch (error) {
-        console.error('❌ Error getting initial session:', error);
-        setError(error instanceof Error ? error.message : 'Error de autenticación');
-        setUser(null);
-        setProfile(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Función optimizada para obtener perfil sin duplicación
+  const fetchProfile = useCallback(async (userId: string) => {
+    // Evitar llamadas duplicadas
+    if (fetchingProfile.current) {
+      console.log('🔄 fetchProfile ya en progreso, saltando...');
+      return;
+    }
 
-    getInitialSession();
+    // Evitar llamadas si el componente fue desmontado
+    if (!mounted.current) {
+      console.log('🔄 Componente desmontado, saltando fetchProfile...');
+      return;
+    }
 
-    // Suscribirse a cambios de autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔄 Auth state changed:', event, session ? 'with session' : 'no session');
-        
-        try {
-          setError(null);
-          if (session?.user) {
-            console.log('👤 Usuario autenticado:', session.user.id);
-            setUser(session.user);
-            await fetchProfile(session.user.id);
-          } else {
-            console.log('👤 Usuario desautenticado');
-            setUser(null);
-            setProfile(null);
-          }
-        } catch (error) {
-          console.error('❌ Error in auth state change:', error);
-          setError(error instanceof Error ? error.message : 'Error de autenticación');
-          setUser(null);
-          setProfile(null);
-        } finally {
-          setLoading(false);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const fetchProfile = async (userId: string) => {
+    fetchingProfile.current = true;
+    
     try {
       setError(null);
       console.log('👤 Buscando perfil para usuario:', userId);
@@ -89,6 +42,9 @@ export const useAuth = () => {
         .eq('id', userId)
         .single();
 
+      // Verificar si el componente sigue montado antes de actualizar estado
+      if (!mounted.current) return;
+
       console.log('📊 Respuesta de profiles:', { data, error });
 
       if (error) {
@@ -99,6 +55,8 @@ export const useAuth = () => {
           // Obtener datos del usuario de auth
           const { data: { user }, error: userError } = await supabase.auth.getUser();
           if (userError) throw userError;
+
+          if (!mounted.current) return;
 
           // Crear perfil nuevo
           const newProfileData = {
@@ -116,6 +74,8 @@ export const useAuth = () => {
             .select()
             .single();
 
+          if (!mounted.current) return;
+
           if (createError) {
             console.error('❌ Error creando perfil:', createError);
             // Como fallback, usar datos en memoria
@@ -130,16 +90,21 @@ export const useAuth = () => {
         }
       } else {
         console.log('✅ Perfil encontrado:', data);
-        setProfile(data);
+        if (mounted.current) {
+          setProfile(data);
+        }
       }
     } catch (error) {
       console.error('❌ Error crítico en fetchProfile:', error);
+      
+      if (!mounted.current) return;
+      
       setError(error instanceof Error ? error.message : 'Error al cargar perfil');
       
       // Fallback: crear perfil temporal en memoria para que la aplicación funcione
       try {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (!userError && user) {
+        if (!userError && user && mounted.current) {
           const fallbackProfile: Profile = {
             id: userId,
             email: user.email || '',
@@ -158,8 +123,94 @@ export const useAuth = () => {
       } catch (fallbackError) {
         console.error('❌ Error creando perfil temporal:', fallbackError);
       }
+    } finally {
+      fetchingProfile.current = false;
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    
+    // Obtener sesión inicial
+    const getInitialSession = async () => {
+      try {
+        setError(null);
+        console.log('🔍 Obteniendo sesión inicial...');
+        
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('❌ Error obteniendo sesión:', error);
+          throw error;
+        }
+        
+        console.log('✅ Sesión obtenida:', session ? 'Sí' : 'No');
+        
+        if (!mounted.current) return;
+        
+        if (session?.user) {
+          console.log('👤 Usuario encontrado:', session.user.id);
+          setUser(session.user);
+          await fetchProfile(session.user.id);
+        } else {
+          console.log('👤 No hay usuario autenticado');
+          setUser(null);
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error('❌ Error getting initial session:', error);
+        if (mounted.current) {
+          setError(error instanceof Error ? error.message : 'Error de autenticación');
+          setUser(null);
+          setProfile(null);
+        }
+      } finally {
+        if (mounted.current) {
+          setLoading(false);
+        }
+      }
+    };
+
+    getInitialSession();
+
+    // Suscribirse a cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔄 Auth state changed:', event, session ? 'with session' : 'no session');
+        
+        if (!mounted.current) return;
+        
+        try {
+          setError(null);
+          if (session?.user) {
+            console.log('👤 Usuario autenticado:', session.user.id);
+            setUser(session.user);
+            await fetchProfile(session.user.id);
+          } else {
+            console.log('👤 Usuario desautenticado');
+            setUser(null);
+            setProfile(null);
+          }
+        } catch (error) {
+          console.error('❌ Error in auth state change:', error);
+          if (mounted.current) {
+            setError(error instanceof Error ? error.message : 'Error de autenticación');
+            setUser(null);
+            setProfile(null);
+          }
+        } finally {
+          if (mounted.current) {
+            setLoading(false);
+          }
+        }
+      }
+    );
+
+    // Cleanup function
+    return () => {
+      mounted.current = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile]);
 
   const signOut = async () => {
     try {
@@ -169,12 +220,16 @@ export const useAuth = () => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
-      setUser(null);
-      setProfile(null);
+      if (mounted.current) {
+        setUser(null);
+        setProfile(null);
+      }
       console.log('✅ Sesión cerrada exitosamente');
     } catch (error) {
       console.error('❌ Error signing out:', error);
-      setError(error instanceof Error ? error.message : 'Error al cerrar sesión');
+      if (mounted.current) {
+        setError(error instanceof Error ? error.message : 'Error al cerrar sesión');
+      }
     }
   };
 
