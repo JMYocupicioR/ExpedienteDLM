@@ -352,8 +352,6 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave 
         diagnosis: data.diagnosis,
         prognosis: data.prognosis || null,
         treatment: data.treatment,
-        physical_exam_data: physicalExamData,
-        created_at: new Date().toISOString(),
         validation_warnings: validationResult.warnings
       };
 
