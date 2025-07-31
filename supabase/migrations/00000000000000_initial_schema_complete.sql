@@ -677,7 +677,7 @@ CREATE TABLE public.drug_interactions (
   recommendation TEXT NOT NULL,
   evidence_level VARCHAR(20) DEFAULT 'moderate' CHECK (evidence_level IN ('low', 'moderate', 'high')),
   onset VARCHAR(20) DEFAULT 'delayed' CHECK (onset IN ('rapid', 'delayed', 'unknown')),
-  references TEXT[],
+  reference_sources TEXT[],
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(medication_a_ingredient, medication_b_ingredient)
