@@ -831,7 +831,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdate }
       }
 
       const updatedPrescriptionStyle = {
-        ...prescriptionSettings.prescription_style,
+        ...(userProfile?.prescription_style || {}),
         visualTemplate: {
           elements: templateElements,
           canvasSettings: {
