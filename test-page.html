@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test React - Expediente DLM</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to bottom, #111827, #1f2937, #000000);
+            color: white;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .warning { color: #f59e0b; }
+        .info { color: #3b82f6; }
+        #root {
+            border: 2px solid #3b82f6;
+            padding: 20px;
+            margin: 20px 0;
+            min-height: 200px;
+            background: rgba(59, 130, 246, 0.1);
+        }
+        .debug-info {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Test de React - Expediente DLM</h1>
+        
+        <div class="test-section">
+            <h2>📋 Información del Sistema</h2>
+            <div class="debug-info" id="system-info">
+                Cargando información del sistema...
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>⚛️ React Test</h2>
+            <div id="root">
+                <p class="info">Área de React - Si ves esto, React no se ha cargado</p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔧 Debug Console</h2>
+            <div class="debug-info" id="debug-output">
+                Ejecutando debug...
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Estado de la Aplicación</h2>
+            <div id="app-status">
+                <p class="warning">Verificando estado...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Debug script
+        console.log('🔍 Iniciando debug de ExpedienteDLM...');
+        
+        // Información del sistema
+        const systemInfo = document.getElementById('system-info');
+        systemInfo.innerHTML = `
+            <div class="success">✅ Navegador: ${navigator.userAgent}</div>
+            <div class="success">✅ URL: ${window.location.href}</div>
+            <div class="success">✅ Timestamp: ${new Date().toLocaleString()}</div>
+            <div class="info">📦 User Agent: ${navigator.userAgent}</div>
+        `;
+
+        // Debug output
+        const debugOutput = document.getElementById('debug-output');
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            debugOutput.innerHTML += '<div class="success">' + args.join(' ') + '</div>';
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            debugOutput.innerHTML += '<div class="error">' + args.join(' ') + '</div>';
+        };
+
+        // Verificar React
+        if (typeof React !== 'undefined') {
+            console.log('✅ React está disponible');
+            document.getElementById('root').innerHTML = '<div class="success">✅ React cargado correctamente</div>';
+        } else {
+            console.log('❌ React no está disponible');
+            document.getElementById('root').innerHTML = '<div class="error">❌ React no está disponible</div>';
+        }
+
+        // Verificar ReactDOM
+        if (typeof ReactDOM !== 'undefined') {
+            console.log('✅ ReactDOM está disponible');
+        } else {
+            console.log('❌ ReactDOM no está disponible');
+        }
+
+        // Verificar errores
+        window.addEventListener('error', (event) => {
+            console.error('🚨 Error:', event.error);
+            console.error('📄 Archivo:', event.filename);
+            console.error('📍 Línea:', event.lineno);
+        });
+
+        // Estado de la aplicación
+        const appStatus = document.getElementById('app-status');
+        appStatus.innerHTML = `
+            <div class="success">✅ Página HTML cargada</div>
+            <div class="success">✅ JavaScript ejecutándose</div>
+            <div class="info">📝 Revisa la consola del navegador (F12) para más detalles</div>
+        `;
+
+        console.log('🔍 Debug completado');
+    </script>
+
+    <!-- Intentar cargar React desde CDN para pruebas -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <script>
+        // Test con React desde CDN
+        setTimeout(() => {
+            if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined') {
+                console.log('✅ React cargado desde CDN');
+                
+                const TestComponent = () => {
+                    return React.createElement('div', {
+                        style: {
+                            background: '#10b981',
+                            color: 'white',
+                            padding: '20px',
+                            borderRadius: '8px',
+                            textAlign: 'center'
+                        }
+                    }, '✅ React funcionando correctamente desde CDN');
+                };
+
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(React.createElement(TestComponent));
+            } else {
+                console.log('❌ React no se pudo cargar desde CDN');
+            }
+        }, 1000);
+    </script>
+</body>
+</html> 

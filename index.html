@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Expediente DLM - Sistema de Gestión Médica</title>
+    <script>
+      (function() {
+        try {
+          var pref = localStorage.getItem('dlm_theme_preference');
+          var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = pref || 'dark';
+          var resolved = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
+          var root = document.documentElement;
+          if (resolved === 'dark') {
+            root.classList.add('dark');
+            root.classList.remove('light');
+          } else {
+            root.classList.add('light');
+            root.classList.remove('dark');
+          }
+          var savedScale = localStorage.getItem('dlm_font_scale');
+          if (savedScale) root.style.setProperty('--font-scale', savedScale);
+          var ap = localStorage.getItem('dlm_accent_primary');
+          var as = localStorage.getItem('dlm_accent_secondary');
+          if (ap) root.style.setProperty('--accent-primary', ap);
+          if (as) root.style.setProperty('--accent-secondary', as);
+          var contrast = localStorage.getItem('dlm_contrast_mode') || 'normal';
+          root.setAttribute('data-contrast', contrast);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
