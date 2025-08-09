@@ -8,6 +8,14 @@ export default defineConfig({
     port: 3000,
     host: true
   },
+  build: {
+    rollupOptions: {
+      external: [
+        // Evitar que Rollup trate la ruta de entrada como externa en Netlify
+        // (No es necesario usualmente, pero dejamos la opción documentada)
+      ],
+    },
+  },
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
