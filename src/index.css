@@ -1,5 +1,4 @@
-/* Importar estilos específicos para tablas médicas accesibles */
-@import url('./styles/medical-tables.css');
+/* Estilos específicos para tablas médicas accesibles integrados */
 
 @tailwind base;
 @tailwind components;
@@ -269,4 +268,78 @@ input[type="reset"] {
   .medical-table-container [role="button"] + [role="button"] {
     margin-left: 8px;
   }
+}
+
+/* =================================
+   ESTILOS MÉDICOS ESPECÍFICOS
+   (Integrados desde medical-tables.css)
+   ================================= */
+
+/* Mejoras de contraste para datos médicos críticos */
+.medical-patients-table [data-medical-priority="urgent"] {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 4px solid #ef4444;
+}
+
+.medical-consultations-table [data-consultation-status="pending"] {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-left: 4px solid #f59e0b;
+}
+
+.medical-prescriptions-table [data-prescription-status="discontinued"] {
+  background-color: rgba(239, 68, 68, 0.1);
+  opacity: 0.8;
+}
+
+/* Indicadores visuales para signos vitales anormales */
+.medical-vital-signs-table [data-vital-status="abnormal"] {
+  background-color: rgba(239, 68, 68, 0.1);
+  font-weight: 600;
+}
+
+.medical-vital-signs-table [data-vital-status="critical"] {
+  background-color: rgba(220, 38, 38, 0.2);
+  border: 2px solid #dc2626;
+  font-weight: 700;
+  animation: pulse 2s infinite;
+}
+
+/* Indicadores específicos para contexto médico */
+.medical-context-urgent::before {
+  content: "🚨";
+  margin-right: 4px;
+}
+
+.medical-context-warning::before {
+  content: "⚠️";
+  margin-right: 4px;
+}
+
+.medical-context-normal::before {
+  content: "✅";
+  margin-right: 4px;
+}
+
+/* Mejoras de legibilidad para datos médicos numéricos */
+.medical-numeric-data {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+}
+
+/* Estilos para diferentes tipos de datos médicos */
+.medical-data-medication {
+  color: #10b981; /* Verde para medicamentos */
+}
+
+.medical-data-diagnosis {
+  color: #f59e0b; /* Amarillo para diagnósticos */
+}
+
+.medical-data-vital-sign {
+  color: #ef4444; /* Rojo para signos vitales */
+}
+
+.medical-data-test-result {
+  color: #8b5cf6; /* Púrpura para resultados de exámenes */
 }
