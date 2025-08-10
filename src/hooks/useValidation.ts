@@ -158,9 +158,24 @@ export function useValidation() {
     const warnings: string[] = [];
     const criticalAlerts: string[] = [];
 
-    // Validar cada signo vital
-    Object.entries(vitalSigns).forEach(([field, value]) => {
+    // Normalización: si existe blood_pressure (ej. "120/80"), derivar systolic/diastolic cuando falten
+    const normalized: any = { ...vitalSigns };
+    if (normalized.blood_pressure && (!normalized.systolic_pressure || !normalized.diastolic_pressure)) {
+      const match = String(normalized.blood_pressure).match(/(\d+)\s*\/\s*(\d+)/);
+      if (match) {
+        const [ , sys, dia ] = match;
+        if (!normalized.systolic_pressure) normalized.systolic_pressure = sys;
+        if (!normalized.diastolic_pressure) normalized.diastolic_pressure = dia;
+      } else {
+        warnings.push('Formato de presión arterial no reconocido. Use ej.: 120/80');
+      }
+    }
+
+    // Validar cada signo vital (ignorar campos auxiliares no soportados)
+    const allowedFields = new Set(['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature', 'oxygen_saturation', 'height', 'weight']);
+    Object.entries(normalized).forEach(([field, value]) => {
       if (field === 'bmi' || !value) return;
+      if (!allowedFields.has(field)) return; // ignorar blood_pressure y otros no reconocidos
 
       const validation = validateVitalSign(field, value as string | number);
       
@@ -176,7 +191,7 @@ export function useValidation() {
     // Verificar campos requeridos
     const requiredFields = ['systolic_pressure', 'diastolic_pressure', 'heart_rate', 'respiratory_rate', 'temperature'];
     requiredFields.forEach(field => {
-      if (!vitalSigns[field]) {
+      if (!normalized[field]) {
         errors.push(`${field.replace('_', ' ')} es requerido`);
       }
     });

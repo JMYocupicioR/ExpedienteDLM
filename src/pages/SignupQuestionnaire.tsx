@@ -22,6 +22,9 @@ export default function SignupQuestionnaire() {
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [specialtySearch, setSpecialtySearch] = useState('');
+  const [filteredSpecialties, setFilteredSpecialties] = useState<string[]>([]);
+  const [isSpecialtyDropdownOpen, setIsSpecialtyDropdownOpen] = useState(false);
 
   const [formData, setFormData] = useState<QuestionnaireData>({
     fullName: '',
@@ -36,32 +39,76 @@ export default function SignupQuestionnaire() {
   });
 
   const medicalSpecialties = [
+    'Alergología e Inmunología',
+    'Anatomía Patológica',
     'Anestesiología',
+    'Angiología y Cirugía Vascular',
     'Cardiología',
+    'Cardiología Intervencionista',
+    'Cardiología Pediátrica',
+    'Cirugía Bariátrica',
+    'Cirugía Cardiovascular',
+    'Cirugía de Cabeza y Cuello',
+    'Cirugía de Tórax',
     'Cirugía General',
+    'Cirugía Oncológica',
+    'Cirugía Pediátrica',
+    'Cirugía Plástica y Reconstructiva',
+    'Coloproctología',
     'Dermatología',
+    'Dermatología Pediátrica',
     'Endocrinología',
+    'Endocrinología Pediátrica',
+    'Endoscopía',
     'Gastroenterología',
+    'Gastroenterología Pediátrica',
+    'Genética Médica',
     'Geriatría',
-    'Ginecología',
+    'Ginecología y Obstetricia',
     'Hematología',
+    'Hematología Pediátrica',
+    'Hepatología',
     'Infectología',
+    'Infectología Pediátrica',
     'Medicina de Rehabilitación',
+    'Medicina del Deporte',
+    'Medicina del Dolor y Paliativa',
+    'Medicina del Sueño',
+    'Medicina Familiar',
     'Medicina General',
+    'Medicina Intensiva',
     'Medicina Interna',
+    'Medicina Legal y Forense',
+    'Medicina Nuclear',
+    'Medicina Preventiva',
     'Nefrología',
-    'Neurología',
+    'Nefrología Pediátrica',
+    'Neonatología',
     'Neumología',
+    'Neumología Pediátrica',
+    'Neurocirugía',
+    'Neurofisiología Clínica',
+    'Neurología',
+    'Neurología Pediátrica',
+    'Nutriología Clínica',
     'Oftalmología',
-    'Oncología',
+    'Oncología Médica',
+    'Oncología Pediátrica',
+    'Ortopedia y Traumatología',
     'Otorrinolaringología',
+    'Patología Clínica',
     'Pediatría',
     'Psiquiatría',
-    'Radiología',
+    'Psiquiatría Infantil y del Adolescente',
+    'Radiología e Imagen',
+    'Radio-Oncología',
     'Reumatología',
-    'Traumatología',
-    'Urgencias',
-    'Urología'
+    'Reumatología Pediátrica',
+    'Salud Pública',
+    'Toxicología',
+    'Urgencias Médico-Quirúrgicas',
+    'Urología',
+    'Otra'
   ];
 
   const experienceOptions = [
@@ -193,21 +240,7 @@ export default function SignupQuestionnaire() {
         throw new Error('No se encontró información del usuario');
       }
 
-      // Verificar si ya existe el perfil
-      const { data: existingProfile, error: checkError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (checkError) {
-        console.error('Error checking existing profile:', checkError);
-        throw new Error(`Error al verificar perfil: ${checkError.message}`);
-      }
-
       const profileData = {
-        id: userId,
-        email: userEmail,
         full_name: formData.fullName,
         role: formData.role,
         specialty: formData.role === 'doctor' ? formData.specialty : null,
@@ -217,39 +250,33 @@ export default function SignupQuestionnaire() {
           type: formData.workSchedule,
           notes: formData.additionalInfo
         } : null,
-        prescription_style: {},
+        clinic_name: formData.clinicName, // Añadido clinicName
+        experience: formData.experience, // Añadido experience
         updated_at: new Date().toISOString()
       };
 
-      let result;
-      if (existingProfile) {
-        // Actualizar perfil existente
-        console.log('Actualizando perfil existente...');
-        result = await supabase
-          .from('profiles')
-          .update(profileData)
-          .eq('id', userId)
-          .select()
-          .single();
-      } else {
-        // Crear nuevo perfil
-        console.log('Creando nuevo perfil...');
-        result = await supabase
-          .from('profiles')
-          .insert({
-            ...profileData,
-            created_at: new Date().toISOString()
-          })
-          .select()
-          .single();
+      // Siempre actualizaremos el perfil existente
+      console.log('Actualizando perfil existente...');
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(profileData)
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        // Si el error es 'JSON object requested, multiple (or no) rows returned', 
+        // significa que el perfil no existía, lo cual no debería pasar si el usuario está autenticado.
+        // Podríamos manejar la creación aquí como fallback, pero lo ideal es que el perfil se cree con un trigger.
+        if (error.code === 'PGRST116') {
+            console.error('Error: No se encontró el perfil para actualizar. Esto no debería ocurrir.');
+            throw new Error('No se encontró tu perfil. Por favor, contacta a soporte.');
+        }
+        console.error('Error saving profile:', error);
+        throw new Error(`Error al guardar el perfil: ${error.message}`);
       }
 
-      if (result.error) {
-        console.error('Error saving profile:', result.error);
-        throw new Error(`Error al guardar el perfil: ${result.error.message}`);
-      }
-
-      console.log('✅ Perfil guardado exitosamente:', result.data);
+      console.log('✅ Perfil guardado exitosamente:', data);
 
       // Mostrar mensaje de éxito antes de redirigir
       setError(null);
@@ -449,17 +476,50 @@ export default function SignupQuestionnaire() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Especialidad médica *
                   </label>
-                  <select
-                    value={formData.specialty}
-                    onChange={(e) => updateFormData('specialty', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                    required
-                  >
-                    <option value="">Selecciona tu especialidad</option>
-                    {medicalSpecialties.map(specialty => (
-                      <option key={specialty} value={specialty}>{specialty}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={specialtySearch}
+                      onChange={(e) => {
+                        setSpecialtySearch(e.target.value);
+                        setFilteredSpecialties(
+                          medicalSpecialties.filter(s => 
+                            s.toLowerCase().includes(e.target.value.toLowerCase())
+                          )
+                        );
+                        setIsSpecialtyDropdownOpen(true);
+                      }}
+                      onFocus={() => {
+                        setFilteredSpecialties(medicalSpecialties);
+                        setIsSpecialtyDropdownOpen(true);
+                      }}
+                      onBlur={() => setTimeout(() => setIsSpecialtyDropdownOpen(false), 200)}
+                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                      placeholder="Busca tu especialidad"
+                      required={!formData.specialty}
+                    />
+                    {isSpecialtyDropdownOpen && (
+                      <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredSpecialties.length > 0 ? (
+                          filteredSpecialties.map(specialty => (
+                            <div
+                              key={specialty}
+                              onMouseDown={() => {
+                                updateFormData('specialty', specialty);
+                                setSpecialtySearch(specialty);
+                                setIsSpecialtyDropdownOpen(false);
+                              }}
+                              className="px-4 py-2 text-white hover:bg-gray-700 cursor-pointer"
+                            >
+                              {specialty}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-4 py-2 text-gray-400">No se encontraron resultados</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

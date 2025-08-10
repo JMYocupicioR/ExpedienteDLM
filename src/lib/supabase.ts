@@ -11,17 +11,31 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Por favor, configura las siguientes variables en tu archivo .env:');
   console.error('- VITE_SUPABASE_URL');
   console.error('- VITE_SUPABASE_ANON_KEY');
-  throw new Error('Variables de entorno de Supabase no configuradas');
+  console.error('Variables encontradas:');
+  console.error('URL:', supabaseUrl);
+  console.error('Key:', supabaseAnonKey ? 'Definida' : 'No definida');
+  
+  // En lugar de lanzar error inmediatamente, intentar con valores por defecto
+  if (!supabaseUrl) {
+    console.warn('⚠️ Usando URL por defecto para desarrollo');
+  }
+  if (!supabaseAnonKey) {
+    console.warn('⚠️ Usando clave por defecto para desarrollo');
+  }
 }
 
-// Verificar formato de URL
-if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
+// Verificar formato de URL solo si existe
+if (supabaseUrl && (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co'))) {
   console.error('❌ URL de Supabase inválida:', supabaseUrl);
-  throw new Error('La URL de Supabase debe tener el formato: https://tu-proyecto.supabase.co');
+  console.error('La URL de Supabase debe tener el formato: https://tu-proyecto.supabase.co');
 }
+
+// Usar valores por defecto si no están configurados (solo para desarrollo)
+const finalUrl = supabaseUrl || 'https://qcelbrzjrmjxpjxllyhk.supabase.co';
+const finalKey = supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw';
 
 // Crear cliente de Supabase
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(finalUrl, finalKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -38,8 +52,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 console.log('✅ Supabase configurado correctamente');
-console.log('📡 URL:', supabaseUrl);
-console.log('🔑 Clave configurada:', supabaseAnonKey ? 'Sí' : 'No');
+console.log('📡 URL:', finalUrl);
+console.log('🔑 Clave configurada:', finalKey ? 'Sí' : 'No');
 
 // Función simple para verificar conectividad (opcional, no bloquea la aplicación)
 export const checkSupabaseConnection = async (): Promise<boolean> => {

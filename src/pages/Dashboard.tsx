@@ -1,882 +1,671 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Users, Calendar, Activity, FileText, Plus, Search, Filter, 
-  MoreVertical, Edit, Trash2, Eye, Settings, LogOut, Bell,
-  TrendingUp, Clock, Heart, Brain, Stethoscope, AlertCircle,
-  CheckCircle, RefreshCw, Download, Upload, BarChart3, X,
-  FileDown, Printer, FileText as FileTextIcon
-} from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { format } from 'date-fns';
+import { 
+  Users, 
+  FileText, 
+  Pill, 
+  Activity, 
+  Calendar, 
+  Settings, 
+  LogOut,
+  Plus,
+  Search,
+  Bell,
+  ArrowRight,
+  Clock,
+  AlertTriangle,
+  TrendingUp,
+  User,
+  Phone,
+  Mail
+} from 'lucide-react';
+import { format, isToday, isTomorrow, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import SettingsModal from '../components/SettingsModal';
-import { PatientTable } from '../components/MedicalDataTable';
-import type { PatientTableRow } from '../components/MedicalDataTable';
-import { useAuth } from '../hooks/useAuth';
+import { Button } from '../components/ui/button';
+import Logo from '../components/Logo';
+import NewPatientForm from '../components/NewPatientForm';
+import { appointmentService, Appointment } from '../lib/services/appointment-service';
 
-interface Patient {
-  id: string;
-  full_name: string;
-  birth_date: string;
-  gender: string;
-  email: string;
-  phone: string;
-  created_at: string;
-}
-
-interface DashboardStats {
-  totalPatients: number;
-  totalConsultations: number;
-  pendingTasks: number;
-  todayAppointments: number;
-}
-
-export default function Dashboard() {
+const Dashboard = () => {
   const navigate = useNavigate();
-  const { 
-    user, 
-    profile: userProfile, 
-    loading: authLoading, 
-    signOut, 
-    isAuthenticated 
-  } = useAuth();
-  
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
-  const [dashboardLoading, setDashboardLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [quickSearchResults, setQuickSearchResults] = useState<any[]>([]);
+  const [showQuickSearch, setShowQuickSearch] = useState(false);
+  const [realStats, setRealStats] = useState({
+    patients: 0,
+    consultations: 0,
+    prescriptions: 0,
+    todayConsultations: 0,
+    todayAppointments: 0,
+    upcomingAppointments: 0
+  });
+  const [recentPatients, setRecentPatients] = useState<any[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [showPatientActions, setShowPatientActions] = useState<string | null>(null);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalPatients: 0,
-    totalConsultations: 0,
-    pendingTasks: 0,
-    todayAppointments: 0
-  });
-
-  // New patient form state
-  const [newPatient, setNewPatient] = useState({
-    full_name: '',
-    birth_date: '',
-    gender: 'masculino',
-    email: '',
-    phone: '',
-    address: '',
-    city_of_birth: '',
-    city_of_residence: '',
-    social_security_number: ''
-  });
 
   useEffect(() => {
-    // Si la autenticación ha terminado y no hay usuario, redirigir
-    if (!authLoading && !isAuthenticated) {
-      navigate('/auth');
-    }
-  }, [authLoading, isAuthenticated, navigate]);
-
-  useEffect(() => {
-    // Si el perfil está disponible, cargar los datos del dashboard
-    if (userProfile) {
-      fetchDashboardData();
-    }
-  }, [userProfile]);
-
-  useEffect(() => {
-    const filtered = patients.filter(patient =>
-      patient.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.phone?.includes(searchTerm)
-    );
-    setFilteredPatients(filtered);
-  }, [patients, searchTerm]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('.patient-actions-menu') && 
-          !target.closest('.notifications-menu') && 
-          !target.closest('.export-menu')) {
-        setShowPatientActions(null);
-        setShowNotifications(false);
-        setShowExportMenu(false);
+    const getUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+        if (user) {
+          await loadDashboardData();
+          await loadUpcomingAppointments(user.id);
+        }
+      } catch (error) {
+        console.error('Error getting user:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    getUser();
   }, []);
 
-  const fetchDashboardData = async () => {
+  useEffect(() => {
+    if (searchTerm.length > 2) {
+      performQuickSearch();
+    } else {
+      setQuickSearchResults([]);
+      setShowQuickSearch(false);
+    }
+  }, [searchTerm]);
+
+  const loadDashboardData = async () => {
     try {
-      setDashboardLoading(true);
-      setError(null);
+      // Cargar estadísticas reales
+      const [patientsResult, consultationsResult, prescriptionsResult, recentPatientsResult] = await Promise.all([
+        supabase.from('patients').select('id', { count: 'exact' }),
+        supabase.from('consultations').select('id', { count: 'exact' }),
+        supabase.from('prescriptions').select('id', { count: 'exact' }),
+        supabase.from('patients')
+          .select('id, full_name, phone, email, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5)
+      ]);
 
-      // Fetch patients
-      const { data: patientsData, error: patientsError } = await supabase
-        .from('patients')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (patientsError) throw patientsError;
-      setPatients(patientsData || []);
-
-      // Fetch consultations for stats
-      const { data: consultationsData, error: consultationsError } = await supabase
-        .from('consultations')
-        .select('id, created_at');
-
-      if (consultationsError) throw consultationsError;
-
-      // Calculate stats
+      // Consultas de hoy
       const today = new Date().toISOString().split('T')[0];
-      const todayConsultations = consultationsData?.filter(c => 
-        c.created_at.startsWith(today)
-      ).length || 0;
+      const todayConsultationsResult = await supabase
+        .from('consultations')
+        .select('id', { count: 'exact' })
+        .gte('created_at', `${today}T00:00:00`)
+        .lt('created_at', `${today}T23:59:59`);
 
-      setStats({
-        totalPatients: patientsData?.length || 0,
-        totalConsultations: consultationsData?.length || 0,
-        pendingTasks: Math.floor(Math.random() * 10), // Mock data
-        todayAppointments: todayConsultations
+      setRealStats({
+        patients: patientsResult.count || 0,
+        consultations: consultationsResult.count || 0,
+        prescriptions: prescriptionsResult.count || 0,
+        todayConsultations: todayConsultationsResult.count || 0,
+        todayAppointments: 0, // Se actualizará en loadUpcomingAppointments
+        upcomingAppointments: 0 // Se actualizará en loadUpcomingAppointments
       });
 
-    } catch (error: any) {
-      console.error('Error fetching dashboard data:', error);
-      setError(error.message);
+      setRecentPatients(recentPatientsResult.data || []);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
+  };
+
+  const loadUpcomingAppointments = async (userId: string) => {
+    try {
+      setLoadingAppointments(true);
+      
+      // Obtener citas desde hoy hasta los próximos 7 días
+      const today = new Date();
+      const nextWeek = addDays(today, 7);
+      
+      const appointments = await appointmentService.getAppointmentsByDateRange(
+        format(today, 'yyyy-MM-dd'),
+        format(nextWeek, 'yyyy-MM-dd'),
+        userId
+      );
+
+      // Filtrar solo citas pendientes y confirmadas
+      const filteredAppointments = appointments
+        .filter(apt => ['scheduled', 'confirmed'].includes(apt.status))
+        .sort((a, b) => {
+          const dateTimeA = new Date(`${a.appointment_date}T${a.appointment_time}`);
+          const dateTimeB = new Date(`${b.appointment_date}T${b.appointment_time}`);
+          return dateTimeA.getTime() - dateTimeB.getTime();
+        })
+        .slice(0, 5); // Mostrar solo las próximas 5 citas
+
+      setUpcomingAppointments(filteredAppointments);
+
+      // Actualizar estadísticas
+      const todayAppointments = appointments.filter(apt => 
+        isToday(new Date(apt.appointment_date)) && ['scheduled', 'confirmed'].includes(apt.status)
+      ).length;
+
+      setRealStats(prev => ({
+        ...prev,
+        todayAppointments,
+        upcomingAppointments: filteredAppointments.length
+      }));
+
+    } catch (error) {
+      console.error('Error loading upcoming appointments:', error);
     } finally {
-      setDashboardLoading(false);
+      setLoadingAppointments(false);
+    }
+  };
+
+  const performQuickSearch = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('id, full_name, phone, email')
+        .or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
+        .limit(5);
+
+      if (error) throw error;
+      setQuickSearchResults(data || []);
+      setShowQuickSearch(true);
+    } catch (error) {
+      console.error('Error in quick search:', error);
     }
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/auth');
-  };
-
-  const handleCreatePatient = async (e: React.FormEvent) => {
-    e.preventDefault();
     try {
-      setDashboardLoading(true);
-      setError(null);
-
-      const { error } = await supabase
-        .from('patients')
-        .insert([newPatient]);
-
-      if (error) throw error;
-
-      setShowNewPatientForm(false);
-      setNewPatient({
-        full_name: '',
-        birth_date: '',
-        gender: 'masculino',
-        email: '',
-        phone: '',
-        address: '',
-        city_of_birth: '',
-        city_of_residence: '',
-        social_security_number: ''
-      });
-      
-      await fetchDashboardData();
-    } catch (error: any) {
-      console.error('Error creating patient:', error);
-      setError(error.message);
-    } finally {
-      setDashboardLoading(false);
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
     }
   };
 
-  const calculateAge = (birthDate: string): number => {
-    const today = new Date();
-    const birth = new Date(birthDate);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    
-    return age;
-  };
-
-  const handleDeletePatient = async (patientId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este paciente? Esta acción no se puede deshacer.')) {
-      return;
-    }
-
-    try {
-      setDashboardLoading(true);
-      const { error } = await supabase
-        .from('patients')
-        .delete()
-        .eq('id', patientId);
-
-      if (error) throw error;
-      
-      await fetchDashboardData();
-      setShowPatientActions(null);
-    } catch (error: any) {
-      console.error('Error deleting patient:', error);
-      setError(error.message);
-    } finally {
-      setDashboardLoading(false);
+  const getAppointmentDateLabel = (date: string) => {
+    const appointmentDate = new Date(date);
+    if (isToday(appointmentDate)) {
+      return 'Hoy';
+    } else if (isTomorrow(appointmentDate)) {
+      return 'Mañana';
+    } else {
+      return format(appointmentDate, "EEE d 'de' MMM", { locale: es });
     }
   };
 
-  const handleEditPatient = (patient: Patient) => {
-    // Aquí podrías abrir un modal de edición o navegar a una página de edición
-    setSelectedPatient(patient);
-    setShowPatientActions(null);
-    // Por ahora, navegar al expediente del paciente
-    navigate(`/expediente/${patient.id}`);
-  };
-
-  const handlePatientActionsToggle = (patientId: string) => {
-    setShowPatientActions(showPatientActions === patientId ? null : patientId);
-  };
-
-  const handleNotificationsToggle = () => {
-    setShowNotifications(!showNotifications);
-  };
-
-  const handleNewConsultation = (patientId: string) => {
-    // Navegar al expediente del paciente con parámetro para abrir nueva consulta
-    navigate(`/expediente/${patientId}?nueva-consulta=true`);
-    setShowPatientActions(null);
-  };
-
-  const handleExportMenuToggle = () => {
-    setShowExportMenu(!showExportMenu);
-  };
-
-  const handlePrint = () => {
-    const printContent = generatePrintContent();
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Lista de Pacientes - Expediente DLM</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #333; text-align: center; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #f5f5f5; font-weight: bold; }
-              tr:nth-child(even) { background-color: #f9f9f9; }
-              .header-info { margin-bottom: 20px; }
-            </style>
-          </head>
-          <body>
-            ${printContent}
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'scheduled':
+        return 'bg-blue-600 text-blue-100';
+      case 'confirmed':
+        return 'bg-green-600 text-green-100';
+      case 'in_progress':
+        return 'bg-yellow-600 text-yellow-100';
+      case 'completed':
+        return 'bg-gray-600 text-gray-100';
+      case 'cancelled':
+        return 'bg-red-600 text-red-100';
+      default:
+        return 'bg-gray-600 text-gray-100';
     }
-    setShowExportMenu(false);
   };
 
-  const handleExportTXT = () => {
-    const txtContent = generateTXTContent();
-    const blob = new Blob([txtContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `pacientes_${format(new Date(), 'yyyy-MM-dd')}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setShowExportMenu(false);
+  const handleNewPatientCreated = (newPatient: any) => {
+    // Recargar datos del dashboard para actualizar estadísticas
+    loadDashboardData();
+    
+    // Opcional: Navegar al expediente del nuevo paciente
+    navigate(`/expediente/${newPatient.id}`);
   };
 
-  const handleExportPDF = () => {
-    // Para PDF, vamos a generar un HTML que se puede imprimir como PDF
-    const pdfContent = generatePrintContent();
-    const pdfWindow = window.open('', '_blank');
-    if (pdfWindow) {
-      pdfWindow.document.write(`
-        <html>
-          <head>
-            <title>Lista de Pacientes - Expediente DLM</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #333; text-align: center; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #f5f5f5; font-weight: bold; }
-              tr:nth-child(even) { background-color: #f9f9f9; }
-              .header-info { margin-bottom: 20px; }
-              @media print {
-                body { margin: 0; }
-              }
-            </style>
-          </head>
-          <body>
-            ${pdfContent}
-            <script>
-              window.onload = function() {
-                setTimeout(function() {
-                  window.print();
-                }, 500);
-              }
-            </script>
-          </body>
-        </html>
-      `);
-      pdfWindow.document.close();
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'scheduled':
+        return 'Programada';
+      case 'confirmed':
+        return 'Confirmada';
+      case 'in_progress':
+        return 'En Progreso';
+      case 'completed':
+        return 'Completada';
+      case 'cancelled':
+        return 'Cancelada';
+      case 'no_show':
+        return 'No Asistió';
+      default:
+        return status;
     }
-    setShowExportMenu(false);
   };
 
-  const generatePrintContent = () => {
-    const currentDate = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es });
-    
-    return `
-      <div class="header-info">
-        <h1>Lista de Pacientes - Expediente DLM</h1>
-        <p><strong>Fecha de generación:</strong> ${currentDate}</p>
-        <p><strong>Total de pacientes:</strong> ${filteredPatients.length}</p>
-        <p><strong>Generado por:</strong> ${userProfile?.full_name}</p>
-      </div>
-      
-      <table>
-        <thead>
-          <tr>
-            <th>Nombre Completo</th>
-            <th>Edad</th>
-            <th>Género</th>
-            <th>Email</th>
-            <th>Teléfono</th>
-            <th>Fecha de Registro</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filteredPatients.map(patient => `
-            <tr>
-              <td>${patient.full_name}</td>
-              <td>${calculateAge(patient.birth_date)} años</td>
-              <td style="text-transform: capitalize;">${patient.gender}</td>
-              <td>${patient.email}</td>
-              <td>${patient.phone}</td>
-              <td>${format(new Date(patient.created_at), 'dd/MM/yyyy')}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
-  };
-
-  const generateTXTContent = () => {
-    const currentDate = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es });
-    
-    let content = `LISTA DE PACIENTES - EXPEDIENTE DLM\n`;
-    content += `===========================================\n\n`;
-    content += `Fecha de generación: ${currentDate}\n`;
-    content += `Total de pacientes: ${filteredPatients.length}\n`;
-    content += `Generado por: ${userProfile?.full_name}\n\n`;
-    
-    content += `DATOS DE PACIENTES:\n`;
-    content += `===================\n\n`;
-    
-    filteredPatients.forEach((patient, index) => {
-      content += `${index + 1}. ${patient.full_name}\n`;
-      content += `   - Edad: ${calculateAge(patient.birth_date)} años\n`;
-      content += `   - Género: ${patient.gender}\n`;
-      content += `   - Email: ${patient.email}\n`;
-      content += `   - Teléfono: ${patient.phone}\n`;
-      content += `   - Fecha de registro: ${format(new Date(patient.created_at), 'dd/MM/yyyy')}\n\n`;
-    });
-    
-    return content;
-  };
-
-  if (authLoading || dashboardLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-900">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700">
+      {/* Navigation */}
+      <nav className="bg-gray-800 border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Stethoscope className="h-8 w-8 text-cyan-400" />
-              <span className="ml-2 text-xl font-bold text-white">Expediente DLM</span>
+              <Logo />
             </div>
-            
             <div className="flex items-center space-x-4">
-              <div className="relative">
-                <button 
-                  onClick={handleNotificationsToggle}
-                  className="p-2 text-gray-400 hover:text-white transition-colors relative"
-                >
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
-                </button>
-                
-                {showNotifications && (
-                  <div className="notifications-menu absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-20">
-                    <div className="p-4 border-b border-gray-700">
-                      <h3 className="text-sm font-medium text-white">Notificaciones</h3>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      <div className="p-4 hover:bg-gray-700 transition-colors">
-                        <div className="flex items-start">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></div>
-                          <div>
-                            <p className="text-sm text-white">Nueva consulta programada</p>
-                            <p className="text-xs text-gray-400 mt-1">Hace 2 horas</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-4 hover:bg-gray-700 transition-colors">
-                        <div className="flex items-start">
-                          <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3"></div>
-                          <div>
-                            <p className="text-sm text-white">Paciente registrado exitosamente</p>
-                            <p className="text-xs text-gray-400 mt-1">Hace 4 horas</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-4 hover:bg-gray-700 transition-colors">
-                        <div className="flex items-start">
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 mr-3"></div>
-                          <div>
-                            <p className="text-sm text-white">Recordatorio de cita</p>
-                            <p className="text-xs text-gray-400 mt-1">Hace 1 día</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-3 border-t border-gray-700">
-                      <button className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                        Ver todas las notificaciones
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <div className="relative group">
-                <button className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors">
-                  <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">
-                      {userProfile?.full_name?.charAt(0) || 'U'}
-                    </span>
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-medium text-white">{userProfile?.full_name}</p>
-                    <p className="text-xs text-gray-400">{userProfile?.role}</p>
-                  </div>
-                </button>
-                
-                <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-                  <div className="py-1">
-                    <button
-                      onClick={() => setShowSettingsModal(true)}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                    >
-                      <Settings className="h-4 w-4 mr-3" />
-                      Configuración
-                    </button>
-                    <button
-                      onClick={handleSignOut}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                    >
-                      <LogOut className="h-4 w-4 mr-3" />
-                      Cerrar Sesión
-                    </button>
-                  </div>
+              <button className="text-gray-300 hover:text-white p-2">
+                <Bell className="h-5 w-5" />
+              </button>
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-cyan-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-semibold">
+                    {user?.email?.charAt(0).toUpperCase()}
+                  </span>
                 </div>
+                <span className="text-gray-300 text-sm">{user?.email}</span>
               </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSignOut}
+                className="text-gray-300 border-gray-600 hover:bg-gray-700"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Cerrar Sesión
+              </Button>
             </div>
           </div>
         </div>
-      </header>
+      </nav>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Bienvenido, {userProfile?.full_name}
-          </h1>
-          <p className="text-gray-400">
-            {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
-          </p>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+            <div className="mb-4 lg:mb-0">
+              <h1 className="text-3xl font-bold text-white mb-2">
+                Bienvenido, {user?.email}
+              </h1>
+              <p className="text-gray-400">
+                Panel de control de Expediente DLM
+              </p>
+            </div>
+            
+            {/* Quick Search */}
+            <div className="relative w-full lg:w-96">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <input
+                type="text"
+                placeholder="Búsqueda rápida de pacientes..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+              />
+              
+              {/* Quick Search Results */}
+              {showQuickSearch && quickSearchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                  {quickSearchResults.map((patient) => (
+                    <div
+                      key={patient.id}
+                      onClick={() => {
+                        navigate(`/expediente/${patient.id}`);
+                        setShowQuickSearch(false);
+                        setSearchTerm('');
+                      }}
+                      className="p-3 hover:bg-gray-700 cursor-pointer border-b border-gray-700 last:border-b-0"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white font-medium">{patient.full_name}</p>
+                          <p className="text-gray-400 text-sm">{patient.email || patient.phone}</p>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-cyan-400" />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="p-3 bg-gray-750 border-t border-gray-700">
+                    <button
+                      onClick={() => {
+                        navigate('/patients');
+                        setShowQuickSearch(false);
+                        setSearchTerm('');
+                      }}
+                      className="text-cyan-400 text-sm hover:text-cyan-300 flex items-center"
+                    >
+                      Ver todos los pacientes
+                      <ArrowRight className="h-3 w-3 ml-1" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* No Results */}
+              {showQuickSearch && quickSearchResults.length === 0 && searchTerm.length > 2 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 p-3">
+                  <p className="text-gray-400 text-sm">No se encontraron pacientes</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <Link to="/patients" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-cyan-400 transition-all group">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Total Pacientes</p>
-                <p className="text-2xl font-bold text-white">{stats.totalPatients}</p>
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-500 rounded-lg group-hover:scale-110 transition-transform">
+                  <Users className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm">Total Pacientes</p>
+                  <p className="text-2xl font-bold text-white">{realStats.patients.toLocaleString()}</p>
+                </div>
               </div>
-              <Users className="h-8 w-8 text-cyan-400" />
+              <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+            </div>
+          </Link>
+          
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-500 rounded-lg">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <p className="text-gray-400 text-sm">Consultas Totales</p>
+                <p className="text-2xl font-bold text-white">{realStats.consultations.toLocaleString()}</p>
+                <div className="flex items-center mt-1">
+                  <TrendingUp className="h-3 w-3 text-green-400 mr-1" />
+                  <span className="text-green-400 text-xs">Activo</span>
+                </div>
+              </div>
             </div>
           </div>
-
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          
+          <Link to="/recetas" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-cyan-400 transition-all group">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Consultas Totales</p>
-                <p className="text-2xl font-bold text-white">{stats.totalConsultations}</p>
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-500 rounded-lg group-hover:scale-110 transition-transform">
+                  <Pill className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm">Recetas Emitidas</p>
+                  <p className="text-2xl font-bold text-white">{realStats.prescriptions.toLocaleString()}</p>
+                </div>
               </div>
-              <Calendar className="h-8 w-8 text-green-400" />
+              <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+            </div>
+          </Link>
+          
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <div className="flex items-center">
+              <div className="p-2 bg-orange-500 rounded-lg">
+                <Clock className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <p className="text-gray-400 text-sm">Consultas Hoy</p>
+                <p className="text-2xl font-bold text-white">{realStats.todayConsultations}</p>
+                {realStats.todayConsultations > 0 && (
+                  <div className="flex items-center mt-1">
+                    <Activity className="h-3 w-3 text-cyan-400 mr-1" />
+                    <span className="text-cyan-400 text-xs">En progreso</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          
+          <Link to="/citas" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-cyan-400 transition-all group">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Citas Hoy</p>
-                <p className="text-2xl font-bold text-white">{stats.todayAppointments}</p>
+              <div className="flex items-center">
+                <div className="p-2 bg-teal-500 rounded-lg group-hover:scale-110 transition-transform">
+                  <Calendar className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm">Citas Hoy</p>
+                  <p className="text-2xl font-bold text-white">{realStats.todayAppointments}</p>
+                  <div className="flex items-center mt-1">
+                    <Clock className="h-3 w-3 text-teal-400 mr-1" />
+                    <span className="text-teal-400 text-xs">{realStats.upcomingAppointments} próximas</span>
+                  </div>
+                </div>
               </div>
-              <Clock className="h-8 w-8 text-blue-400" />
+              <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
             </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Tareas Pendientes</p>
-                <p className="text-2xl font-bold text-white">{stats.pendingTasks}</p>
-              </div>
-              <AlertCircle className="h-8 w-8 text-yellow-400" />
-            </div>
-          </div>
+          </Link>
         </div>
 
-        {/* Patients Section */}
-        <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-700">
-          <div className="p-6 border-b border-gray-700">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-white">Pacientes</h2>
-              <div className="flex items-center space-x-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input
-                    type="text"
-                    placeholder="Buscar pacientes..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    aria-label="Buscar pacientes por nombre, email o teléfono"
-                  />
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-semibold text-white mb-4">Acciones Rápidas</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <Button 
+                onClick={() => setShowNewPatientForm(true)}
+                className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nuevo Paciente
+              </Button>
+              <Button asChild variant="outline" className="border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-gray-900">
+                <Link to="/recetas">
+                  <Pill className="h-4 w-4 mr-2" />
+                  Nueva Receta
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="border-green-400 text-green-400 hover:bg-green-400 hover:text-gray-900">
+                <Link to="/plantillas">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Plantillas
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="border-orange-400 text-orange-400 hover:bg-orange-400 hover:text-gray-900">
+                <Link to="/citas">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Citas Médicas
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="border-purple-400 text-purple-400 hover:bg-purple-400 hover:text-gray-900">
+                <Link to="/settings">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Configuración
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-white flex items-center">
+                <Calendar className="h-5 w-5 mr-2 text-cyan-400" />
+                Próximas Citas
+              </h2>
+              <Link to="/citas" className="text-cyan-400 text-sm hover:text-cyan-300 flex items-center">
+                Ver calendario
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </Link>
+            </div>
+            
+            <div className="space-y-4">
+              {loadingAppointments ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
                 </div>
-                <div className="relative">
-                  <button
-                    onClick={handleExportMenuToggle}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center mr-3"
-                    aria-label="Exportar lista de pacientes"
-                    aria-expanded={showExportMenu}
-                    aria-haspopup="menu"
+              ) : upcomingAppointments.length > 0 ? (
+                upcomingAppointments.map((appointment) => (
+                  <div 
+                    key={appointment.id}
+                    onClick={() => navigate('/citas')}
+                    className="p-4 bg-gray-700 rounded-lg hover:bg-gray-600 cursor-pointer transition-colors group border-l-4 border-cyan-400"
                   >
-                    <FileDown className="h-4 w-4 mr-2" />
-                    Exportar
-                  </button>
-                  
-                  {showExportMenu && (
-                    <div 
-                      className="export-menu absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-10"
-                      role="menu"
-                      aria-labelledby="export-menu-button"
-                    >
-                      <div className="py-1">
-                        <button
-                          onClick={handlePrint}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                          role="menuitem"
-                          aria-label="Imprimir lista de pacientes"
-                        >
-                          <Printer className="h-4 w-4 mr-3" />
-                          Imprimir
-                        </button>
-                        <button
-                          onClick={handleExportPDF}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                          role="menuitem"
-                          aria-label="Exportar como archivo PDF"
-                        >
-                          <FileDown className="h-4 w-4 mr-3" />
-                          Exportar como PDF
-                        </button>
-                        <button
-                          onClick={handleExportTXT}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                          role="menuitem"
-                          aria-label="Exportar como archivo de texto"
-                        >
-                          <FileTextIcon className="h-4 w-4 mr-3" />
-                          Exportar como TXT
-                        </button>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h3 className="text-white font-medium">{appointment.title}</h3>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}>
+                            {getStatusLabel(appointment.status)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-4 text-sm text-gray-300 mb-2">
+                          <div className="flex items-center">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {getAppointmentDateLabel(appointment.appointment_date)} - {appointment.appointment_time}
+                          </div>
+                          <div className="flex items-center">
+                            <User className="h-3 w-3 mr-1" />
+                            {appointment.patient?.full_name}
+                          </div>
+                        </div>
+
+                        {appointment.patient && (
+                          <div className="flex items-center space-x-4 text-xs text-gray-400">
+                            {appointment.patient.phone && (
+                              <div className="flex items-center">
+                                <Phone className="h-3 w-3 mr-1" />
+                                {appointment.patient.phone}
+                              </div>
+                            )}
+                            {appointment.patient.email && (
+                              <div className="flex items-center">
+                                <Mail className="h-3 w-3 mr-1" />
+                                {appointment.patient.email}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {appointment.notes && (
+                          <p className="text-gray-400 text-xs mt-2 line-clamp-2">
+                            {appointment.notes}
+                          </p>
+                        )}
                       </div>
+                      
+                      <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-cyan-400 transition-colors ml-2 flex-shrink-0" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <Calendar className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm mb-4">No tienes citas programadas</p>
+                  <Button asChild className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white">
+                    <Link to="/citas">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Programar Primera Cita
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Mini vista de pacientes recientes */}
+            {recentPatients.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-gray-700">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-gray-300">Pacientes Recientes</h3>
+                  <Link to="/patients" className="text-cyan-400 text-xs hover:text-cyan-300">
+                    Ver todos
+                  </Link>
+                </div>
+                <div className="flex space-x-2">
+                  {recentPatients.slice(0, 4).map((patient) => (
+                    <div
+                      key={patient.id}
+                      onClick={() => navigate(`/expediente/${patient.id}`)}
+                      className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
+                      title={patient.full_name}
+                    >
+                      <span className="text-white font-semibold text-xs">
+                        {patient.full_name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                      </span>
+                    </div>
+                  ))}
+                  {recentPatients.length > 4 && (
+                    <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                      <span className="text-gray-300 text-xs">+{recentPatients.length - 4}</span>
                     </div>
                   )}
                 </div>
-                
-                <button
-                  onClick={() => setShowNewPatientForm(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-                  aria-label="Registrar nuevo paciente en el sistema"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nuevo Paciente
-                </button>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="mt-8 bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-white">Actividad Reciente</h2>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-gray-400">Últimas 24 horas</span>
+              <Activity className="h-4 w-4 text-gray-400" />
             </div>
           </div>
-
-          {error && (
-            <div className="p-4 bg-red-900/50 border-b border-red-700 text-red-300 flex items-center" role="alert">
-              <AlertCircle className="h-5 w-5 mr-2" />
-              {error}
+          
+          <div className="space-y-3">
+            {upcomingAppointments.length > 0 && (
+              <div className="flex items-center text-gray-300">
+                <div className="w-2 h-2 bg-cyan-400 rounded-full mr-3"></div>
+                <span>Cita programada con {upcomingAppointments[0].patient?.full_name}</span>
+                <span className="ml-auto text-gray-500 text-sm">
+                  {getAppointmentDateLabel(upcomingAppointments[0].appointment_date)}
+                </span>
+              </div>
+            )}
+            
+            {recentPatients.length > 0 && (
+              <div className="flex items-center text-gray-300">
+                <div className="w-2 h-2 bg-green-400 rounded-full mr-3"></div>
+                <span>Nuevo expediente creado para {recentPatients[0].full_name}</span>
+                <span className="ml-auto text-gray-500 text-sm">
+                  {new Date(recentPatients[0].created_at).toLocaleDateString('es-ES', {
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                </span>
+              </div>
+            )}
+            
+            <div className="flex items-center text-gray-300">
+              <div className="w-2 h-2 bg-blue-400 rounded-full mr-3"></div>
+              <span>Sistema de citas médicas activado</span>
+              <span className="ml-auto text-gray-500 text-sm">Hoy</span>
+            </div>
+            
+            <div className="flex items-center text-gray-300">
+              <div className="w-2 h-2 bg-purple-400 rounded-full mr-3"></div>
+              <span>Selector de pacientes mejorado</span>
+              <span className="ml-auto text-gray-500 text-sm">Hoy</span>
+            </div>
+            
+            {realStats.todayConsultations > 0 && (
+              <div className="flex items-center text-gray-300">
+                <div className="w-2 h-2 bg-orange-400 rounded-full mr-3"></div>
+                <span>{realStats.todayConsultations} consulta{realStats.todayConsultations > 1 ? 's' : ''} realizada{realStats.todayConsultations > 1 ? 's' : ''} hoy</span>
+                <span className="ml-auto text-gray-500 text-sm">Hoy</span>
+              </div>
+            )}
+          </div>
+          
+          {upcomingAppointments.length === 0 && recentPatients.length === 0 && (
+            <div className="text-center py-6">
+              <Activity className="h-8 w-8 text-gray-600 mx-auto mb-2" />
+              <p className="text-gray-400 text-sm">No hay actividad reciente</p>
             </div>
           )}
-
-          {/* Usar tabla accesible mejorada */}
-          <PatientTable
-            patients={filteredPatients as PatientTableRow[]}
-            onPatientClick={(patient) => navigate(`/expediente/${patient.id}`)}
-            loading={dashboardLoading}
-            error={error}
-          />
         </div>
       </main>
 
-      {/* New Patient Modal */}
-      {showNewPatientForm && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50"
-          role="dialog"
-          aria-labelledby="new-patient-title"
-          aria-describedby="new-patient-description"
-        >
-          <div className="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-700">
-            <div className="p-6 border-b border-gray-700 flex justify-between items-center">
-              <h3 id="new-patient-title" className="text-lg font-medium text-white">Registrar Nuevo Paciente</h3>
-              <button
-                onClick={() => setShowNewPatientForm(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-                aria-label="Cerrar formulario de nuevo paciente"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div id="new-patient-description" className="sr-only">
-              Formulario para registrar un nuevo paciente en el sistema de expedientes médicos.
-              Complete todos los campos obligatorios marcados con asterisco.
-            </div>
-
-            <form onSubmit={handleCreatePatient} className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Nombre Completo *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newPatient.full_name}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, full_name: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    aria-required="true"
-                    aria-describedby="full-name-help"
-                  />
-                  <div id="full-name-help" className="sr-only">
-                    Ingrese el nombre completo del paciente incluyendo apellidos
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Fecha de Nacimiento *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newPatient.birth_date}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, birth_date: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    aria-required="true"
-                    aria-describedby="birth-date-help"
-                  />
-                  <div id="birth-date-help" className="sr-only">
-                    Seleccione la fecha de nacimiento del paciente para calcular la edad automáticamente
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Género *
-                  </label>
-                  <select
-                    required
-                    value={newPatient.gender}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, gender: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    aria-required="true"
-                  >
-                    <option value="masculino">Masculino</option>
-                    <option value="femenino">Femenino</option>
-                    <option value="otro">Otro</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={newPatient.email}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    aria-required="true"
-                    aria-describedby="email-help"
-                  />
-                  <div id="email-help" className="sr-only">
-                    Dirección de correo electrónico para comunicaciones médicas importantes
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Teléfono *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={newPatient.phone}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, phone: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    aria-required="true"
-                    aria-describedby="phone-help"
-                    placeholder="Ej: +52 555 123 4567"
-                  />
-                  <div id="phone-help" className="sr-only">
-                    Número de teléfono de contacto principal del paciente
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Ciudad de Nacimiento
-                  </label>
-                  <input
-                    type="text"
-                    value={newPatient.city_of_birth}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, city_of_birth: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Ciudad de Residencia
-                  </label>
-                  <input
-                    type="text"
-                    value={newPatient.city_of_residence}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, city_of_residence: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Número de Seguro Social
-                  </label>
-                  <input
-                    type="text"
-                    value={newPatient.social_security_number}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, social_security_number: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Dirección
-                  </label>
-                  <textarea
-                    value={newPatient.address}
-                    onChange={(e) => setNewPatient(prev => ({ ...prev, address: e.target.value }))}
-                    rows={3}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowNewPatientForm(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
-                  aria-label="Cancelar registro de nuevo paciente"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={dashboardLoading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                  aria-label="Guardar nuevo paciente en el sistema"
-                >
-                  {dashboardLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Creando...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Crear Paciente
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Settings Modal */}
-      {userProfile && (
-        <SettingsModal
-          isOpen={showSettingsModal}
-          onClose={() => setShowSettingsModal(false)}
-          userProfile={userProfile}
-          onUpdate={(updatedProfile) => {
-            if (updatedProfile) {
-              // Assuming useAuth handles state updates for profile
-              // No need to setUserProfile here directly, as useAuth will manage it
-              console.log('Profile updated:', updatedProfile);
-            }
-          }}
-        />
-      )}
+      {/* Modal de Nuevo Paciente */}
+      <NewPatientForm
+        isOpen={showNewPatientForm}
+        onClose={() => setShowNewPatientForm(false)}
+        onSave={handleNewPatientCreated}
+      />
     </div>
   );
-}
+};
+
+export default Dashboard;

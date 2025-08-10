@@ -329,6 +329,14 @@ const AccessibleTable: React.FC<AccessibleTableProps> = ({
         </div>
       )}
 
+      {/* Descripción oculta para lectores de pantalla */}
+      <div id={`${id}-description`} className="sr-only">
+        Tabla de datos médicos con {columns.length} columnas y {data.length} filas.
+        Las columnas incluyen: {columns.map(col => col.label).join(', ')}.
+        {columns.some(col => col.sortable) && ' Algunas columnas son ordenables.'}
+        {selectable && ' Los registros son seleccionables.'}
+      </div>
+
       {/* Tabla */}
       {!loading && (
         <div className="overflow-x-auto">
@@ -350,13 +358,7 @@ const AccessibleTable: React.FC<AccessibleTableProps> = ({
               Usa las flechas del teclado para navegar, Enter para seleccionar, y las teclas de acceso rápido para ordenar.
             </caption>
 
-            {/* Descripción oculta para lectores de pantalla */}
-            <div id={`${id}-description`} className="sr-only">
-              Tabla de datos médicos con {columns.length} columnas y {data.length} filas.
-              Las columnas incluyen: {columns.map(col => col.label).join(', ')}.
-              {columns.some(col => col.sortable) && ' Algunas columnas son ordenables.'}
-              {selectable && ' Los registros son seleccionables.'}
-            </div>
+
 
             <thead className="bg-gray-900">
               <tr role="row">

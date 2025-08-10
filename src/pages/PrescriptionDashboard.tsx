@@ -9,8 +9,9 @@ import { es } from 'date-fns/locale';
 import QRCode from 'qrcode';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { getOrCreateTemplateForUser, saveTemplateForUser, type PrescriptionTemplateData } from '../lib/prescriptionTemplates';
 import VisualPrescriptionEditor from '../components/VisualPrescriptionEditor';
-import { renderTemplateElement, TemplateElement } from '../components/VisualPrescriptionRenderer';
+import VisualPrescriptionRenderer, { renderTemplateElement, TemplateElement } from '../components/VisualPrescriptionRenderer';
 // ===== NUEVAS IMPORTACIONES PARA SISTEMA CENTRALIZADO =====
 import { 
   validateMedication, 
@@ -41,7 +42,7 @@ interface Prescription {
   expires_at: string;
   status: 'active' | 'expired' | 'dispensed';
   doctor_signature?: string;
-  prescription_style?: any;
+  visual_layout?: any;
   patients?: {
     full_name: string;
   };
@@ -68,7 +69,7 @@ export default function PrescriptionDashboard() {
   const [prescriptionHistory, setPrescriptionHistory] = useState<Prescription[]>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = useState('');
-  const [prescriptionTemplate, setPrescriptionTemplate] = useState<any>(null);
+  const [prescriptionTemplate, setPrescriptionTemplate] = useState<PrescriptionTemplateData | null>(null);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
 
   useEffect(() => {
@@ -113,7 +114,7 @@ export default function PrescriptionDashboard() {
           status,
           created_at,
           expires_at,
-          prescription_style,
+          visual_layout,
           patients (
             full_name
           )
@@ -170,24 +171,8 @@ export default function PrescriptionDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from('prescription_templates')
-        .select('style_definition, logo_url')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') { // Ignore 'no rows found'
-        throw error;
-      }
-
-      if (data) {
-        setPrescriptionTemplate(data.style_definition);
-        if (data.logo_url) {
-          // Asumimos que `setLogoPreview` existe en tu dashboard o se pasará al editor
-          // Por ahora, lo guardamos en el estado de la plantilla.
-          setPrescriptionTemplate(prev => ({ ...prev, logo_url: data.logo_url }));
-        }
-      }
+      const tpl = await getOrCreateTemplateForUser(user.id);
+      setPrescriptionTemplate(tpl);
     } catch (err: any) {
       console.error('Error fetching prescription template:', err.message);
       setError('No se pudo cargar la plantilla de receta.');
@@ -209,7 +194,7 @@ export default function PrescriptionDashboard() {
       if (newLogoFile) {
         const filePath = `${user.id}/${newLogoFile.name}-${Date.now()}`;
         const { error: uploadError } = await supabase.storage
-          .from('logos')
+          .from('prescription-icons')
           .upload(filePath, newLogoFile, {
             cacheControl: '3600',
             upsert: true,
@@ -217,27 +202,12 @@ export default function PrescriptionDashboard() {
         
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supabase.storage.from('logos').getPublicUrl(filePath);
+        const { data: urlData } = supabase.storage.from('prescription-icons').getPublicUrl(filePath);
         logoUrlToSave = urlData.publicUrl;
       }
 
-      const { data, error } = await supabase
-        .from('prescription_templates')
-        .upsert(
-          { 
-            user_id: user.id, 
-            style_definition: styleDefinition, 
-            logo_url: logoUrlToSave,
-            updated_at: new Date().toISOString() 
-          },
-          { onConflict: 'user_id' }
-        )
-        .select()
-        .single();
-      
-      if (error) throw error;
-
-      setPrescriptionTemplate({ ...data.style_definition, logo_url: data.logo_url });
+      const normalized = await saveTemplateForUser(user.id, { ...(styleDefinition as any), logo_url: logoUrlToSave });
+      setPrescriptionTemplate(normalized);
       setSaveStatus('success');
       setSaveMessage('Plantilla guardada exitosamente.');
       setTimeout(() => setActiveTab('dashboard'), 1500);
@@ -338,12 +308,29 @@ export default function PrescriptionDashboard() {
         throw new Error('Paciente no encontrado o error al verificar paciente.');
       }
       
+      // Obtener snapshot del layout visual actual del médico
+      let visualLayoutToSave: any = null;
+      {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: tpl } = await supabase
+            .from('prescription_templates')
+            .select('style_definition')
+            .eq('user_id', user.id)
+            .single();
+          if (tpl?.style_definition) {
+            visualLayoutToSave = tpl.style_definition;
+          }
+        }
+      }
+
       const { data, error: insertError } = await supabase
         .from('prescriptions')
         .insert({
           ...prescriptionData,
           doctor_id: doctorId, 
-          status: 'active'
+          status: 'active',
+          visual_layout: visualLayoutToSave || null
         })
         .select();
 
@@ -411,31 +398,54 @@ export default function PrescriptionDashboard() {
     const { data: { user } } = await supabase.auth.getUser();
     let userPrescriptionStyle = {} as any; // Default to an empty object
     if (user) {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('prescription_style')
-        .eq('id', user.id)
+      // 1) Intentar obtener plantilla visual desde prescription_templates (preferido)
+      const { data: tpl, error: tplError } = await supabase
+        .from('prescription_templates')
+        .select('style_definition, logo_url')
+        .eq('user_id', user.id)
         .single();
-      if (profileError) {
-        console.error("Error fetching prescription_style:", profileError);
+
+      if (!tplError && tpl?.style_definition) {
+        userPrescriptionStyle = { ...(tpl.style_definition as any), logo_url: tpl.logo_url };
       } else {
-        userPrescriptionStyle = profileData?.prescription_style || {};
+        // 2) Fallback a profiles.prescription_style si no existe plantilla
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('prescription_style')
+          .eq('id', user.id)
+          .single();
+        if (profileError) {
+          console.error('Error fetching prescription_style (fallback):', profileError);
+        } else {
+          userPrescriptionStyle = profileData?.prescription_style || {};
+        }
       }
     }
 
-    // Si hay plantilla visual, renderizar usando los elementos
-    if (userPrescriptionStyle.visualTemplate && userPrescriptionStyle.visualTemplate.elements) {
+    // Preferir snapshot por receta si existe
+    const layout = (prescription as any).visual_layout || userPrescriptionStyle;
+
+    // Si hay plantilla visual, renderizar usando los elementos (soporta 2 estructuras)
+    const hasVisualTemplate = layout?.visualTemplate && layout.visualTemplate.elements;
+    const hasTemplateElements = layout?.template_elements && Array.isArray(layout.template_elements);
+    if (hasVisualTemplate || hasTemplateElements) {
       const container = document.createElement('div');
       container.style.position = 'relative';
-      container.style.width = (userPrescriptionStyle.visualTemplate.canvasSettings?.canvasSize?.width || 794) + 'px';
-      container.style.height = (userPrescriptionStyle.visualTemplate.canvasSettings?.canvasSize?.height || 1123) + 'px';
-      container.style.background = userPrescriptionStyle.visualTemplate.canvasSettings?.backgroundColor || '#fff';
-      if (userPrescriptionStyle.visualTemplate.canvasSettings?.backgroundImage) {
-        container.style.backgroundImage = `url(${userPrescriptionStyle.visualTemplate.canvasSettings.backgroundImage})`;
+      const canvasSettings = hasVisualTemplate
+        ? (layout.visualTemplate.canvasSettings || {})
+        : (layout.canvas_settings || {});
+      const elementsSource = hasVisualTemplate
+        ? layout.visualTemplate.elements
+        : layout.template_elements;
+      container.style.width = (canvasSettings?.canvasSize?.width || 794) + 'px';
+      container.style.height = (canvasSettings?.canvasSize?.height || 1123) + 'px';
+      container.style.background = canvasSettings?.backgroundColor || '#fff';
+      if (canvasSettings?.backgroundImage) {
+        container.style.backgroundImage = `url(${canvasSettings.backgroundImage})`;
         container.style.backgroundSize = 'cover';
       }
 
-      const elementsToRender = userPrescriptionStyle.visualTemplate.elements
+      const elementsToRender = elementsSource
         .filter((el: TemplateElement) => el.isVisible)
         .sort((a: TemplateElement, b: TemplateElement) => a.zIndex - b.zIndex);
 
@@ -465,13 +475,13 @@ export default function PrescriptionDashboard() {
             .replace(/\[FECHA\]/g, format(new Date(prescription.created_at), 'dd/MM/yyyy'))
             .replace(/\[DIAGNÓSTICO\]/g, prescription.diagnosis || '')
             .replace(/\[NOTAS E INSTRUCCIONES ESPECIALES\]/g, prescription.notes || '')
-            .replace(/\[NOMBRE DEL MÉDICO\]/g, userPrescriptionStyle.doctorFullName || '')
-            .replace(/\[ESPECIALIDAD\]/g, userPrescriptionStyle.doctorSpecialty || '')
-            .replace(/\[NÚMERO\]/g, userPrescriptionStyle.doctorLicense || '')
-            .replace(/\[NOMBRE DE LA CLÍNICA\]/g, userPrescriptionStyle.clinicName || '')
-            .replace(/\[DIRECCIÓN\]/g, userPrescriptionStyle.clinicAddress || '')
-            .replace(/\[TELÉFONO\]/g, userPrescriptionStyle.clinicPhone || '')
-            .replace(/\[EMAIL\]/g, userPrescriptionStyle.clinicEmail || '');
+            .replace(/\[NOMBRE DEL MÉDICO\]/g, layout.doctorFullName || '')
+            .replace(/\[ESPECIALIDAD\]/g, layout.doctorSpecialty || '')
+            .replace(/\[NÚMERO\]/g, layout.doctorLicense || '')
+            .replace(/\[NOMBRE DE LA CLÍNICA\]/g, layout.clinicName || '')
+            .replace(/\[DIRECCIÓN\]/g, layout.clinicAddress || '')
+            .replace(/\[TELÉFONO\]/g, layout.clinicPhone || '')
+            .replace(/\[EMAIL\]/g, layout.clinicEmail || '');
 
           if (content.includes('[MEDICAMENTO]')) {
             let meds = '';
@@ -495,13 +505,24 @@ export default function PrescriptionDashboard() {
         container.appendChild(elDiv);
       }
 
-      printWindow.document.write(`<!DOCTYPE html><html><head><title>Receta Médica</title><style>body{margin:0;padding:0;} .canvas{position:relative;}</style></head><body><div class="canvas">${container.innerHTML}</div></body></html>`);
+      // Normalizar papel y márgenes si existen en layout de estilo
+      const rawPaper = (layout?.paperSize || 'letter').toString().toLowerCase();
+      const rawMargins = (layout?.margins || 'normal').toString().toLowerCase();
+      const pageSize = rawPaper === 'a4' ? 'A4' : rawPaper === 'legal' ? 'Legal' : 'Letter';
+      const pageMargin = rawMargins === 'narrow' ? '0.5in' : rawMargins === 'wide' ? '1.5in' : '1in';
+
+      printWindow.document.write(`<!DOCTYPE html><html><head><title>Receta Médica</title><style>
+        @media print { @page { size: ${pageSize}; margin: ${pageMargin}; } body { margin: 0; } }
+        body{margin:0;padding:0;background:#fff;} .canvas{position:relative; margin: 0 auto;}
+      </style></head><body><div class="canvas">${container.innerHTML}</div></body></html>`);
       printWindow.document.close();
       setTimeout(() => printWindow.print(), 250);
       return;
     }
 
     // Fallback al diseño por defecto si no hay plantilla visual
+    const rawPaper = (userPrescriptionStyle.paperSize || 'letter').toString().toLowerCase();
+    const rawMargins = (userPrescriptionStyle.margins || 'normal').toString().toLowerCase();
     const style = {
       fontFamily: userPrescriptionStyle.fontFamily || 'Arial, sans-serif',
       primaryColor: userPrescriptionStyle.primaryColor || '#0066cc',
@@ -530,8 +551,8 @@ export default function PrescriptionDashboard() {
       showLogo: userPrescriptionStyle.showLogo !== undefined ? userPrescriptionStyle.showLogo : true,
       logoPosition: userPrescriptionStyle.logoPosition || 'left',
       includeQR: userPrescriptionStyle.includeQR !== undefined ? userPrescriptionStyle.includeQR : true,
-      paperSize: userPrescriptionStyle.paperSize || 'letter',
-      margins: userPrescriptionStyle.margins || 'normal',
+      paperSize: rawPaper,
+      margins: rawMargins,
       includeWatermark: userPrescriptionStyle.includeWatermark !== undefined ? userPrescriptionStyle.includeWatermark : false,
     };
 
@@ -793,6 +814,7 @@ export default function PrescriptionDashboard() {
               <FileText className="h-5 w-5 mr-2" />
               Historial Completo
             </button>
+            
           </nav>
         </div>
       </div>
@@ -1015,6 +1037,8 @@ export default function PrescriptionDashboard() {
             onPatientChange={setSelectedPatientId}
             saveStatus={saveStatus}
             saveMessage={saveMessage}
+            visualTemplate={prescriptionTemplate}
+            onOpenVisualEditor={() => setActiveTab('visual')}
           />
         )}
 
@@ -1187,6 +1211,8 @@ export default function PrescriptionDashboard() {
             </div>
           </div>
         )}
+
+        
       </div>
     </div>
   );
@@ -1202,6 +1228,8 @@ interface EnhancedPrescriptionFormProps {
   onPatientChange?: (patientId: string) => void;
   saveStatus?: 'idle' | 'saving' | 'success' | 'error';
   saveMessage?: string;
+  visualTemplate?: PrescriptionTemplateData | null;
+  onOpenVisualEditor?: () => void;
 }
 
 // ===== MEDICAMENTOS COMUNES USANDO CONFIGURACIÓN CENTRALIZADA =====
@@ -1240,7 +1268,9 @@ function EnhancedPrescriptionForm({
   patients = [],
   onPatientChange,
   saveStatus = 'idle',
-  saveMessage = ''
+  saveMessage = '',
+  visualTemplate = null,
+  onOpenVisualEditor
 }: EnhancedPrescriptionFormProps) {
   const navigate = useNavigate();
   const [medications, setMedications] = useState<Medication[]>([{
@@ -1261,6 +1291,11 @@ function EnhancedPrescriptionForm({
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [doctorProfile, setDoctorProfile] = useState<{ full_name?: string; medical_license?: string; specialty?: string; clinic?: { name?: string; address?: string; phone?: string; email?: string } } | null>(null);
+  const [medicationTemplates, setMedicationTemplates] = useState<any[]>([]);
+  const [formTopErrors, setFormTopErrors] = useState<string[]>([]);
+  const [draftRecovered, setDraftRecovered] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
 
   // Detectar estado de conexión
   useEffect(() => {
@@ -1275,6 +1310,99 @@ function EnhancedPrescriptionForm({
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Cargar perfil de médico y plantillas de medicamentos
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, medical_license, specialty, clinic_info')
+            .eq('id', user.id)
+            .single();
+          if (profile) {
+            setDoctorProfile({
+              full_name: profile.full_name,
+              medical_license: profile.medical_license,
+              specialty: profile.specialty,
+              clinic: profile.clinic_info || {}
+            });
+          }
+
+          const { data: tpl } = await supabase
+            .from('medication_templates')
+            .select('id, name, medications, diagnosis, notes, usage_count')
+            .or(`doctor_id.eq.${user.id},is_public.eq.true`)
+            .order('usage_count', { ascending: false });
+          setMedicationTemplates(tpl || []);
+        }
+      } catch (e) {
+        // no-op
+      }
+    })();
+  }, []);
+
+  // Resumen de errores superior
+  useEffect(() => {
+    const errs: string[] = [];
+    if (!patientId) errs.push('Seleccione un paciente');
+    if (!diagnosis) errs.push('Ingrese un diagnóstico');
+    if (medications.filter(m => m.name).length === 0) errs.push('Agregue al menos un medicamento');
+    setFormTopErrors(errs);
+  }, [patientId, diagnosis, medications]);
+
+  // Autosave de borrador por paciente (diagnóstico/meds/notas)
+  useEffect(() => {
+    const loadDraft = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const key = `rx_draft_${user?.id || 'anon'}_${patientId || 'none'}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft?.diagnosis) setDiagnosis(draft.diagnosis);
+          if (Array.isArray(draft?.medications)) setMedications(draft.medications);
+          if (typeof draft?.notes === 'string') setNotes(draft.notes);
+          setDraftRecovered(true);
+        } else {
+          setDraftRecovered(false);
+        }
+      } catch (_) {}
+    };
+    loadDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId]);
+
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      try {
+        setDraftSaving(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        const key = `rx_draft_${user?.id || 'anon'}_${patientId || 'none'}`;
+        const payload = {
+          diagnosis,
+          medications,
+          notes,
+          updated_at: Date.now()
+        };
+        localStorage.setItem(key, JSON.stringify(payload));
+      } finally {
+        setDraftSaving(false);
+      }
+    }, 600);
+    return () => clearTimeout(handler);
+  }, [patientId, diagnosis, medications, notes]);
+
+  const clearDraft = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const key = `rx_draft_${user?.id || 'anon'}_${patientId || 'none'}`;
+      localStorage.removeItem(key);
+      setDraftRecovered(false);
+    } catch (_) {}
+  };
 
   // Generar código QR
   useEffect(() => {
@@ -1509,6 +1637,25 @@ function EnhancedPrescriptionForm({
         </div>
       )}
 
+      {/* Resumen de errores */}
+      {formTopErrors.length > 0 && (
+        <div className="bg-red-900/20 border border-red-500 rounded-lg p-3 text-sm text-red-300 mb-2">
+          <ul className="list-disc pl-5 space-y-1">
+            {formTopErrors.map((err, idx) => (
+              <li key={idx}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Aviso de borrador recuperado / guardando */}
+      {(draftRecovered || draftSaving) && (
+        <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-2 text-xs text-yellow-200 mb-2 flex items-center justify-between">
+          <span>{draftRecovered ? 'Borrador recuperado automáticamente.' : 'Guardando borrador...'}</span>
+          <button onClick={clearDraft} className="text-yellow-300 hover:text-yellow-100">Limpiar</button>
+        </div>
+      )}
+
       {/* Selector de paciente */}
       <div className="dark-card p-4">
         <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -1592,6 +1739,49 @@ function EnhancedPrescriptionForm({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Columna izquierda - Formulario */}
         <div className="space-y-4">
+          {/* Plantillas de medicamentos */}
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-gray-300">Plantillas de medicamentos</label>
+            <div className="flex gap-2">
+              <select
+                className="dark-input"
+                defaultValue=""
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (!id) return;
+                  const tpl = medicationTemplates.find(t => t.id === id);
+                  if (tpl) {
+                    if (Array.isArray(tpl.medications)) setMedications(tpl.medications);
+                    if (tpl.diagnosis) setDiagnosis(tpl.diagnosis);
+                    if (tpl.notes) setNotes(tpl.notes);
+                  }
+                  e.currentTarget.value = '';
+                }}
+              >
+                <option value="">Usar plantilla…</option>
+                {medicationTemplates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              {previousPrescriptions.length > 0 && (
+                <button
+                  type="button"
+                  className="px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
+                  title="Duplicar última receta"
+                  onClick={() => {
+                    const last = previousPrescriptions[0];
+                    if (!last) return;
+                    if (Array.isArray(last.medications)) setMedications(last.medications);
+                    if (last.diagnosis) setDiagnosis(last.diagnosis);
+                    if (last.notes) setNotes(last.notes);
+                  }}
+                >
+                  Duplicar última
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Diagnóstico */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Diagnóstico <span className="text-red-400">*</span></label>
@@ -1733,72 +1923,186 @@ function EnhancedPrescriptionForm({
           </div>
         </div>
 
-        {/* Columna derecha - Vista previa */}
-        <div className="lg:sticky lg:top-4">
-          <div className="dark-card p-6 print-friendly" id="prescription-preview">
+      {/* Columna derecha - Vista previa visual + controles */}
+      <div className="lg:sticky lg:top-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-gray-200 font-medium">Vista previa</h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPreview(!showPreview)}
+                className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
+                title="Alternar vista previa"
+              >
+                {showPreview ? 'Ocultar' : 'Mostrar'}
+              </button>
+              <button
+                type="button"
+                onClick={onOpenVisualEditor}
+                className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
+                title="Editar plantilla visual"
+              >
+                Editor Visual
+              </button>
+              {visualTemplate?.template_elements?.length ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    // Imprimir vista previa usando el layout visual
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    const layout: any = visualTemplate;
+                    const canvasSettings = layout.canvas_settings || {};
+                    const elementsSource = layout.template_elements || [];
+                    const rawPaper = (layout.print_settings?.paperSize || layout.paperSize || 'a4').toString().toLowerCase();
+                    const orientation = (layout.print_settings?.orientation || layout.orientation || 'portrait').toString().toLowerCase();
+                    const margins = layout.print_settings?.margins || layout.margins || 'normal';
+                    const pageSize = rawPaper === 'a4' ? 'A4' : rawPaper === 'legal' ? 'Legal' : 'Letter';
+                    const marginStr = typeof margins === 'string'
+                      ? (margins === 'narrow' ? '0.5in' : margins === 'wide' ? '1.5in' : '1in')
+                      : `${margins.top} ${margins.right} ${margins.bottom} ${margins.left}`;
+
+                    const container = document.createElement('div');
+                    container.style.position = 'relative';
+                    container.style.width = (canvasSettings?.canvasSize?.width || 794) + 'px';
+                    container.style.height = (canvasSettings?.canvasSize?.height || 1123) + 'px';
+                    container.style.background = canvasSettings?.backgroundColor || '#fff';
+                    if (canvasSettings?.backgroundImage) {
+                      container.style.backgroundImage = `url(${canvasSettings.backgroundImage})`;
+                      container.style.backgroundSize = 'cover';
+                    }
+                    const elementsToRender = elementsSource
+                      .filter((el: TemplateElement) => el.isVisible)
+                      .sort((a: TemplateElement, b: TemplateElement) => a.zIndex - b.zIndex);
+                    for (const element of elementsToRender) {
+                      const elDiv = document.createElement('div');
+                      elDiv.style.position = 'absolute';
+                      elDiv.style.left = element.position.x + 'px';
+                      elDiv.style.top = element.position.y + 'px';
+                      elDiv.style.width = element.size.width + 'px';
+                      elDiv.style.height = element.size.height + 'px';
+                      elDiv.style.fontSize = (element.style.fontSize || 14) + 'px';
+                      elDiv.style.fontFamily = element.style.fontFamily || 'Arial';
+                      elDiv.style.color = element.style.color || '#000';
+                      elDiv.style.fontWeight = (element.style.fontWeight as any) || 'normal';
+                      elDiv.style.fontStyle = (element.style.fontStyle as any) || 'normal';
+                      elDiv.style.textDecoration = (element.style.textDecoration as any) || 'none';
+                      elDiv.style.textAlign = (element.style.textAlign as any) || 'left';
+                      elDiv.style.lineHeight = element.style.lineHeight ? String(element.style.lineHeight) : '1.5';
+                      elDiv.style.zIndex = String(element.zIndex);
+                      elDiv.style.background = (element as any).backgroundColor || 'transparent';
+                      elDiv.style.overflow = 'hidden';
+                      elDiv.style.whiteSpace = 'pre-wrap';
+
+                      let content = element.content;
+                      if (content) {
+                        content = content
+                          .replace(/\[NOMBRE DEL PACIENTE\]/g, patientName || '')
+                          .replace(/\[FECHA\]/g, format(new Date(), 'dd/MM/yyyy', { locale: es }))
+                          .replace(/\[DIAGNÓSTICO\]/g, diagnosis || '')
+                          .replace(/\[NOTAS E INSTRUCCIONES ESPECIALES\]/g, notes || '')
+                          .replace(/\[NOMBRE DEL MÉDICO\]/g, doctorProfile?.full_name || '')
+                          .replace(/\[ESPECIALIDAD\]/g, doctorProfile?.specialty || '')
+                          .replace(/\[NÚMERO\]/g, doctorProfile?.medical_license || '')
+                          .replace(/\[NOMBRE DE LA CLÍNICA\]/g, doctorProfile?.clinic?.name || '')
+                          .replace(/\[DIRECCIÓN\]/g, doctorProfile?.clinic?.address || '')
+                          .replace(/\[TELÉFONO\]/g, doctorProfile?.clinic?.phone || '')
+                          .replace(/\[EMAIL\]/g, doctorProfile?.clinic?.email || '');
+                        if (content.includes('[MEDICAMENTO]')) {
+                          let meds = '';
+                          medications.filter(m => m.name).forEach((med, idx) => {
+                            meds += `${idx + 1}. ${med.name} - ${med.dosage}\n   Frecuencia: ${med.frequency}\n   Duración: ${med.duration}\n   Instrucciones: ${med.instructions || ''}\n`;
+                          });
+                          content = content.replace(/\[MEDICAMENTO\][^\[]*/g, meds);
+                        }
+                      }
+                      elDiv.textContent = content as string;
+                      container.appendChild(elDiv);
+                    }
+
+                    printWindow.document.write(`<!DOCTYPE html><html><head><title>Vista Previa Receta</title><style>@media print { @page { size: ${pageSize} ${orientation}; margin: ${marginStr}; } body { margin: 0; } } body{margin:0;padding:0;background:#fff;} .canvas{position:relative; margin: 0 auto;}</style></head><body><div class="canvas">${container.innerHTML}</div></body></html>`);
+                    printWindow.document.close();
+                    setTimeout(() => printWindow.print(), 250);
+                  }}
+                  className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
+                  title="Imprimir vista previa"
+                >
+                  Imprimir vista previa
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="dark-card p-4 print-friendly" id="prescription-preview">
             <div className="text-center mb-4 pb-4 border-b border-gray-700">
               <h2 className="text-xl font-bold text-gray-100 mb-2">RECETA MÉDICA</h2>
               <p className="text-sm text-gray-400">Dr. Juan Médico</p>
               <p className="text-xs text-gray-500">CED. PROF. 12345678</p>
             </div>
-
             <div className="space-y-4 text-sm">
-              <div>
-                <span className="text-gray-400">Paciente:</span>
-                <span className="ml-2 text-gray-200">{patientName || 'Por seleccionar'}</span>
-              </div>
-              
-              <div>
-                <span className="text-gray-400">Fecha:</span>
-                <span className="ml-2 text-gray-200">{format(new Date(), 'dd/MM/yyyy', { locale: es })}</span>
-              </div>
-
-              {diagnosis && (
-                <div>
-                  <span className="text-gray-400">Diagnóstico:</span>
-                  <span className="ml-2 text-gray-200">{diagnosis}</span>
+              {/* Vista previa visual si hay plantilla */}
+              {visualTemplate?.template_elements?.length ? (
+                <div className="flex justify-center">
+                  <VisualPrescriptionRenderer
+                    elements={visualTemplate.template_elements as any}
+                    canvasSettings={visualTemplate.canvas_settings as any}
+                    prescriptionData={{
+                      patientName: patientName || 'Por seleccionar',
+                      doctorName: doctorProfile?.full_name || 'Dr. (sin nombre)',
+                      doctorLicense: doctorProfile?.medical_license || '',
+                      doctorSpecialty: doctorProfile?.specialty || '',
+                      clinicName: doctorProfile?.clinic?.name || 'Clínica',
+                      clinicAddress: doctorProfile?.clinic?.address || '',
+                      clinicPhone: doctorProfile?.clinic?.phone || '',
+                      clinicEmail: doctorProfile?.clinic?.email || '',
+                      diagnosis,
+                      medications: medications.filter(m => m.name),
+                      notes,
+                      date: format(new Date(), 'dd/MM/yyyy', { locale: es })
+                    }}
+                  />
                 </div>
-              )}
-
-              {medications.filter(m => m.name).length > 0 && (
-                <div>
-                  <h3 className="text-gray-300 font-medium mb-2">Medicamentos:</h3>
-                  <div className="space-y-2">
-                    {medications.filter(m => m.name).map((med, index) => (
-                      <div key={index} className="pl-4 border-l-2 border-cyan-400">
-                        <div className="font-medium text-gray-200">{med.name} - {med.dosage}</div>
-                        <div className="text-gray-400 text-xs">
-                          {med.frequency} por {med.duration}
-                          {med.instructions && <span className="block">Instrucciones: {med.instructions}</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {notes && (
-                <div>
-                  <h3 className="text-gray-300 font-medium mb-1">Notas:</h3>
-                  <p className="text-gray-400 text-xs">{notes}</p>
-                </div>
-              )}
-
-              <div className="flex justify-between items-end mt-6 pt-4 border-t border-gray-700">
-                {signatureData && (
+              ) : (
+                // Fallback simple cuando no hay plantilla visual
+                <div className="space-y-4 text-sm">
                   <div>
-                    <img src={signatureData} alt="Firma" className="h-16" />
-                    <p className="text-xs text-gray-500 mt-1">Firma del médico</p>
+                    <span className="text-gray-400">Paciente:</span>
+                    <span className="ml-2 text-gray-200">{patientName || 'Por seleccionar'}</span>
                   </div>
-                )}
-                
-                {qrCodeUrl && (
-                  <div className="text-center">
-                    <img src={qrCodeUrl} alt="QR Code" className="h-20 w-20" />
-                    <p className="text-xs text-gray-500 mt-1">Código de verificación</p>
+                  <div>
+                    <span className="text-gray-400">Fecha:</span>
+                    <span className="ml-2 text-gray-200">{format(new Date(), 'dd/MM/yyyy', { locale: es })}</span>
                   </div>
-                )}
-              </div>
+                  {diagnosis && (
+                    <div>
+                      <span className="text-gray-400">Diagnóstico:</span>
+                      <span className="ml-2 text-gray-200">{diagnosis}</span>
+                    </div>
+                  )}
+                  {medications.filter(m => m.name).length > 0 && (
+                    <div>
+                      <h3 className="text-gray-300 font-medium mb-2">Medicamentos:</h3>
+                      <div className="space-y-2">
+                        {medications.filter(m => m.name).map((med, index) => (
+                          <div key={index} className="pl-4 border-l-2 border-cyan-400">
+                            <div className="font-medium text-gray-200">{med.name} - {med.dosage}</div>
+                            <div className="text-gray-400 text-xs">
+                              {med.frequency} por {med.duration}
+                              {med.instructions && <span className="block">Instrucciones: {med.instructions}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {notes && (
+                    <div>
+                      <h3 className="text-gray-300 font-medium mb-1">Notas:</h3>
+                      <p className="text-gray-400 text-xs">{notes}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

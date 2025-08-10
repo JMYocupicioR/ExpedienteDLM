@@ -1,9 +1,8 @@
 .App {
   min-height: 100vh;
-  background: linear-gradient(to bottom, #111827, #0f172a);
 }
 
-/* Variables CSS para tema oscuro */
+/* Variables CSS - tema oscuro por DEFECTO */
 :root {
   --bg-primary: #111827;
   --bg-secondary: #1f2937;
@@ -15,6 +14,8 @@
   --accent-secondary: #3b82f6;
   --border-color: #4b5563;
   --hover-bg: #4b5563;
+  --app-gradient: linear-gradient(to bottom, #111827, #0f172a);
+  --app-bg-solid: #0f172a;
   
   /* Responsive spacing variables */
   --spacing-xs: 0.5rem;
@@ -32,6 +33,24 @@
   --text-2xl: 1.5rem;
   --text-3xl: 1.875rem;
   --text-4xl: 2.25rem;
+  /* Escala global ajustable */
+  --font-scale: 1;
+}
+
+/* Variables para tema CLARO cuando <html> tiene .light */
+.light {
+  --bg-primary: #f6f7fb; /* Light slate/neutral con leve azul */
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #eef2f6; /* contenedores suaves */
+  --text-primary: #0b1220; /* alto contraste base */
+  --text-secondary: #334155; /* slate-700 */
+  --text-muted: #6b7280; /* slate-500-600 */
+  --accent-primary: var(--accent-primary, #0ea5e9); /* cielo/cyan 500 */
+  --accent-secondary: var(--accent-secondary, #6366f1); /* indigo 500-600 */
+  --border-color: #d7dde6;
+  --hover-bg: #e9edf3;
+  --app-gradient: linear-gradient(to bottom, #f6f7fb, #ffffff);
+  --app-bg-solid: #ffffff;
 }
 
 /* Estilos base para la aplicación */
@@ -47,10 +66,57 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(to bottom, #111827, #0f172a);
+  background: var(--app-gradient);
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden; /* Previene scroll horizontal en móviles */
+}
+
+/* Tipografía responsiva global (mínimo 14px) */
+html { font-size: clamp(14px, 1.1vw, 16px); }
+body { font-size: calc(1rem * var(--font-scale)); }
+
+/* Contraste alto opcional */
+:root[data-contrast="high"] {
+  --border-color: #94a3b8;
+  --text-secondary: #1f2937;
+  --text-muted: #334155;
+}
+
+/* THEME SHIMS: Alinear componentes existentes al tema seleccionado
+   Estas reglas aseguran que clases Tailwind con grises oscuros obedezcan el tema claro.
+   Mantienen el aspecto actual en modo oscuro (no afectan) y corrigen contraste en light. */
+.light .bg-gray-900,
+.light .bg-gray-800,
+.light .bg-gray-700 {
+  background-color: var(--bg-secondary) !important;
+}
+
+.light .bg-gray-800\/30,
+.light .bg-gray-900\/20,
+.light .bg-blue-900\/20,
+.light .bg-green-900\/20,
+.light .bg-yellow-900\/20,
+.light .bg-purple-900\/30 {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.light .border-gray-800,
+.light .border-gray-700,
+.light .border-blue-700,
+.light .border-green-700,
+.light .border-yellow-700,
+.light .border-purple-700 {
+  border-color: var(--border-color) !important;
+}
+
+.light .text-white { color: var(--text-primary) !important; }
+.light .text-gray-400,
+.light .text-gray-300 { color: var(--text-secondary) !important; }
+
+.light .bg-gray-700\/50,
+.light .bg-gray-700\/30 {
+  background-color: var(--bg-tertiary) !important;
 }
 
 /* Estilos para modales y overlays */

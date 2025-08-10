@@ -8,11 +8,24 @@ import Dashboard from './pages/Dashboard';
 import PatientRecord from './pages/PatientRecord';
 import PrescriptionDashboard from './pages/PrescriptionDashboard';
 import SignupQuestionnaire from './pages/SignupQuestionnaire';
+import EnhancedSignupQuestionnaire from './pages/EnhancedSignupQuestionnaire';
+import UserProfile from './pages/UserProfile';
+import Settings from './pages/Settings';
+import MedicalTemplates from './pages/MedicalTemplates';
+import MedicalScales from './pages/MedicalScales';
+import MedicalScaleBarthel from './pages/MedicalScaleBarthel';
+import MedicalScaleBoston from './pages/MedicalScaleBoston';
+import PatientsList from './pages/PatientsList';
+import AppointmentsPage from './pages/AppointmentsPage';
+import AppLayout from './components/Layout/AppLayout';
 import ErrorBoundary from './components/ErrorBoundary';
+import { useTheme } from './hooks/useTheme';
+
 import './App.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     // Check initial auth state
@@ -49,6 +62,7 @@ function App() {
       
       <Router>
         <Routes>
+          {/* Public routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route 
@@ -56,17 +70,65 @@ function App() {
             element={isAuthenticated ? <Navigate to="/dashboard" /> : <Auth />} 
           />
           <Route 
-            path="/dashboard" 
-            element={isAuthenticated ? <Dashboard /> : <Navigate to="/auth" />} 
+            path="/login" 
+            element={isAuthenticated ? <Navigate to="/dashboard" /> : <Auth />} 
           />
           <Route 
-            path="/expediente/:id" 
-            element={isAuthenticated ? <PatientRecord /> : <Navigate to="/auth" />} 
+            path="/signup-questionnaire" 
+            element={<EnhancedSignupQuestionnaire />} 
           />
           <Route 
-            path="/recetas" 
-            element={isAuthenticated ? <PrescriptionDashboard /> : <Navigate to="/auth" />} 
+            path="/signup-legacy" 
+            element={<SignupQuestionnaire />} 
           />
+
+          {/* Protected routes with layout */}
+          <Route element={<AppLayout />}>
+            <Route 
+              path="/dashboard" 
+              element={isAuthenticated ? <Dashboard /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/profile" 
+              element={isAuthenticated ? <UserProfile /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/settings" 
+              element={isAuthenticated ? <Settings /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/plantillas" 
+              element={isAuthenticated ? <MedicalTemplates /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/escalas" 
+              element={isAuthenticated ? <MedicalScales /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/escalas/barthel" 
+              element={isAuthenticated ? <MedicalScaleBarthel /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/escalas/:id" 
+              element={isAuthenticated ? <MedicalScaleBoston /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/expediente/:id" 
+              element={isAuthenticated ? <PatientRecord /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/recetas" 
+              element={isAuthenticated ? <PrescriptionDashboard /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/patients" 
+              element={isAuthenticated ? <PatientsList /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/citas" 
+              element={isAuthenticated ? <AppointmentsPage /> : <Navigate to="/auth" />} 
+            />
+          </Route>
         </Routes>
       </Router>
     </ErrorBoundary>

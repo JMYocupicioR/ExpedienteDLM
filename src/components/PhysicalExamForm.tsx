@@ -379,8 +379,18 @@ export default function PhysicalExamForm({
       setError(null);
       setValidationErrors({});
       
+      // Agregar metadatos de la plantilla si existe
+      const enrichedData = {
+        ...data,
+        templateInfo: templateDefinition ? {
+          templateId,
+          templateName,
+          templateVersion: templateDefinition.version || '1.0'
+        } : undefined
+      };
+      
       // Validación completa
-      const validation = validateCompleteForm(data);
+      const validation = validateCompleteForm(enrichedData);
       
       if (!validation.isValid) {
         setValidationErrors(validation.errors.reduce((acc, error, index) => {
@@ -403,7 +413,7 @@ export default function PhysicalExamForm({
         }
       }
       
-      await onSave(data);
+      await onSave(enrichedData);
       setSaveState('saved');
       
     } catch (err: any) {
@@ -653,11 +663,131 @@ export default function PhysicalExamForm({
 
                  {/* Plantilla dinámica de exploración */}
          {templateDefinition ? (
-           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-             <h3 className="text-lg font-medium text-white mb-4">Plantilla Personalizada</h3>
-             <p className="text-gray-400 text-sm">
-               Plantilla "{templateName}" cargada. Funcionalidad completa disponible próximamente.
-             </p>
+           <div className="space-y-4">
+             <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-4">
+               <h3 className="text-lg font-medium text-white mb-2">Plantilla: {templateName}</h3>
+               <p className="text-blue-300 text-sm">
+                 Plantilla personalizada cargada con {templateDefinition.sections?.length || 0} secciones
+               </p>
+             </div>
+             {templateDefinition.sections?.map((section) => (
+               <div key={section.id} className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                 <h3 className="text-lg font-medium text-white mb-4">{section.title}</h3>
+                 {section.description && (
+                   <p className="text-gray-400 text-sm mb-4">{section.description}</p>
+                 )}
+                 
+                 <div className="space-y-4">
+                   {section.questions?.map((question) => (
+                     <div key={question.id} className="space-y-2">
+                       <label className="block text-sm font-medium text-gray-300">
+                         {question.label}
+                         {question.required && <span className="text-red-400 ml-1">*</span>}
+                       </label>
+                       
+                       {/* Renderizar diferentes tipos de campos */}
+                       {question.type === 'text' && (
+                         <input
+                           type="text"
+                           {...register(`dynamic.${section.id}.${question.id}`, {
+                             required: question.required ? `${question.label} es requerido` : false
+                           })}
+                           placeholder={question.placeholder}
+                           className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                         />
+                       )}
+                       
+                       {question.type === 'textarea' && (
+                         <textarea
+                           {...register(`dynamic.${section.id}.${question.id}`, {
+                             required: question.required ? `${question.label} es requerido` : false
+                           })}
+                           rows={3}
+                           placeholder={question.placeholder}
+                           className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                         />
+                       )}
+                       
+                       {question.type === 'select' && (
+                         <select
+                           {...register(`dynamic.${section.id}.${question.id}`, {
+                             required: question.required ? `${question.label} es requerido` : false
+                           })}
+                           className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                         >
+                           <option value="">Seleccionar...</option>
+                           {question.options?.map((option, index) => (
+                             <option key={index} value={option}>{option}</option>
+                           ))}
+                         </select>
+                       )}
+                       
+                       {question.type === 'radio' && (
+                         <div className="space-y-2">
+                           {question.options?.map((option, index) => (
+                             <label key={index} className="flex items-center">
+                               <input
+                                 type="radio"
+                                 value={option}
+                                 {...register(`dynamic.${section.id}.${question.id}`, {
+                                   required: question.required ? `${question.label} es requerido` : false
+                                 })}
+                                 className="rounded border-gray-600 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-700"
+                               />
+                               <span className="ml-2 text-sm text-gray-300">{option}</span>
+                             </label>
+                           ))}
+                         </div>
+                       )}
+                       
+                       {question.type === 'checkbox' && (
+                         <div className="space-y-2">
+                           {question.options?.map((option, index) => (
+                             <label key={index} className="flex items-center">
+                               <input
+                                 type="checkbox"
+                                 value={option}
+                                 {...register(`dynamic.${section.id}.${question.id}.${index}`)}
+                                 className="rounded border-gray-600 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-700"
+                               />
+                               <span className="ml-2 text-sm text-gray-300">{option}</span>
+                             </label>
+                           ))}
+                         </div>
+                       )}
+                       
+                       {question.type === 'number' && (
+                         <input
+                           type="number"
+                           {...register(`dynamic.${section.id}.${question.id}`, {
+                             required: question.required ? `${question.label} es requerido` : false
+                           })}
+                           placeholder={question.placeholder}
+                           className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                         />
+                       )}
+                       
+                       {question.type === 'date' && (
+                         <input
+                           type="date"
+                           {...register(`dynamic.${section.id}.${question.id}`, {
+                             required: question.required ? `${question.label} es requerido` : false
+                           })}
+                           className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                         />
+                       )}
+                       
+                       {/* Mostrar error de validación si existe */}
+                       {errors.dynamic?.[section.id]?.[question.id] && (
+                         <p className="text-xs text-red-400">
+                           {errors.dynamic[section.id][question.id]?.message}
+                         </p>
+                       )}
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             ))}
            </div>
          ) : (
           /* Formulario de exploración estática */

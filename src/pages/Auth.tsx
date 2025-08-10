@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -39,39 +40,36 @@ export default function Auth() {
         // navigate('/dashboard') se manejará automáticamente en App.tsx
         
       } else {
-        console.log('📝 Signing up...');
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: 'Usuario' // Nombre por defecto
-            }
-          }
-        });
+        console.log('📝 Checking if email is already in use...');
+        setCheckingEmail(true);
         
-        if (error) {
-          if (error.message?.includes('User already registered')) {
-            setError('Este correo ya está registrado. Por favor inicia sesión.');
-            setIsLogin(true);
+        try {
+          // Verificar si el email ya existe en la tabla profiles
+          const { data: existingProfile, error: profileCheckError } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('email', email)
+            .single();
+          
+          if (existingProfile) {
+            setError('Este correo electrónico ya está registrado. Por favor, inicia sesión o usa un correo diferente.');
             return;
           }
-          throw error;
-        }
-        
-        if (data.user) {
-          console.log('✅ Signup successful:', data.user.email);
           
-          // Verificar si necesita confirmación por email
-          if (data.user.email_confirmed_at) {
-            console.log('📧 Email ya confirmado, useAuth manejará la navegación...');
-            // NO navegar inmediatamente - dejar que useAuth maneje el estado
-          } else {
-            console.log('📧 Email pendiente de confirmación');
-            setError('Revisa tu correo electrónico para confirmar tu cuenta.');
-          }
-        } else {
-          throw new Error('No se pudo crear el usuario');
+          // NO crear usuarios temporales - solo verificar en la tabla profiles
+          // La verificación en auth.users no es necesaria y causa problemas
+          
+          console.log('✅ Email disponible, redirecting to enhanced signup...');
+          // Redirigir al nuevo cuestionario de registro mejorado con el email
+          navigate('/signup-questionnaire', { 
+            state: { 
+              email: email,
+              fromRegistration: true 
+            } 
+          });
+          return;
+        } finally {
+          setCheckingEmail(false);
         }
       }
     } catch (err: any) {
@@ -189,42 +187,51 @@ export default function Auth() {
                       name="email"
                       placeholder="ejemplo@correo.com"
                       required
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                      disabled={checkingEmail}
+                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
                     />
-                    <Mail className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    {checkingEmail ? (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-cyan-400"></div>
+                      </div>
+                    ) : (
+                      <Mail className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    )}
                   </div>
+                  <p className="text-xs text-cyan-400 mt-1">
+                    {checkingEmail ? '🔍 Verificando disponibilidad del email...' : '✨ Solo necesitamos tu email para comenzar'}
+                  </p>
                 </div>
-
-                <div>
-                  <label htmlFor="password-register" className="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
-                  <div className="relative">
-                    <input
-                      id="password-register"
-                      type="password"
-                      name="password"
-                      placeholder="••••••••"
-                      required
-                      minLength={6}
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
-                    />
-                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">Mínimo 6 caracteres</p>
-                </div>
+                {/* Campo oculto para que el formulario no falle */}
+                <input type="hidden" name="password" value="temporal_password_123" />
               </div>
 
               <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
-                <p className="text-blue-300 text-sm">
-                  ✅ Tu perfil se creará automáticamente tras el registro.
-                </p>
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-6 h-6 bg-blue-400 rounded-full flex items-center justify-center">
+                      <span className="text-blue-900 text-xs font-bold">1</span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-blue-300 text-sm font-medium mb-1">
+                      Proceso de registro simplificado
+                    </p>
+                    <p className="text-blue-200 text-xs">
+                      • Tu contraseña se configurará más adelante<br/>
+                      • Cuestionario personalizado según tu rol<br/>
+                      • Información profesional y de clínica
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || checkingEmail}
                 className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
-                {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
+                {checkingEmail ? 'Verificando email...' : loading ? 'Iniciando registro...' : 'Comenzar Registro →'}
               </button>
 
               <div className="text-center">

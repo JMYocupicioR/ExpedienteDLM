@@ -76,6 +76,19 @@ interface UsePhysicalExamReturn {
   
   // Audit and history
   getExamHistory: (patientId: string) => Promise<any[]>;
+  // Medical scales
+  listActiveScales: () => Promise<Array<{ id: string; name: string }>>;
+  saveScaleAssessment: (
+    params: {
+      consultationId?: string;
+      scaleId: string;
+      answers: Record<string, unknown>;
+      score?: number;
+      severity?: string;
+      interpretation?: Record<string, unknown>;
+    }
+  ) => Promise<{ id: string }>; 
+  getScaleAssessmentsByConsultation: (consultationId: string) => Promise<any[]>;
   getChangeLog: (examId: string) => Promise<any[]>;
 }
 
@@ -566,6 +579,58 @@ export function usePhysicalExam({
     }
   }, []);
 
+  // ===== Medical scales API =====
+  const listActiveScales = useCallback(async (): Promise<Array<{ id: string; name: string }>> => {
+    const { data, error } = await supabase
+      .from('medical_scales')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  }, []);
+
+  const saveScaleAssessment = useCallback(async (
+    params: {
+      consultationId?: string;
+      scaleId: string;
+      answers: Record<string, unknown>;
+      score?: number;
+      severity?: string;
+      interpretation?: Record<string, unknown>;
+    }
+  ): Promise<{ id: string }> => {
+    const { data, error } = await supabase
+      .from('scale_assessments')
+      .insert({
+        patient_id: patientId,
+        doctor_id: doctorId,
+        consultation_id: params.consultationId || null,
+        scale_id: params.scaleId,
+        answers: params.answers,
+        score: params.score ?? null,
+        severity: params.severity ?? null,
+        interpretation: params.interpretation ?? null
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data.id };
+  }, [patientId, doctorId]);
+
+  const getScaleAssessmentsByConsultation = useCallback(async (consultationId: string) => {
+    const { data, error } = await supabase
+      .from('scale_assessments')
+      .select('*')
+      .eq('consultation_id', consultationId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }, []);
+
   // Auto-save effect
   useEffect(() => {
     if (!currentDraft) return;
@@ -617,5 +682,10 @@ export function usePhysicalExam({
     // Audit and history
     getExamHistory,
     getChangeLog
+    ,
+    // Scales
+    listActiveScales,
+    saveScaleAssessment,
+    getScaleAssessmentsByConsultation
   };
 } 

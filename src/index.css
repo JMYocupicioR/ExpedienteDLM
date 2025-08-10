@@ -36,6 +36,16 @@
   color: #06b6d4;
 }
 
+/* Ajustes globales para notches y safe areas en móviles */
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.mobile-container {
+  padding-left: max(env(safe-area-inset-left), 16px);
+  padding-right: max(env(safe-area-inset-right), 16px);
+}
+
 /* Asegurar que los touch targets funcionen en todos los dispositivos */
 .touch-target {
   min-height: var(--min-touch-target);
@@ -195,7 +205,7 @@ input[type="reset"] {
   }
   
   .medical-table-container table {
-    min-width: 600px;
+    min-width: 560px;
   }
   
   /* Aumentar área táctil en móviles */
@@ -203,8 +213,8 @@ input[type="reset"] {
   [role="button"],
   input,
   select {
-    min-height: 48px;
-    min-width: 48px;
+    min-height: clamp(40px, 6.5vh, 48px);
+    min-width: clamp(40px, 6.5vh, 48px);
   }
 }
 

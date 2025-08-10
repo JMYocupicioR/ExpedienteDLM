@@ -3,15 +3,19 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
   ArrowLeft, Clock, Heart, Brain, Dna, Trash2, Eye, ChevronDown, ChevronUp,
-  Search, Filter, RefreshCw, FileDown, Printer, FileText as FileTextIcon
+  Search, Filter, RefreshCw, FileDown, Printer, FileText as FileTextIcon,
+  Phone, Mail, MapPin, CheckCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { format } from 'date-fns';
+import { format, isToday, isTomorrow, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { validateAndSanitizeArray } from '../lib/validation';
 import ConsultationForm from '../components/ConsultationForm';
 import ConsultationDetails from '../components/ConsultationDetails';
 import ConsultationModal from '../components/ConsultationModal';
+import AppointmentQuickScheduler from '../components/AppointmentQuickScheduler';
+import StudiesSection from '../components/StudiesSection';
+import { appointmentService, Appointment } from '../lib/services/appointment-service';
 import type { Database } from '../lib/database.types';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
@@ -38,6 +42,8 @@ export default function PatientRecord() {
   const [consultationSearch, setConsultationSearch] = useState('');
   const [expandedConsultation, setExpandedConsultation] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
 
   useEffect(() => {
     if (id) {
@@ -173,6 +179,11 @@ export default function PatientRecord() {
       if (consultationsError) throw consultationsError;
       setConsultations(consultationsData || []);
 
+      // Cargar citas del paciente si tenemos userProfile
+      if (userProfile?.id) {
+        await loadPatientAppointments(id, userProfile.id);
+      }
+
     } catch (error: any) {
       console.error('Error fetching patient data:', error);
       setError(error.message);
@@ -180,6 +191,97 @@ export default function PatientRecord() {
       setLoading(false);
     }
   };
+
+  const loadPatientAppointments = async (patientId: string, doctorId: string) => {
+    try {
+      setLoadingAppointments(true);
+      
+      // Obtener citas desde hoy hasta los próximos 30 días
+      const today = new Date();
+      const nextMonth = addDays(today, 30);
+      
+      const appointments = await appointmentService.getAppointments({
+        patient_id: patientId,
+        doctor_id: doctorId,
+        date_from: format(today, 'yyyy-MM-dd'),
+        date_to: format(nextMonth, 'yyyy-MM-dd'),
+      });
+
+      // Ordenar por fecha y hora
+      const sortedAppointments = appointments.sort((a, b) => {
+        const dateTimeA = new Date(`${a.appointment_date}T${a.appointment_time}`);
+        const dateTimeB = new Date(`${b.appointment_date}T${b.appointment_time}`);
+        return dateTimeA.getTime() - dateTimeB.getTime();
+      });
+
+      setPatientAppointments(sortedAppointments);
+    } catch (error) {
+      console.error('Error loading patient appointments:', error);
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
+  const getAppointmentDateLabel = (date: string) => {
+    const appointmentDate = new Date(date);
+    if (isToday(appointmentDate)) {
+      return 'Hoy';
+    } else if (isTomorrow(appointmentDate)) {
+      return 'Mañana';
+    } else {
+      return format(appointmentDate, "EEE d 'de' MMM", { locale: es });
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'scheduled':
+        return 'bg-blue-600 text-blue-100';
+      case 'confirmed':
+        return 'bg-green-600 text-green-100';
+      case 'in_progress':
+        return 'bg-yellow-600 text-yellow-100';
+      case 'completed':
+        return 'bg-gray-600 text-gray-100';
+      case 'cancelled':
+        return 'bg-red-600 text-red-100';
+      default:
+        return 'bg-gray-600 text-gray-100';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'scheduled':
+        return 'Programada';
+      case 'confirmed':
+        return 'Confirmada';
+      case 'in_progress':
+        return 'En Progreso';
+      case 'completed':
+        return 'Completada';
+      case 'cancelled':
+        return 'Cancelada';
+      case 'no_show':
+        return 'No Asistió';
+      default:
+        return status;
+    }
+  };
+
+  const handleAppointmentScheduled = async () => {
+    // Recargar citas después de programar una nueva
+    if (id && userProfile?.id) {
+      await loadPatientAppointments(id, userProfile.id);
+    }
+  };
+
+  // Cargar citas cuando userProfile esté disponible
+  useEffect(() => {
+    if (userProfile?.id && id && !loadingAppointments) {
+      loadPatientAppointments(id, userProfile.id);
+    }
+  }, [userProfile?.id, id]);
 
   const handleSave = async () => {
     if (!patient || !id) return;
@@ -586,9 +688,9 @@ export default function PatientRecord() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-900">
+    <div className="flex h-screen" style={{ background: 'var(--app-bg-solid)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
-      <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+      <div className="w-64 border-r border-gray-700 flex flex-col" style={{ background: 'var(--bg-secondary)' }}>
         <div className="p-4 border-b border-gray-700">
           <button
             onClick={() => navigate('/dashboard')}
@@ -601,77 +703,110 @@ export default function PatientRecord() {
         
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="mb-6">
-            <h2 className="text-lg font-semibold text-white">{patient.full_name}</h2>
-            <p className="text-sm text-gray-400">Expediente #{patient.id.slice(0, 8)}</p>
+            <h2 className="text-base font-semibold text-white leading-tight">{patient.full_name}</h2>
+            <p className="text-xs text-gray-400">Expediente #{patient.id.slice(0, 8)}</p>
           </div>
 
+          <div className="text-xs uppercase tracking-wide text-gray-400 mb-2">Secciones</div>
           <ul className="space-y-2">
             <li>
               <button 
                 onClick={() => setSeccionActiva('paciente')}
-                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
                   seccionActiva === 'paciente' 
                     ? 'bg-blue-600 text-white' 
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                <User className="h-5 w-5 mr-3" />
-                <span>Información Personal</span>
+                <User className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Información Personal</span>
               </button>
             </li>
             <li>
               <button 
                 onClick={() => setSeccionActiva('patologicos')}
-                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
                   seccionActiva === 'patologicos' 
                     ? 'bg-blue-600 text-white' 
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                <Heart className="h-5 w-5 mr-3" />
-                <span>Antecedentes Patológicos</span>
+                <Heart className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Antecedentes Patológicos</span>
               </button>
             </li>
             <li>
               <button 
                 onClick={() => setSeccionActiva('no-patologicos')}
-                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
                   seccionActiva === 'no-patologicos' 
                     ? 'bg-blue-600 text-white' 
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                <Brain className="h-5 w-5 mr-3" />
-                <span>Antecedentes No Patológicos</span>
+                <Brain className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Antecedentes No Patológicos</span>
               </button>
             </li>
             <li>
               <button 
                 onClick={() => setSeccionActiva('heredofamiliares')}
-                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
                   seccionActiva === 'heredofamiliares' 
                     ? 'bg-blue-600 text-white' 
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                <Dna className="h-5 w-5 mr-3" />
-                <span>Antecedentes Heredofamiliares</span>
+                <Dna className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Antecedentes Heredofamiliares</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => setSeccionActiva('estudios')}
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'estudios' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                <FileText className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Estudios</span>
               </button>
             </li>
             <li>
               <button 
                 onClick={() => setSeccionActiva('consultas')}
-                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
                   seccionActiva === 'consultas' 
                     ? 'bg-blue-600 text-white' 
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                <Clock className="h-5 w-5 mr-3" />
-                <span>Consultas</span>
+                <Clock className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Consultas</span>
                 <span className="ml-auto bg-gray-600 text-gray-200 text-xs rounded-full px-2 py-1">
                   {consultations.length}
                 </span>
+              </button>
+            </li>
+            
+            <li>
+              <button 
+                onClick={() => setSeccionActiva('citas')}
+                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'citas' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                <Calendar className="h-5 w-5 mr-3" />
+                <span>Citas Médicas</span>
+                {patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length > 0 && (
+                  <span className="ml-auto bg-cyan-500 text-white text-xs rounded-full px-2 py-1">
+                    {patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length}
+                  </span>
+                )}
               </button>
             </li>
           </ul>
@@ -680,7 +815,7 @@ export default function PatientRecord() {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto">
-        <header className="bg-gray-800 p-4 border-b border-gray-700 flex justify-between items-center">
+        <header className="p-4 border-b border-gray-700 flex justify-between items-center" style={{ background: 'var(--bg-secondary)' }}>
           <div>
             <h1 className="text-2xl font-bold text-white">
               Expediente Médico
@@ -769,124 +904,143 @@ export default function PatientRecord() {
           </div>
         </header>
 
-        <main className="p-6">
+        <main className="p-6 max-w-7xl mx-auto">
           {seccionActiva === 'paciente' && (
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
               <h2 className="text-xl font-bold mb-6 text-white">Información Personal</h2>
-              
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Nombre completo</label>
-                    <input
-                      type="text"
-                      value={patient.full_name}
-                      onChange={(e) => setPatient({ ...patient, full_name: e.target.value })}
-                      readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
+              {modoEdicion ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Nombre completo</label>
+                      <input
+                        type="text"
+                        value={patient.full_name}
+                        onChange={(e) => setPatient({ ...patient, full_name: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Fecha de nacimiento</label>
+                      <input
+                        type="date"
+                        value={patient.birth_date}
+                        onChange={(e) => setPatient({ ...patient, birth_date: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Género</label>
+                      <select
+                        value={patient.gender}
+                        onChange={(e) => setPatient({ ...patient, gender: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      >
+                        <option value="masculino">Masculino</option>
+                        <option value="femenino">Femenino</option>
+                        <option value="otro">Otro</option>
+                      </select>
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Ciudad de Nacimiento</label>
+                      <input
+                        type="text"
+                        value={patient.city_of_birth || ''}
+                        onChange={(e) => setPatient({ ...patient, city_of_birth: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
                   </div>
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Fecha de nacimiento</label>
-                    <input
-                      type="date"
-                      value={patient.birth_date}
-                      onChange={(e) => setPatient({ ...patient, birth_date: e.target.value })}
-                      readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Género</label>
-                    <select
-                      value={patient.gender}
-                      onChange={(e) => setPatient({ ...patient, gender: e.target.value })}
-                      disabled={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    >
-                      <option value="masculino">Masculino</option>
-                      <option value="femenino">Femenino</option>
-                      <option value="otro">Otro</option>
-                    </select>
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Ciudad de Nacimiento</label>
-                    <input
-                      type="text"
-                      value={patient.city_of_birth || ''}
-                      onChange={(e) => setPatient({ ...patient, city_of_birth: e.target.value })}
-                      readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Email</label>
-                    <input
-                      type="email"
-                      value={patient.email || ''}
-                      onChange={(e) => setPatient({ ...patient, email: e.target.value })}
-                      readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Teléfono</label>
-                    <input
-                      type="tel"
-                      value={patient.phone || ''}
-                      onChange={(e) => setPatient({ ...patient, phone: e.target.value })}
-                      readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Ciudad de Residencia</label>
-                    <input
-                      type="text"
-                      value={patient.city_of_residence || ''}
-                      onChange={(e) => setPatient({ ...patient, city_of_residence: e.target.value })}
-                      readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Número de Seguro Social</label>
-                    <input
-                      type="text"
-                      value={patient.social_security_number || ''}
-                      onChange={(e) => setPatient({ ...patient, social_security_number: e.target.value })}
-                      readOnly={!modoEdicion}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-300">Dirección</label>
-                    <textarea
-                      value={patient.address || ''}
-                      onChange={(e) => setPatient({ ...patient, address: e.target.value })}
-                      readOnly={!modoEdicion}
-                      rows={3}
-                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                    />
+                  <div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Email</label>
+                      <input
+                        type="email"
+                        value={patient.email || ''}
+                        onChange={(e) => setPatient({ ...patient, email: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Teléfono</label>
+                      <input
+                        type="tel"
+                        value={patient.phone || ''}
+                        onChange={(e) => setPatient({ ...patient, phone: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Ciudad de Residencia</label>
+                      <input
+                        type="text"
+                        value={patient.city_of_residence || ''}
+                        onChange={(e) => setPatient({ ...patient, city_of_residence: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Número de Seguro Social</label>
+                      <input
+                        type="text"
+                        value={patient.social_security_number || ''}
+                        onChange={(e) => setPatient({ ...patient, social_security_number: e.target.value })}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-300">Dirección</label>
+                      <textarea
+                        value={patient.address || ''}
+                        onChange={(e) => setPatient({ ...patient, address: e.target.value })}
+                        rows={3}
+                        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <dl className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Nombre completo</dt>
+                    <dd className="text-white font-medium">{patient.full_name}</dd>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Fecha de nacimiento</dt>
+                    <dd className="text-white font-medium">{format(new Date(patient.birth_date), 'dd/MM/yyyy')}</dd>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Género</dt>
+                    <dd className="text-white font-medium capitalize">{patient.gender}</dd>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Ciudad de Nacimiento</dt>
+                    <dd className="text-white font-medium">{patient.city_of_birth || 'No especificado'}</dd>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Email</dt>
+                    <dd className="text-white font-medium">{patient.email || 'No especificado'}</dd>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Teléfono</dt>
+                    <dd className="text-white font-medium">{patient.phone || 'No especificado'}</dd>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Ciudad de Residencia</dt>
+                    <dd className="text-white font-medium">{patient.city_of_residence || 'No especificado'}</dd>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4 md:col-span-2">
+                    <dt className="text-xs uppercase tracking-wide text-gray-400">Dirección</dt>
+                    <dd className="text-white font-medium whitespace-pre-wrap">{patient.address || 'No especificado'}</dd>
+                  </div>
+                </dl>
+              )}
             </div>
           )}
 
           {seccionActiva === 'patologicos' && (
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
-              <h2 className="text-xl font-bold mb-6 text-white">Antecedentes Patológicos</h2>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 text-left">
+              <h2 className="text-xl font-bold mb-6 text-white text-left">Antecedentes Patológicos</h2>
               
               <div className="space-y-6">
                 <div>
@@ -1010,8 +1164,8 @@ export default function PatientRecord() {
           )}
 
           {seccionActiva === 'no-patologicos' && (
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
-              <h2 className="text-xl font-bold mb-6 text-white">Antecedentes No Patológicos</h2>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 text-left">
+              <h2 className="text-xl font-bold mb-6 text-white text-left">Antecedentes No Patológicos</h2>
               
               <div className="grid grid-cols-2 gap-6">
                 <div>
@@ -1147,8 +1301,8 @@ export default function PatientRecord() {
           )}
 
           {seccionActiva === 'heredofamiliares' && (
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
-              <h2 className="text-xl font-bold mb-6 text-white">Antecedentes Heredofamiliares</h2>
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 text-left">
+              <h2 className="text-xl font-bold mb-6 text-white text-left">Antecedentes Heredofamiliares</h2>
               
               <div className="space-y-6">
                 {hereditaryBackgrounds.length > 0 ? (
@@ -1312,7 +1466,7 @@ export default function PatientRecord() {
                       <tbody>
                         {filteredConsultations.map((consultation) => (
                           <React.Fragment key={consultation.id}>
-                            <tr className="border-b border-gray-700 hover:bg-gray-750 transition-colors">
+                            <tr className="border-b border-gray-700 hover:bg-gray-700 transition-colors">
                               <td className="py-3 px-4 text-white">
                                 {format(new Date(consultation.created_at), "dd/MM/yyyy", { locale: es })}
                               </td>
@@ -1347,7 +1501,7 @@ export default function PatientRecord() {
                             </tr>
                             {expandedConsultation === consultation.id && (
                               <tr>
-                                <td colSpan={5} className="px-4 py-6 bg-gray-750">
+                                <td colSpan={5} className="px-4 py-6 bg-gray-700">
                                   <ConsultationDetails consultation={consultation} />
                                 </td>
                               </tr>
@@ -1383,6 +1537,209 @@ export default function PatientRecord() {
               </div>
             </div>
           )}
+          {seccionActiva === 'estudios' && patient && (
+            <div className="space-y-6">
+              <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-white">Estudios</h2>
+                  <button
+                    onClick={() => fetchPatientData()}
+                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    title="Actualizar"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+                <StudiesSection patientId={patient.id} doctorId={userProfile?.id || null} />
+              </div>
+            </div>
+          )}
+
+          {/* Sección de Citas Médicas */}
+          {seccionActiva === 'citas' && (
+            <div className="space-y-6">
+              {/* Header de citas */}
+              <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-white flex items-center">
+                    <Calendar className="h-6 w-6 mr-2 text-cyan-400" />
+                    Citas Médicas
+                  </h2>
+                  {patient && userProfile && (
+                    <AppointmentQuickScheduler
+                      patientId={patient.id}
+                      patientName={patient.full_name}
+                      onScheduled={handleAppointmentScheduled}
+                      className="hidden sm:block"
+                    />
+                  )}
+                </div>
+
+                {/* Stats de citas */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-blue-500 rounded-lg">
+                        <Calendar className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-gray-400 text-sm">Total</p>
+                        <p className="text-white font-semibold">{patientAppointments.length}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-green-500 rounded-lg">
+                        <Clock className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-gray-400 text-sm">Próximas</p>
+                        <p className="text-white font-semibold">
+                          {patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-purple-500 rounded-lg">
+                        <CheckCircle className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-gray-400 text-sm">Completadas</p>
+                        <p className="text-white font-semibold">
+                          {patientAppointments.filter(apt => apt.status === 'completed').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-orange-500 rounded-lg">
+                        <Activity className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-gray-400 text-sm">Este Mes</p>
+                        <p className="text-white font-semibold">
+                          {patientAppointments.filter(apt => {
+                            const aptDate = new Date(apt.appointment_date);
+                            const now = new Date();
+                            return aptDate.getMonth() === now.getMonth() && aptDate.getFullYear() === now.getFullYear();
+                          }).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Agendador para móvil */}
+                {patient && userProfile && (
+                  <div className="block sm:hidden mb-4">
+                    <AppointmentQuickScheduler
+                      patientId={patient.id}
+                      patientName={patient.full_name}
+                      onScheduled={handleAppointmentScheduled}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Lista de citas */}
+              <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-700">
+                <div className="p-6">
+                  {loadingAppointments ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+                    </div>
+                  ) : patientAppointments.length > 0 ? (
+                    <div className="space-y-4">
+                      {patientAppointments.map((appointment) => (
+                        <div
+                          key={appointment.id}
+                          className="p-4 bg-gray-700 rounded-lg border-l-4 border-cyan-400 hover:bg-gray-650 transition-colors"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3 mb-2">
+                                <h3 className="text-white font-medium text-lg">{appointment.title}</h3>
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}>
+                                  {getStatusLabel(appointment.status)}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-300">
+                                <div className="flex items-center">
+                                  <Clock className="h-4 w-4 mr-2 text-cyan-400" />
+                                  <span className="font-medium">{getAppointmentDateLabel(appointment.appointment_date)}</span>
+                                  <span className="mx-2">•</span>
+                                  <span>{appointment.appointment_time}</span>
+                                  <span className="mx-2">•</span>
+                                  <span>{appointment.duration} min</span>
+                                </div>
+
+                                {appointment.location && (
+                                  <div className="flex items-center">
+                                    <MapPin className="h-4 w-4 mr-2 text-cyan-400" />
+                                    <span>{appointment.location}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {appointment.description && (
+                                <p className="text-gray-400 text-sm mt-2 leading-relaxed">
+                                  {appointment.description}
+                                </p>
+                              )}
+
+                              {appointment.notes && (
+                                <div className="mt-3 p-3 bg-gray-600 rounded-lg">
+                                  <div className="flex items-start">
+                                    <FileText className="h-4 w-4 mr-2 text-yellow-400 mt-0.5 flex-shrink-0" />
+                                    <p className="text-gray-300 text-sm">{appointment.notes}</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col space-y-2 ml-4">
+                              <button
+                                onClick={() => navigate('/citas')}
+                                className="px-3 py-2 text-cyan-400 hover:text-cyan-300 text-sm flex items-center"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                Ver en Calendario
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Calendar className="mx-auto h-12 w-12 text-gray-500" />
+                      <h3 className="mt-2 text-sm font-medium text-white">No hay citas programadas</h3>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Programa la primera cita médica para este paciente.
+                      </p>
+                      {patient && userProfile && (
+                        <div className="mt-6">
+                          <AppointmentQuickScheduler
+                            patientId={patient.id}
+                            patientName={patient.full_name}
+                            onScheduled={handleAppointmentScheduled}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -1393,10 +1750,22 @@ export default function PatientRecord() {
             <ConsultationForm
               patientId={id!}
               doctorId={userProfile.id}
+              patientName={patient?.full_name}
               onClose={() => setShowConsultationForm(false)}
-              onSave={() => {
-                setShowConsultationForm(false);
-                fetchPatientData();
+              onSave={async (consultationData: any) => {
+                try {
+                  const { data, error } = await supabase
+                    .from('consultations')
+                    .insert(consultationData)
+                    .select('id')
+                    .single();
+                  if (error) throw error;
+                  // No cerrar automáticamente: permitir agregar escalas
+                  await fetchPatientData();
+                  return data.id as string;
+                } catch (e) {
+                  console.error('Error inserting consultation', e);
+                }
               }}
             />
           </div>

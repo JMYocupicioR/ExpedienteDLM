@@ -153,6 +153,12 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const [measurementEnd, setMeasurementEnd] = useState<{x: number, y: number} | null>(null);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
+  // Configuración de impresión
+  const [paperSize, setPaperSize] = useState<string>('a4'); // 'a4' | 'letter' | 'legal'
+  const [orientation, setOrientation] = useState<string>('portrait'); // 'portrait' | 'landscape'
+  const [margins, setMargins] = useState<{ top: string; right: string; bottom: string; left: string}>({
+    top: '1in', right: '1in', bottom: '1in', left: '1in'
+  });
 
   // Estados de historial (Deshacer/Rehacer)
   const [history, setHistory] = useState<HistoryState[]>([]);
@@ -1287,6 +1293,28 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         setCanvasSize(existingTemplate.canvas_settings.canvasSize || { width: 794, height: 1123 });
         setZoom(existingTemplate.canvas_settings.zoom || 0.8);
       }
+      // Cargar print settings desde plantilla (compatibilidad doble)
+      const ps: any = existingTemplate.print_settings || {};
+      const tplPaper = (ps.paperSize || existingTemplate.paperSize || 'a4').toString().toLowerCase();
+      const tplOrientation = (ps.orientation || existingTemplate.orientation || 'portrait').toString().toLowerCase();
+      const tplMargins: any = ps.margins || existingTemplate.margins || 'normal';
+      setPaperSize(tplPaper);
+      setOrientation(tplOrientation);
+      if (typeof tplMargins === 'string') {
+        const map: Record<string, {top:string;right:string;bottom:string;left:string}> = {
+          narrow: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+          wide: { top: '1.5in', right: '1.5in', bottom: '1.5in', left: '1.5in' },
+          normal: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
+        };
+        setMargins(map[tplMargins] || map.normal);
+      } else if (typeof tplMargins === 'object') {
+        setMargins({
+          top: tplMargins.top || '1in',
+          right: tplMargins.right || '1in',
+          bottom: tplMargins.bottom || '1in',
+          left: tplMargins.left || '1in'
+        });
+      }
     } else {
       loadFromLocalStorage();
     }
@@ -1314,7 +1342,16 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         backgroundImage,
         canvasSize,
         zoom
-      }
+      },
+      print_settings: {
+        paperSize,
+        orientation,
+        margins
+      },
+      // Compatibilidad con consumidores que leen en nivel raíz
+      paperSize,
+      orientation,
+      margins
     };
 
     await onSave(prescriptionStyleData);
@@ -1326,23 +1363,39 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    
+    // Calcular dimensiones del canvas según papel y orientación
+    const getCanvasSizePx = (paper: string, orient: string) => {
+      const sizes: Record<string, { w: number; h: number }> = {
+        a4: { w: 794, h: 1123 }, // 210x297mm @96dpi aprox
+        letter: { w: 816, h: 1056 }, // 8.5x11in @96dpi
+        legal: { w: 816, h: 1344 } // 8.5x14in @96dpi
+      };
+      const key = (paper || 'a4').toLowerCase();
+      const base = sizes[key] || sizes.a4;
+      const isLandscape = (orient || 'portrait').toLowerCase() === 'landscape';
+      return isLandscape ? { w: base.h, h: base.w } : base;
+    };
+    const sizePx = getCanvasSizePx(paperSize, orientation);
+    const pageSize = paperSize.toLowerCase() === 'a4' ? 'A4' : paperSize.toLowerCase() === 'legal' ? 'Legal' : 'Letter';
+    const pageMargin = `${margins.top} ${margins.right} ${margins.bottom} ${margins.left}`;
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
           <title>Receta Médica</title>
           <style>
-            body { margin: 0; padding: 20px; }
+            body { margin: 0; padding: 0; background: #fff; }
             .canvas { 
-              width: 794px; 
-              height: 1123px; 
+              width: ${sizePx.w}px; 
+              height: ${sizePx.h}px; 
               position: relative;
               background: ${backgroundColor};
               ${backgroundImage ? `background-image: url(${backgroundImage}); background-size: cover;` : ''}
             }
             @media print {
-              body { margin: 0; }
+              @page { size: ${pageSize} ${orientation}; margin: ${pageMargin}; }
+              body { margin: 0; background: #fff; }
               .canvas { page-break-inside: avoid; }
             }
           </style>
@@ -1544,6 +1597,39 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
             >
               <Layers className="h-3 w-3" />
             </button>
+            {/* Controles rápidos de impresión */}
+            <select
+              value={paperSize}
+              onChange={(e) => setPaperSize(e.target.value)}
+              className="bg-gray-700 text-gray-200 text-xs rounded px-2 py-1"
+              title="Tamaño de papel"
+            >
+              <option value="a4">A4</option>
+              <option value="letter">Carta</option>
+              <option value="legal">Legal</option>
+            </select>
+            <select
+              value={orientation}
+              onChange={(e) => setOrientation(e.target.value)}
+              className="bg-gray-700 text-gray-200 text-xs rounded px-2 py-1"
+              title="Orientación"
+            >
+              <option value="portrait">Vertical</option>
+              <option value="landscape">Horizontal</option>
+            </select>
+            <select
+              value={`${margins.top}|${margins.right}|${margins.bottom}|${margins.left}`}
+              onChange={(e) => {
+                const [t,r,b,l] = e.target.value.split('|');
+                setMargins({ top: t, right: r, bottom: b, left: l });
+              }}
+              className="bg-gray-700 text-gray-200 text-xs rounded px-2 py-1"
+              title="Márgenes"
+            >
+              <option value={'0.5in|0.5in|0.5in|0.5in'}>Estrecho</option>
+              <option value={'1in|1in|1in|1in'}>Normal</option>
+              <option value={'1.5in|1.5in|1.5in|1.5in'}>Amplio</option>
+            </select>
           </div>
         </div>
 

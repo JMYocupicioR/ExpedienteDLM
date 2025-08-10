@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { X, Mic, Pause, Trash2, Copy, Check, Bot, Zap } from 'lucide-react';
+import OpenAI from 'openai';
 
 // --- Componente para renderizar Markdown simple ---
 const SimpleMarkdownRenderer = ({ text }: { text: string }) => {
@@ -90,11 +91,79 @@ const TranscriptionPanel = ({
     );
 };
 
+// --- Componente para Métricas de Análisis ---
+const AnalysisMetrics = ({ metrics }: { metrics: any }) => {
+    if (!metrics) return null;
+
+    return (
+        <div className="bg-gray-800 rounded-lg p-3 mt-3 border border-gray-600">
+            <h4 className="text-sm font-semibold text-cyan-400 mb-2">📊 Métricas de Análisis</h4>
+            <div className="grid grid-cols-2 gap-2 text-xs text-gray-300">
+                <div>
+                    <span className="text-gray-400">Texto original:</span> {metrics.wordsOriginal} palabras
+                </div>
+                <div>
+                    <span className="text-gray-400">Texto formateado:</span> {metrics.wordsFormatted} palabras
+                </div>
+                <div>
+                    <span className="text-gray-400">Compresión:</span> {metrics.compressionRatio}%
+                </div>
+                <div>
+                    <span className="text-gray-400">Tiempo:</span> {metrics.processingTime}ms
+                </div>
+                <div>
+                    <span className="text-gray-400">Tokens usados:</span> {metrics.tokensUsed}
+                </div>
+                <div>
+                    <span className="text-gray-400">Modelo:</span> {metrics.model}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Componente para Estado de Conexión ---
+const ConnectionStatus = ({ status, onTest }: { status: string, onTest: () => void }) => {
+    const getStatusColor = () => {
+        switch (status) {
+            case 'connected': return 'text-green-400';
+            case 'failed': return 'text-red-400';
+            case 'testing': return 'text-yellow-400';
+            default: return 'text-gray-400';
+        }
+    };
+
+    const getStatusText = () => {
+        switch (status) {
+            case 'connected': return '✅ Conectado';
+            case 'failed': return '❌ Error';
+            case 'testing': return '🔄 Probando...';
+            default: return '⚪ Sin probar';
+        }
+    };
+
+    return (
+        <div className="flex items-center justify-between mb-3 p-2 bg-gray-700 rounded-lg">
+            <span className={`text-xs font-medium ${getStatusColor()}`}>
+                {getStatusText()}
+            </span>
+            <button
+                onClick={onTest}
+                disabled={status === 'testing'}
+                className="text-xs px-2 py-1 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 rounded text-white transition-colors"
+            >
+                Probar Conexión
+            </button>
+        </div>
+    );
+};
+
 // --- Componente del Panel de IA ---
-const AiPanel = ({ transcript, formatTextForMedicalConsultation, formattedText, isLoading, error, handleCopy, isCopied, onApplyText }: any) => {
+const AiPanel = ({ transcript, formatTextForMedicalConsultation, formattedText, isLoading, error, handleCopy, isCopied, onApplyText, analysisMetrics, connectionStatus, onTestConnection }: any) => {
     return (
         <div className="bg-gray-800 rounded-2xl p-6 shadow-lg flex flex-col">
-            <h2 className="text-xl font-semibold text-white mb-4">2. Formato con IA</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">2. Formato con DeepSeek R1</h2>
+            <ConnectionStatus status={connectionStatus} onTest={onTestConnection} />
             <button
                 onClick={formatTextForMedicalConsultation}
                 disabled={!transcript || isLoading}
@@ -108,7 +177,7 @@ const AiPanel = ({ transcript, formatTextForMedicalConsultation, formattedText, 
                 ) : (
                     <>
                         <Zap className=" -ml-1 mr-3 h-5 w-5" />
-                        Generar Nota Médica
+                        Generar con DeepSeek R1
                     </>
                 )}
             </button>
@@ -127,6 +196,7 @@ const AiPanel = ({ transcript, formatTextForMedicalConsultation, formattedText, 
                     <span className="text-gray-500">El resultado de la IA aparecerá aquí...</span>
                 )}
             </div>
+            <AnalysisMetrics metrics={analysisMetrics} />
             {formattedText && (
                  <button
                     onClick={() => onApplyText(formattedText)}
@@ -161,6 +231,8 @@ const MedicalTranscription = ({ onClose, onApplyText, isOpen }: MedicalTranscrip
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [isCopied, setIsCopied] = useState(false);
+    const [analysisMetrics, setAnalysisMetrics] = useState<any>(null);
+    const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'connected' | 'failed'>('idle');
 
     const handleStartListening = () => {
         SpeechRecognition.startListening({ continuous: true, language: language });
@@ -174,6 +246,47 @@ const MedicalTranscription = ({ onClose, onApplyText, isOpen }: MedicalTranscrip
         resetTranscript();
         setFormattedText('');
         setError('');
+        setAnalysisMetrics(null);
+        setConnectionStatus('idle');
+    }
+
+    // Función para probar la conexión con DeepSeek
+    const testDeepSeekConnection = async () => {
+        setConnectionStatus('testing');
+        setError('');
+
+        try {
+            const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+            if (!apiKey) {
+                throw new Error("API key de DeepSeek no configurada");
+            }
+
+            const openai = new OpenAI({
+                baseURL: 'https://api.deepseek.com',
+                apiKey: apiKey,
+                dangerouslyAllowBrowser: true
+            });
+
+            // Test simple de conexión
+            const testCompletion = await openai.chat.completions.create({
+                messages: [{ role: "user", content: "Responde solo: Conexión exitosa" }],
+                model: "deepseek-chat",
+                max_tokens: 10,
+                temperature: 0
+            });
+
+            if (testCompletion.choices[0]?.message?.content) {
+                setConnectionStatus('connected');
+                console.log('✅ Conexión con DeepSeek exitosa');
+            } else {
+                throw new Error("Respuesta inválida de DeepSeek");
+            }
+
+        } catch (err: any) {
+            setConnectionStatus('failed');
+            setError(`Error de conexión: ${err.message}`);
+            console.error('❌ Error de conexión con DeepSeek:', err);
+        }
     }
 
     const formatTextForMedicalConsultation = async () => {
@@ -181,63 +294,93 @@ const MedicalTranscription = ({ onClose, onApplyText, isOpen }: MedicalTranscrip
         setIsLoading(true);
         setError('');
         setFormattedText('');
-        // IMPORTANTE: El prompt debe ser refinado para obtener los mejores resultados.
-        const prompt = `Como asistente médico experto, transforma la siguiente transcripción de una conversación entre un médico y un paciente en una nota médica estructurada para el campo "Padecimiento Actual" de un expediente clínico electrónico.
+        setAnalysisMetrics(null);
 
-La nota debe ser:
-1.  **Concisa y Clara**: Usa terminología médica apropiada pero sé directo.
-2.  **Estructurada**: Organiza la información en secciones lógicas si es necesario (ej. Síntomas principales, Antecedentes relevantes, Cronología).
-3.  **Objetiva**: Reporta los hechos como se describen, sin añadir interpretaciones no fundamentadas.
-4.  **Enfocada en el Padecimiento Actual**: Extrae únicamente la información relevante para la consulta actual.
-5.  **Formateada con Markdown**: Usa negritas (**ejemplo**) para resaltar términos clave y listas con guiones (-) para enumerar síntomas o eventos.
-
-**Transcripción:**
----
-${transcript}
----
-
-**Salida esperada (ejemplo):**
-Paciente refiere inicio de **cefalea tensional** hace 3 días, localizada en región occipital, de carácter opresivo, intensidad 7/10.
-- No presenta auras ni otros síntomas neurológicos.
-- Se acompaña de **náuseas matutinas** sin vómito.
-- El dolor empeora con la exposición a la luz (fotofobia) y mejora parcialmente con el reposo.
-- Antecedentes: Migraña diagnosticada hace 5 años, controlada con paracetamol.
-
-Genera la nota médica a continuación:`;
+        const startTime = Date.now();
 
         try {
-            // Reemplaza "" con tu clave de API de Google Gemini
-            const apiKey = ""; 
+            // Configurar DeepSeek API
+            const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
             if (!apiKey) {
-                throw new Error("API key no configurada. Reemplaza la clave vacía en MedicalTranscription.tsx");
+                throw new Error("API key de DeepSeek no configurada. Configura VITE_DEEPSEEK_API_KEY en tu archivo .env");
             }
 
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-            const payload = { contents: [{ parts: [{ text: prompt }] }] };
-            
-            const response = await fetch(apiUrl, { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify(payload) 
+            const openai = new OpenAI({
+                baseURL: 'https://api.deepseek.com',
+                apiKey: apiKey,
+                dangerouslyAllowBrowser: true // Necesario para uso en el navegador
             });
 
-            if (!response.ok) {
-                const errorBody = await response.json();
-                console.error('Error de la API:', errorBody);
-                throw new Error(`Error de la API: ${response.statusText} - ${errorBody.error?.message || 'Revisa la consola para más detalles.'}`);
-            }
+            const systemPrompt = `Eres un asistente médico especializado en transformar transcripciones de conversaciones médico-paciente en notas clínicas estructuradas para el campo "Padecimiento Actual" del expediente clínico electrónico.
 
-            const result = await response.json();
+INSTRUCCIONES ESPECÍFICAS:
+1. **Terminología Médica**: Usa terminología médica precisa y apropiada
+2. **Estructura Clara**: Organiza la información de forma lógica y coherente
+3. **Objetividad**: Reporta únicamente los hechos mencionados sin interpretaciones
+4. **Enfoque en Padecimiento Actual**: Extrae solo información relevante para la consulta presente
+5. **Formato Profesional**: Redacta en tercera persona usando "Paciente refiere..." o "Se presenta con..."
 
-            if (result.candidates && result.candidates[0]?.content?.parts[0]?.text) {
-                setFormattedText(result.candidates[0].content.parts[0].text.trim());
+FORMATO DE SALIDA:
+- Inicio del padecimiento con tiempo de evolución
+- Síntomas principales con características (localización, intensidad, calidad)
+- Síntomas asociados
+- Factores agravantes y atenuantes
+- Antecedentes relevantes al padecimiento actual
+
+EJEMPLO DE FORMATO:
+Paciente refiere inicio de cefalea hace 3 días, de localización frontal, carácter pulsátil, intensidad 8/10. Se acompaña de náuseas y fotofobia. Empeora con el movimiento y mejora parcialmente con el reposo. Antecedente de migrañas ocasionales.`;
+
+            const userPrompt = `Transcripción a convertir en nota de padecimiento actual:
+
+"${transcript}"
+
+Genera la nota médica estructurada:`;
+
+            const completion = await openai.chat.completions.create({
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt }
+                ],
+                model: "deepseek-chat",
+                temperature: 0.3, // Menor temperatura para mayor consistencia clínica
+                max_tokens: 1000
+            });
+
+            const result = completion.choices[0]?.message?.content;
+            if (result) {
+                setFormattedText(result.trim());
+                
+                // Análisis de métricas de la respuesta
+                const metrics = {
+                    originalLength: transcript.length,
+                    formattedLength: result.length,
+                    compressionRatio: ((transcript.length - result.length) / transcript.length * 100).toFixed(1),
+                    wordsOriginal: transcript.split(' ').length,
+                    wordsFormatted: result.split(' ').length,
+                    processingTime: Date.now() - startTime,
+                    tokensUsed: completion.usage?.total_tokens || 0,
+                    model: completion.model || 'deepseek-chat'
+                };
+                
+                setAnalysisMetrics(metrics);
+                console.log('📊 Métricas de análisis:', metrics);
+                
+                // Validación de calidad de la respuesta
+                if (result.length < 20) {
+                    console.warn('⚠️ Respuesta muy corta, podría indicar un problema');
+                }
+                
+                if (!result.includes('Paciente')) {
+                    console.warn('⚠️ Formato no estándar detectado');
+                }
+                
             } else {
-                console.warn("Respuesta inesperada de la API:", result);
-                throw new Error("La respuesta de la API no contiene el formato esperado.");
+                throw new Error("No se recibió respuesta del modelo DeepSeek");
             }
+
         } catch (err: any) {
-            console.error(err);
-            setError(err.message || 'No se pudo procesar la solicitud. Por favor, inténtalo de nuevo.');
+            console.error('Error con DeepSeek API:', err);
+            setError(err.message || 'No se pudo procesar la solicitud con DeepSeek. Verifica tu API key y conexión.');
         } finally {
             setIsLoading(false);
         }
@@ -293,8 +436,8 @@ Genera la nota médica a continuación:`;
                     <div className='flex items-center space-x-3'>
                         <Bot className="w-7 h-7 text-cyan-400" />
                         <div>
-                            <h1 className="text-xl font-bold text-cyan-400">Asistente de Consulta Médica</h1>
-                            <p className="text-sm text-gray-400">Graba la conversación, transcribe y formatea la nota del padecimiento actual con IA.</p>
+                            <h1 className="text-xl font-bold text-cyan-400">Asistente de Consulta Médica - DeepSeek R1</h1>
+                            <p className="text-sm text-gray-400">Graba la conversación, transcribe y formatea la nota del padecimiento actual con DeepSeek R1.</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
@@ -321,6 +464,9 @@ Genera la nota médica a continuación:`;
                         handleCopy={handleCopy}
                         isCopied={isCopied}
                         onApplyText={handleApplyAndClose}
+                        analysisMetrics={analysisMetrics}
+                        connectionStatus={connectionStatus}
+                        onTestConnection={testDeepSeekConnection}
                     />
                 </main>
             </div>

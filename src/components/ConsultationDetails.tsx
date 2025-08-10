@@ -6,6 +6,7 @@ import {
   Activity, Thermometer, Weight, Ruler, Brain 
 } from 'lucide-react';
 import type { Database } from '../lib/database.types';
+import ScaleAssessments from './ScaleAssessments';
 
 type Consultation = Database['public']['Tables']['consultations']['Row'];
 
@@ -308,6 +309,14 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
       <div className="bg-gray-800 rounded-lg p-4">
         <h4 className="font-medium text-white mb-2">Tratamiento</h4>
         <p className="text-gray-300 whitespace-pre-wrap">{consultation.treatment}</p>
+      </div>
+
+      {/* Escalas médicas asociadas */}
+      <div className="bg-gray-800 rounded-lg p-4">
+        <h4 className="font-medium text-white mb-3 flex items-center">
+          <Activity className="h-4 w-4 mr-2" /> Escalas Médicas
+        </h4>
+        <ScaleAssessments consultationId={consultation.id} />
       </div>
     </div>
   );
