@@ -23,3 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+
+# Local Netlify folder
+.netlify
+
+# Environment files (prevent secrets from being committed)
+.env
+.env.*
+*.env
