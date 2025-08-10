@@ -80,15 +80,71 @@ export function validateVitalSign(field: string, value: string | number): VitalS
 }
 
 // Common medications and their typical dosage ranges
-export const MEDICATION_CONSTRAINTS = {
-  'paracetamol': { maxDailyDose: 4000, unit: 'mg', commonDoses: [500, 1000] },
-  'ibuprofeno': { maxDailyDose: 3200, unit: 'mg', commonDoses: [400, 600, 800] },
-  'amoxicilina': { maxDailyDose: 3000, unit: 'mg', commonDoses: [500, 875] },
-  'omeprazol': { maxDailyDose: 80, unit: 'mg', commonDoses: [20, 40] },
-  'metformina': { maxDailyDose: 2000, unit: 'mg', commonDoses: [500, 850, 1000] },
-  'losartan': { maxDailyDose: 100, unit: 'mg', commonDoses: [25, 50, 100] },
-  'atorvastatina': { maxDailyDose: 80, unit: 'mg', commonDoses: [10, 20, 40, 80] },
-  'amlodipino': { maxDailyDose: 10, unit: 'mg', commonDoses: [5, 10] },
+export type MedicationConstraint = {
+  // legacy fields used by validateMedication
+  maxDailyDose: number;
+  unit: 'mg' | 'g' | 'mcg' | 'ml';
+  commonDoses: number[];
+  
+  // extended fields used by UI helpers
+  minDosage: number; // mg por toma
+  maxDosage: number; // mg por toma
+  allowedFrequencies: string[]; // descripciones legibles
+  maxDurationDays: number;
+  controlledSubstance?: boolean;
+  requiresSpecialist?: boolean;
+};
+
+export const MEDICATION_CONSTRAINTS: Record<string, MedicationConstraint> = {
+  'paracetamol': {
+    maxDailyDose: 4000, unit: 'mg', commonDoses: [500, 1000],
+    minDosage: 325, maxDosage: 1000,
+    allowedFrequencies: ['cada 6 horas', 'cada 8 horas'],
+    maxDurationDays: 10,
+  },
+  'ibuprofeno': {
+    maxDailyDose: 3200, unit: 'mg', commonDoses: [400, 600, 800],
+    minDosage: 200, maxDosage: 800,
+    allowedFrequencies: ['cada 8 horas', 'cada 12 horas'],
+    maxDurationDays: 14,
+  },
+  'amoxicilina': {
+    maxDailyDose: 3000, unit: 'mg', commonDoses: [500, 875],
+    minDosage: 250, maxDosage: 1000,
+    allowedFrequencies: ['cada 8 horas', 'cada 12 horas'],
+    maxDurationDays: 14,
+  },
+  'omeprazol': {
+    maxDailyDose: 80, unit: 'mg', commonDoses: [20, 40],
+    minDosage: 10, maxDosage: 40,
+    allowedFrequencies: ['cada 24 horas'],
+    maxDurationDays: 60,
+  },
+  'metformina': {
+    maxDailyDose: 2000, unit: 'mg', commonDoses: [500, 850, 1000],
+    minDosage: 500, maxDosage: 1000,
+    allowedFrequencies: ['cada 12 horas', 'cada 24 horas'],
+    maxDurationDays: 365,
+    requiresSpecialist: false,
+  },
+  'losartan': {
+    maxDailyDose: 100, unit: 'mg', commonDoses: [25, 50, 100],
+    minDosage: 25, maxDosage: 100,
+    allowedFrequencies: ['cada 24 horas'],
+    maxDurationDays: 365,
+  },
+  'atorvastatina': {
+    maxDailyDose: 80, unit: 'mg', commonDoses: [10, 20, 40, 80],
+    minDosage: 10, maxDosage: 80,
+    allowedFrequencies: ['cada 24 horas'],
+    maxDurationDays: 365,
+  },
+  'amlodipino': {
+    maxDailyDose: 10, unit: 'mg', commonDoses: [5, 10],
+    minDosage: 2.5, maxDosage: 10,
+    allowedFrequencies: ['cada 24 horas'],
+    maxDurationDays: 365,
+  },
 };
 
 // Validate medication
