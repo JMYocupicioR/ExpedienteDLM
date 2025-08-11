@@ -297,8 +297,14 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
       </div>
 
       {/* Mobile Header */}
-      <div className="lg:hidden bg-gray-900 border-b border-gray-800 px-4 py-3" style={{ paddingTop: 'max(env(safe-area-inset-top), 0px)' }}>
-        <div className="flex items-center justify-between">
+      <div 
+        className="lg:hidden bg-gray-900/95 backdrop-blur-lg border-b border-gray-800/50 px-4 py-3 fixed top-0 left-0 right-0 z-50" 
+        style={{ 
+          paddingTop: 'max(var(--safe-area-top), 8px)',
+          height: 'var(--mobile-header-height)'
+        }}
+      >
+        <div className="flex items-center justify-between h-full">
           <Link to="/dashboard" className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
               <Stethoscope className="h-5 w-5 text-white" />
@@ -308,13 +314,13 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
 
           <div className="flex items-center space-x-2">
             {/* Search button for mobile */}
-            <button className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white">
+            <button className="touch-target p-2 rounded-lg bg-gray-800/70 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white">
               <Search className="h-5 w-5" />
             </button>
 
             {/* Notifications for mobile */}
             {(profile?.role === 'doctor' || profile?.role === 'health_staff') && (
-              <button className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white relative">
+              <button className="touch-target p-2 rounded-lg bg-gray-800/70 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white relative">
                 <Bell className="h-5 w-5" />
                 {notifications > 0 && (
                   <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full text-xs flex items-center justify-center text-white">
@@ -327,7 +333,7 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
             {/* Menu toggle */}
             <button
               onClick={() => setIsMobileOpen(!isMobileOpen)}
-              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
+              className="touch-target p-2 rounded-lg bg-gray-800/70 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
             >
               {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -414,25 +420,56 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
 
       {/* Mobile Bottom Nav */}
       <div
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-800"
-        style={{ background: 'var(--bg-secondary)', paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-800/50 backdrop-blur-lg bg-gray-900/95"
+        style={{ 
+          paddingBottom: 'max(var(--safe-area-bottom), 8px)',
+          height: 'var(--mobile-bottom-nav-height)'
+        }}
       >
-        <div className="grid grid-cols-4 gap-1 px-2 py-2 text-xs text-gray-300">
-          <Link to="/dashboard" className={`flex flex-col items-center py-1 rounded-lg ${isActiveLink('/dashboard') ? 'text-cyan-400' : ''}`}>
-            <Home className="h-5 w-5" />
-            <span>Inicio</span>
+        <div className="grid grid-cols-4 gap-1 px-3 py-3 text-xs text-gray-300 h-full">
+          <Link 
+            to="/dashboard" 
+            className={`touch-target flex flex-col items-center justify-center py-2 px-2 rounded-lg transition-all duration-200 ${
+              isActiveLink('/dashboard') 
+                ? 'text-cyan-400 bg-cyan-400/10' 
+                : 'hover:text-white hover:bg-gray-800/50'
+            }`}
+          >
+            <Home className="h-5 w-5 mb-1" />
+            <span className="text-xs">Inicio</span>
           </Link>
-          <Link to="/patients" className={`flex flex-col items-center py-1 rounded-lg ${isActiveLink('/patients') ? 'text-cyan-400' : ''}`}>
-            <Users className="h-5 w-5" />
-            <span>Pacientes</span>
+          <Link 
+            to="/patients" 
+            className={`touch-target flex flex-col items-center justify-center py-2 px-2 rounded-lg transition-all duration-200 ${
+              isActiveLink('/patients') 
+                ? 'text-cyan-400 bg-cyan-400/10' 
+                : 'hover:text-white hover:bg-gray-800/50'
+            }`}
+          >
+            <Users className="h-5 w-5 mb-1" />
+            <span className="text-xs">Pacientes</span>
           </Link>
-          <Link to="/citas" className={`flex flex-col items-center py-1 rounded-lg ${isActiveLink('/citas') ? 'text-cyan-400' : ''}`}>
-            <Calendar className="h-5 w-5" />
-            <span>Citas</span>
+          <Link 
+            to="/citas" 
+            className={`touch-target flex flex-col items-center justify-center py-2 px-2 rounded-lg transition-all duration-200 ${
+              isActiveLink('/citas') 
+                ? 'text-cyan-400 bg-cyan-400/10' 
+                : 'hover:text-white hover:bg-gray-800/50'
+            }`}
+          >
+            <Calendar className="h-5 w-5 mb-1" />
+            <span className="text-xs">Citas</span>
           </Link>
-          <Link to="/settings" className={`flex flex-col items-center py-1 rounded-lg ${isActiveLink('/settings') ? 'text-cyan-400' : ''}`}>
-            <Settings className="h-5 w-5" />
-            <span>Ajustes</span>
+          <Link 
+            to="/settings" 
+            className={`touch-target flex flex-col items-center justify-center py-2 px-2 rounded-lg transition-all duration-200 ${
+              isActiveLink('/settings') 
+                ? 'text-cyan-400 bg-cyan-400/10' 
+                : 'hover:text-white hover:bg-gray-800/50'
+            }`}
+          >
+            <Settings className="h-5 w-5 mb-1" />
+            <span className="text-xs">Ajustes</span>
           </Link>
         </div>
 
@@ -440,9 +477,11 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
         {(profile?.role === 'doctor' || profile?.role === 'super_admin') && (
           <button
             onClick={onNewPatientClick}
-            className="absolute -top-6 right-4 p-4 rounded-full shadow-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+            className="absolute -top-8 right-4 p-4 rounded-full shadow-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white transform hover:scale-105 transition-all duration-200"
             aria-label="Nuevo Paciente"
-            style={{ boxShadow: '0 10px 25px rgba(6, 182, 212, 0.35)' }}
+            style={{ 
+              boxShadow: '0 10px 25px rgba(6, 182, 212, 0.4), 0 0 0 1px rgba(6, 182, 212, 0.2)' 
+            }}
           >
             <User className="h-5 w-5" />
           </button>

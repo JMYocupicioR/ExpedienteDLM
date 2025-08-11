@@ -8,13 +8,10 @@ import {
   Activity, 
   Calendar, 
   Settings, 
-  LogOut,
   Plus,
   Search,
-  Bell,
   ArrowRight,
   Clock,
-  AlertTriangle,
   TrendingUp,
   User,
   Phone,
@@ -23,16 +20,15 @@ import {
 import { format, isToday, isTomorrow, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from '../components/ui/button';
-import Logo from '../components/Logo';
 import NewPatientForm from '../components/NewPatientForm';
 import { appointmentService, Appointment } from '../lib/services/appointment-service';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ email?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [quickSearchResults, setQuickSearchResults] = useState<any[]>([]);
+  const [quickSearchResults, setQuickSearchResults] = useState<Array<{ id: string; full_name: string; phone?: string | null; email?: string | null }>>([]);
   const [showQuickSearch, setShowQuickSearch] = useState(false);
   const [realStats, setRealStats] = useState({
     patients: 0,
@@ -42,7 +38,7 @@ const Dashboard = () => {
     todayAppointments: 0,
     upcomingAppointments: 0
   });
-  const [recentPatients, setRecentPatients] = useState<any[]>([]);
+  const [recentPatients, setRecentPatients] = useState<Array<{ id: string; full_name: string; created_at: string }>>([]);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
@@ -73,6 +69,7 @@ const Dashboard = () => {
       setQuickSearchResults([]);
       setShowQuickSearch(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
   const loadDashboardData = async () => {
@@ -164,20 +161,14 @@ const Dashboard = () => {
         .limit(5);
 
       if (error) throw error;
-      setQuickSearchResults(data || []);
+      setQuickSearchResults((data || []).map((d: { id: string; full_name: string; phone?: string | null; email?: string | null }) => ({ id: d.id, full_name: d.full_name, phone: d.phone, email: d.email })));
       setShowQuickSearch(true);
     } catch (error) {
       console.error('Error in quick search:', error);
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
+  // Sign out is now handled in the global Navbar
 
   const getAppointmentDateLabel = (date: string) => {
     const appointmentDate = new Date(date);
@@ -207,7 +198,7 @@ const Dashboard = () => {
     }
   };
 
-  const handleNewPatientCreated = (newPatient: any) => {
+  const handleNewPatientCreated = (newPatient: { id: string }) => {
     // Recargar datos del dashboard para actualizar estadísticas
     loadDashboardData();
     
@@ -243,63 +234,30 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
-      {/* Navigation */}
-      <nav className="bg-gray-800 border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Logo />
-            </div>
-            <div className="flex items-center space-x-4">
-              <button className="text-gray-300 hover:text-white p-2">
-                <Bell className="h-5 w-5" />
-              </button>
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-cyan-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-semibold">
-                    {user?.email?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <span className="text-gray-300 text-sm">{user?.email}</span>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleSignOut}
-                className="text-gray-300 border-gray-600 hover:bg-gray-700"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Cerrar Sesión
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <>
+      {/* Main Content - sin padding adicional ya que AppLayout lo maneja */}
+      <main className="w-full max-w-none">{/* Removido el padding y margin que causaba espacios extra */}
         {/* Welcome Section */}
-        <div className="mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-            <div className="mb-4 lg:mb-0">
-              <h1 className="text-3xl font-bold text-white mb-2">
+        <section className="welcome-section page-section">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex-1">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2 leading-tight">
                 Bienvenido, {user?.email}
               </h1>
-              <p className="text-gray-400">
+              <p className="text-gray-400 text-sm sm:text-base lg:text-lg">
                 Panel de control de Expediente DLM
               </p>
             </div>
             
             {/* Quick Search */}
-            <div className="relative w-full lg:w-96">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <div className="quick-search-container relative w-full lg:w-[28rem]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-5 w-5" />
               <input
                 type="text"
                 placeholder="Búsqueda rápida de pacientes..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                className="w-full pl-10 pr-3 py-3 bg-gray-800/70 backdrop-blur border border-gray-700/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 focus:bg-gray-800 transition-all duration-200"
               />
               
               {/* Quick Search Results */}
@@ -348,98 +306,101 @@ const Dashboard = () => {
               )}
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          <Link to="/patients" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-cyan-400 transition-all group">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="p-2 bg-blue-500 rounded-lg group-hover:scale-110 transition-transform">
-                  <Users className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-gray-400 text-sm">Total Pacientes</p>
-                  <p className="text-2xl font-bold text-white">{realStats.patients.toLocaleString()}</p>
-                </div>
-              </div>
-              <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
-            </div>
-          </Link>
-          
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-500 rounded-lg">
-                <FileText className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-4">
-                <p className="text-gray-400 text-sm">Consultas Totales</p>
-                <p className="text-2xl font-bold text-white">{realStats.consultations.toLocaleString()}</p>
-                <div className="flex items-center mt-1">
-                  <TrendingUp className="h-3 w-3 text-green-400 mr-1" />
-                  <span className="text-green-400 text-xs">Activo</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <Link to="/recetas" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-cyan-400 transition-all group">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="p-2 bg-purple-500 rounded-lg group-hover:scale-110 transition-transform">
-                  <Pill className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-gray-400 text-sm">Recetas Emitidas</p>
-                  <p className="text-2xl font-bold text-white">{realStats.prescriptions.toLocaleString()}</p>
-                </div>
-              </div>
-              <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
-            </div>
-          </Link>
-          
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center">
-              <div className="p-2 bg-orange-500 rounded-lg">
-                <Clock className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-4">
-                <p className="text-gray-400 text-sm">Consultas Hoy</p>
-                <p className="text-2xl font-bold text-white">{realStats.todayConsultations}</p>
-                {realStats.todayConsultations > 0 && (
-                  <div className="flex items-center mt-1">
-                    <Activity className="h-3 w-3 text-cyan-400 mr-1" />
-                    <span className="text-cyan-400 text-xs">En progreso</span>
+        <section className="stats-section page-section">
+          <div className="dashboard-grid stats-grid">
+            <Link to="/patients" className="dashboard-card group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="stats-card-icon p-3 bg-blue-500 rounded-xl group-hover:scale-110 transition-transform duration-200">
+                    <Users className="h-6 w-6 text-white" />
                   </div>
-                )}
+                  <div className="ml-4">
+                    <p className="text-gray-400 text-sm font-medium">Total Pacientes</p>
+                    <p className="text-2xl lg:text-3xl font-bold text-white">{realStats.patients.toLocaleString()}</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
               </div>
-            </div>
-          </div>
+            </Link>
           
-          <Link to="/citas" className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-cyan-400 transition-all group">
-            <div className="flex items-center justify-between">
+            <div className="dashboard-card">
               <div className="flex items-center">
-                <div className="p-2 bg-teal-500 rounded-lg group-hover:scale-110 transition-transform">
-                  <Calendar className="h-6 w-6 text-white" />
+                <div className="stats-card-icon p-3 bg-green-500 rounded-xl">
+                  <FileText className="h-6 w-6 text-white" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-gray-400 text-sm">Citas Hoy</p>
-                  <p className="text-2xl font-bold text-white">{realStats.todayAppointments}</p>
-                  <div className="flex items-center mt-1">
-                    <Clock className="h-3 w-3 text-teal-400 mr-1" />
-                    <span className="text-teal-400 text-xs">{realStats.upcomingAppointments} próximas</span>
+                  <p className="text-gray-400 text-sm font-medium">Consultas Totales</p>
+                  <p className="text-2xl lg:text-3xl font-bold text-white">{realStats.consultations.toLocaleString()}</p>
+                  <div className="flex items-center mt-2">
+                    <TrendingUp className="h-3 w-3 text-green-400 mr-1" />
+                    <span className="text-green-400 text-xs font-medium">Activo</span>
                   </div>
                 </div>
               </div>
-              <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
             </div>
-          </Link>
-        </div>
+          
+            <Link to="/recetas" className="dashboard-card group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="stats-card-icon p-3 bg-purple-500 rounded-xl group-hover:scale-110 transition-transform duration-200">
+                    <Pill className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-gray-400 text-sm font-medium">Recetas Emitidas</p>
+                    <p className="text-2xl lg:text-3xl font-bold text-white">{realStats.prescriptions.toLocaleString()}</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+              </div>
+            </Link>
+          
+            <div className="dashboard-card">
+              <div className="flex items-center">
+                <div className="stats-card-icon p-3 bg-orange-500 rounded-xl">
+                  <Clock className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-gray-400 text-sm font-medium">Consultas Hoy</p>
+                  <p className="text-2xl lg:text-3xl font-bold text-white">{realStats.todayConsultations}</p>
+                  {realStats.todayConsultations > 0 && (
+                    <div className="flex items-center mt-2">
+                      <Activity className="h-3 w-3 text-cyan-400 mr-1" />
+                      <span className="text-cyan-400 text-xs font-medium">En progreso</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          
+            <Link to="/citas" className="dashboard-card group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="stats-card-icon p-3 bg-teal-500 rounded-xl group-hover:scale-110 transition-transform duration-200">
+                    <Calendar className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-gray-400 text-sm font-medium">Citas Hoy</p>
+                    <p className="text-2xl lg:text-3xl font-bold text-white">{realStats.todayAppointments}</p>
+                    <div className="flex items-center mt-2">
+                      <Clock className="h-3 w-3 text-teal-400 mr-1" />
+                      <span className="text-teal-400 text-xs font-medium">{realStats.upcomingAppointments} próximas</span>
+                    </div>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+              </div>
+            </Link>
+          </div>
+        </section>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <h2 className="text-xl font-semibold text-white mb-4">Acciones Rápidas</h2>
+        <section className="actions-section page-section">
+          <div className="dashboard-grid content-grid">
+            <div className="dashboard-card">
+              <h2 className="text-xl lg:text-2xl font-semibold text-white mb-6">Acciones Rápidas</h2>
             <div className="grid grid-cols-2 gap-4">
               <Button 
                 onClick={() => setShowNewPatientForm(true)}
@@ -475,17 +436,17 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white flex items-center">
-                <Calendar className="h-5 w-5 mr-2 text-cyan-400" />
-                Próximas Citas
-              </h2>
-              <Link to="/citas" className="text-cyan-400 text-sm hover:text-cyan-300 flex items-center">
-                Ver calendario
-                <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
-            </div>
+                      <div className="dashboard-card">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl lg:text-2xl font-semibold text-white flex items-center">
+                  <Calendar className="h-6 w-6 mr-3 text-cyan-400" />
+                  Próximas Citas
+                </h2>
+                <Link to="/citas" className="text-cyan-400 text-sm hover:text-cyan-300 flex items-center transition-colors">
+                  Ver calendario
+                  <ArrowRight className="h-4 w-4 ml-1" />
+                </Link>
+              </div>
             
             <div className="space-y-4">
               {loadingAppointments ? (
@@ -591,13 +552,15 @@ const Dashboard = () => {
                 </div>
               </div>
             )}
+            </div>
           </div>
-        </div>
+        </section>
 
         {/* Recent Activity */}
-        <div className="mt-8 bg-gray-800 rounded-lg p-6 border border-gray-700">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-white">Actividad Reciente</h2>
+        <section className="page-section">
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl lg:text-2xl font-semibold text-white">Actividad Reciente</h2>
             <div className="flex items-center space-x-2">
               <span className="text-xs text-gray-400">Últimas 24 horas</span>
               <Activity className="h-4 w-4 text-gray-400" />
@@ -655,7 +618,8 @@ const Dashboard = () => {
               <p className="text-gray-400 text-sm">No hay actividad reciente</p>
             </div>
           )}
-        </div>
+          </div>
+        </section>
       </main>
 
       {/* Modal de Nuevo Paciente */}
@@ -664,7 +628,7 @@ const Dashboard = () => {
         onClose={() => setShowNewPatientForm(false)}
         onSave={handleNewPatientCreated}
       />
-    </div>
+    </>
   );
 };
 

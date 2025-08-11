@@ -50,17 +50,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--app-gradient)', color: 'var(--text-primary)' }}>
+    <div className="app-container" style={{ background: 'var(--gradient-bg)', color: 'var(--text-primary)' }}>
       <Navbar onNewPatientClick={handleNewPatientClick} />
       
       {/* Main Content Area */}
       <main className={`
-        transition-all duration-300 min-h-screen
+        transition-all duration-300 ease-in-out min-h-screen
         ${isNavCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
-        pt-16 lg:pt-0
       `}>
-        <div className="min-h-screen p-4 lg:p-6 pb-24 lg:pb-6">
-          {children || <Outlet />}
+        <div className={`
+          main-content-container min-h-screen
+          ${isNavCollapsed ? 'sidebar-collapsed' : ''}
+        `}>
+          <div className="dashboard-content">
+            {children || <Outlet />}
+          </div>
         </div>
       </main>
 

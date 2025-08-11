@@ -19,6 +19,35 @@
   --gradient-primary: linear-gradient(to right, #06b6d4, #3b82f6);
   --gradient-bg: linear-gradient(to bottom, #111827, #1f2937, #000000);
   --gradient-text: linear-gradient(to right, #06b6d4, #3b82f6);
+  
+  /* Layout variables para espaciado consistente */
+  --mobile-header-height: 60px;
+  --mobile-bottom-nav-height: 72px;
+  --desktop-sidebar-width: 256px;
+  --desktop-sidebar-collapsed: 64px;
+  --mobile-padding: 16px;
+  --desktop-padding: 24px;
+  --content-max-width: 1280px;
+  
+  /* Variables para responsive design */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  
+  /* Spacing variables */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Safe area variables para dispositivos modernos */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 /* Fallbacks para gradientes que pueden fallar */
@@ -37,12 +66,130 @@
 
 /* Ajustes globales para notches y safe areas en móviles */
 body {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-area-bottom);
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden; /* Prevenir scroll horizontal inesperado */
+}
+
+/* Layout base para aplicación */
+.app-container {
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height para móviles */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Contenedor principal responsive */
+.main-content-container {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Espaciado móvil mejorado */
+.mobile-safe-area {
+  padding-top: max(var(--safe-area-top), var(--space-sm));
+  padding-bottom: max(var(--safe-area-bottom), var(--space-sm));
+  padding-left: max(var(--safe-area-left), var(--mobile-padding));
+  padding-right: max(var(--safe-area-right), var(--mobile-padding));
+}
+
+/* Espaciado desktop */
+@media (min-width: 1024px) {
+  .mobile-safe-area {
+    padding: var(--desktop-padding);
+  }
 }
 
 .mobile-container {
-  padding-left: max(env(safe-area-inset-left), 16px);
-  padding-right: max(env(safe-area-inset-right), 16px);
+  padding-left: max(var(--safe-area-left), var(--mobile-padding));
+  padding-right: max(var(--safe-area-right), var(--mobile-padding));
+}
+
+/* Contenedor de contenido principal mejorado */
+.dashboard-content {
+  /* Espaciado móvil */
+  padding-top: calc(var(--mobile-header-height) + var(--space-md));
+  padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--space-md));
+  padding-left: var(--mobile-padding);
+  padding-right: var(--mobile-padding);
+  min-height: calc(100vh - var(--mobile-header-height) - var(--mobile-bottom-nav-height));
+  
+  /* Transiciones suaves */
+  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Ajustes para desktop */
+@media (min-width: 1024px) {
+  .dashboard-content {
+    padding-top: var(--desktop-padding);
+    padding-bottom: var(--desktop-padding);
+    padding-left: var(--desktop-padding);
+    padding-right: var(--desktop-padding);
+    min-height: calc(100vh - var(--desktop-padding) * 2);
+    margin-left: var(--desktop-sidebar-width);
+  }
+  
+  .dashboard-content.sidebar-collapsed {
+    margin-left: var(--desktop-sidebar-collapsed);
+  }
+}
+
+/* Grid responsive mejorado */
+.dashboard-grid {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .dashboard-grid.stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .dashboard-grid {
+    gap: var(--space-lg);
+  }
+  
+  .dashboard-grid.stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-grid.stats-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
+  .dashboard-grid.content-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Cards responsive */
+.dashboard-card {
+  background: rgba(31, 41, 55, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  border-radius: 12px;
+  padding: var(--space-lg);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dashboard-card:hover {
+  border-color: rgba(6, 182, 212, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -8px rgba(6, 182, 212, 0.3);
+}
+
+@media (max-width: 640px) {
+  .dashboard-card {
+    padding: var(--space-md);
+  }
 }
 
 /* Asegurar que los touch targets funcionen en todos los dispositivos */
@@ -72,6 +219,16 @@ body {
   border-radius: 4px;
   z-index: 1000;
   font-weight: 600;
+}
+
+/* Responsive container spacing tweaks */
+.page-section {
+  margin-bottom: 1rem;
+}
+@media (min-width: 1024px) {
+  .page-section {
+    margin-bottom: 2rem;
+  }
 }
 
 .skip-link:focus {
@@ -212,8 +369,55 @@ input[type="reset"] {
   [role="button"],
   input,
   select {
-    min-height: clamp(40px, 6.5vh, 48px);
-    min-width: clamp(40px, 6.5vh, 48px);
+    min-height: clamp(44px, 6.5vh, 52px);
+    min-width: clamp(44px, 6.5vh, 52px);
+  }
+  
+  /* Mejoras específicas para el dashboard móvil */
+  .welcome-section {
+    margin-bottom: var(--space-md);
+  }
+  
+  .quick-search-container {
+    margin-top: var(--space-sm);
+    margin-bottom: var(--space-md);
+  }
+  
+  .stats-section {
+    margin-bottom: var(--space-lg);
+  }
+  
+  .actions-section {
+    margin-bottom: var(--space-xl);
+  }
+}
+
+/* Mejoras para tablets */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .dashboard-content {
+    padding: var(--space-lg);
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--space-lg));
+  }
+  
+  .dashboard-grid {
+    gap: var(--space-xl);
+  }
+}
+
+/* Animaciones responsive */
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-card,
+  .dashboard-content,
+  .main-content-container {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .stats-card-icon {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .dashboard-card:hover .stats-card-icon {
+    transform: scale(1.05);
   }
 }
 
