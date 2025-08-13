@@ -7,7 +7,6 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import PatientRecord from './pages/PatientRecord';
 import PrescriptionDashboard from './pages/PrescriptionDashboard';
-import SignupQuestionnaire from './pages/SignupQuestionnaire';
 import EnhancedSignupQuestionnaire from './pages/EnhancedSignupQuestionnaire';
 import UserProfile from './pages/UserProfile';
 import Settings from './pages/Settings';
@@ -76,10 +75,6 @@ function App() {
           <Route 
             path="/signup-questionnaire" 
             element={<EnhancedSignupQuestionnaire />} 
-          />
-          <Route 
-            path="/signup-legacy" 
-            element={<SignupQuestionnaire />} 
           />
 
           {/* Protected routes with layout */}

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  User, Phone, Award, Building, Users, Stethoscope, ArrowLeft, ArrowRight, 
-  CheckCircle, AlertCircle, Shield, Heart, UserCheck, FileText, MapPin,
+  User, Phone, Award, Building, Stethoscope, ArrowLeft, ArrowRight, 
+  CheckCircle, AlertCircle, Shield, Heart, UserCheck, MapPin,
   Calendar, Mail, Lock, Eye, EyeOff, Plus, Search
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -25,6 +25,10 @@ export default function EnhancedSignupQuestionnaire() {
   const [specialtySearch, setSpecialtySearch] = useState('');
   const [clinicSearch, setClinicSearch] = useState('');
   const [isSpecialtyDropdownOpen, setIsSpecialtyDropdownOpen] = useState(false);
+  const [specialtiesLoading, setSpecialtiesLoading] = useState(false);
+  const [useBackupSpecialties, setUseBackupSpecialties] = useState(false);
+  const [emailCheckLoading, setEmailCheckLoading] = useState(false);
+  const [emailExists, setEmailExists] = useState(false);
 
   // Obtener email del estado de navegación
   const initialEmail = location.state?.email || '';
@@ -73,10 +77,84 @@ export default function EnhancedSignupQuestionnaire() {
     }
   });
 
+  const loadInitialData = useCallback(async () => {
+    // Especialidades de respaldo en caso de que la BD no esté disponible
+    const backupSpecialties: MedicalSpecialty[] = [
+      { id: '1', name: 'Medicina General', category: 'medical', description: 'Atención médica general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '2', name: 'Cardiología', category: 'medical', description: 'Enfermedades del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '3', name: 'Pediatría', category: 'medical', description: 'Medicina pediátrica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '4', name: 'Neurología', category: 'medical', description: 'Enfermedades del sistema nervioso', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '5', name: 'Dermatología', category: 'medical', description: 'Enfermedades de la piel', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '6', name: 'Ginecología y Obstetricia', category: 'surgical', description: 'Salud femenina y reproductiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '7', name: 'Traumatología', category: 'surgical', description: 'Cirugía de huesos y articulaciones', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '8', name: 'Psiquiatría', category: 'medical', description: 'Salud mental', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '9', name: 'Medicina Interna', category: 'medical', description: 'Medicina interna de adultos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '10', name: 'Cirugía General', category: 'surgical', description: 'Cirugía general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '11', name: 'Oftalmología', category: 'surgical', description: 'Cirugía ocular', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '12', name: 'Urología', category: 'surgical', description: 'Cirugía urológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '13', name: 'Endocrinología', category: 'medical', description: 'Enfermedades endocrinas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '14', name: 'Gastroenterología', category: 'medical', description: 'Enfermedades digestivas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '15', name: 'Neumología', category: 'medical', description: 'Enfermedades respiratorias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '16', name: 'Reumatología', category: 'medical', description: 'Enfermedades reumáticas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '17', name: 'Oncología', category: 'medical', description: 'Tratamiento del cáncer', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '18', name: 'Radiología', category: 'diagnostic', description: 'Diagnóstico por imágenes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '19', name: 'Anestesiología', category: 'medical', description: 'Medicina perioperatoria', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '20', name: 'Medicina de Urgencias', category: 'medical', description: 'Medicina de emergencias', requires_license: true, is_active: true, created_at: new Date().toISOString() }
+    ];
+
+    setSpecialtiesLoading(true);
+    try {
+      // Load medical specialties
+      console.log('🔍 Cargando especialidades médicas...');
+      const { data: specialtiesData, error: specialtiesError } = await supabase
+        .from('medical_specialties')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (specialtiesError) {
+        console.error('❌ Error al cargar especialidades desde BD:', specialtiesError);
+        console.log('🔄 Usando especialidades de respaldo...');
+        setSpecialties(backupSpecialties);
+        setUseBackupSpecialties(true);
+      } else if (!specialtiesData || specialtiesData.length === 0) {
+        console.log('⚠️ No se encontraron especialidades en BD, usando respaldo...');
+        setSpecialties(backupSpecialties);
+        setUseBackupSpecialties(true);
+      } else {
+        console.log('✅ Especialidades cargadas desde BD:', specialtiesData.length);
+        console.log('📋 Lista de especialidades:', specialtiesData.map(s => s.name));
+        setSpecialties(specialtiesData);
+        setUseBackupSpecialties(false);
+      }
+
+      // Load existing clinics
+      const { data: clinicsData, error: clinicsError } = await supabase
+        .from('clinics')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (clinicsError) {
+        console.error('❌ Error al cargar clínicas:', clinicsError);
+      } else {
+        setClinics(clinicsData || []);
+      }
+    } catch (err) {
+      console.error('Error loading initial data:', err);
+      console.log('🔄 Usando datos de respaldo...');
+      setSpecialties(backupSpecialties);
+      setUseBackupSpecialties(true);
+      setError('Usando datos locales (sin conexión a servidor)');
+    } finally {
+      setSpecialtiesLoading(false);
+    }
+  }, []);
+
   // Load initial data
   useEffect(() => {
     loadInitialData();
-  }, []);
+  }, [loadInitialData]);
 
   // Filter specialties when search changes
   useEffect(() => {
@@ -108,44 +186,77 @@ export default function EnhancedSignupQuestionnaire() {
     }
   }, [clinicSearch, clinics]);
 
-  const loadInitialData = async () => {
+  // Función para verificar si el email ya existe
+  const checkEmailExists = useCallback(async (email: string): Promise<boolean> => {
+    if (!email || !email.includes('@')) return false;
+    
     try {
-      // Load medical specialties
-      console.log('🔍 Cargando especialidades médicas...');
-      const { data: specialtiesData, error: specialtiesError } = await supabase
-        .from('medical_specialties')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      if (specialtiesError) {
-        console.error('❌ Error al cargar especialidades:', specialtiesError);
-        throw specialtiesError;
+      setEmailCheckLoading(true);
+      
+      // Verificar en la tabla profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('email', email)
+        .single();
+      
+      if (profileData && !profileError) {
+        console.log('📧 Email encontrado en profiles:', email);
+        return true;
       }
       
-      console.log('✅ Especialidades cargadas:', specialtiesData?.length || 0);
-      console.log('📋 Lista de especialidades:', specialtiesData?.map(s => s.name));
-      setSpecialties(specialtiesData || []);
-
-      // Load existing clinics
-      const { data: clinicsData, error: clinicsError } = await supabase
-        .from('clinics')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      if (clinicsError) throw clinicsError;
-      setClinics(clinicsData || []);
-    } catch (err) {
-      console.error('Error loading initial data:', err);
-      setError('Error al cargar los datos iniciales');
+      // También intentamos con signUp para verificar en auth.users
+      // Esto fallará si el email ya existe, lo cual es lo que queremos detectar
+      try {
+        const { error: authError } = await supabase.auth.signUp({
+          email: email,
+          password: 'temp_check_password_123!@#'
+        });
+        
+        if (authError && (
+          authError.message.includes('already') || 
+          authError.message.includes('registered') ||
+          authError.message.includes('exists') ||
+          authError.message.includes('User already')
+        )) {
+          console.log('📧 Email encontrado en auth.users:', email);
+          return true;
+        }
+      } catch (tempError) {
+        console.log('⚠️ Error en verificación auth:', tempError);
+      }
+      
+      return false;
+      
+    } catch (error) {
+      console.error('❌ Error verificando email:', error);
+      return false;
+    } finally {
+      setEmailCheckLoading(false);
     }
-  };
+  }, []);
+
+  // Verificar email cuando cambie y no esté pre-validado
+  useEffect(() => {
+    if (formData.personalInfo.email && 
+        !initialEmail && 
+        formData.personalInfo.email !== initialEmail) {
+      
+      const debounceTimer = setTimeout(async () => {
+        const exists = await checkEmailExists(formData.personalInfo.email);
+        setEmailExists(exists);
+      }, 1000); // Debounce de 1 segundo
+      
+      return () => clearTimeout(debounceTimer);
+    } else {
+      setEmailExists(false);
+    }
+  }, [formData.personalInfo.email, initialEmail, checkEmailExists]);
 
   const updateFormData = <K extends keyof EnhancedRegistrationData>(
     section: K,
     field: keyof EnhancedRegistrationData[K],
-    value: any
+    value: string | boolean | Record<string, unknown> | undefined
   ) => {
     setFormData(prev => ({
       ...prev,
@@ -166,6 +277,10 @@ export default function EnhancedSignupQuestionnaire() {
         }
         if (!formData.personalInfo.email.trim()) {
           setError('El correo electrónico es requerido');
+          return false;
+        }
+        if (emailExists) {
+          setError('Este correo electrónico ya está registrado');
           return false;
         }
         if (!formData.personalInfo.phone.trim()) {
@@ -190,6 +305,14 @@ export default function EnhancedSignupQuestionnaire() {
         if (!formData.accountInfo.role) {
           setError('Debe seleccionar un tipo de cuenta');
           return false;
+        }
+        // Validar que el rol seleccionado esté habilitado
+        {
+          const selectedRole = roleOptions.find(role => role.value === formData.accountInfo.role);
+          if (!selectedRole?.enabled) {
+            setError('El tipo de cuenta seleccionado no está disponible actualmente');
+            return false;
+          }
         }
         return true;
 
@@ -249,7 +372,15 @@ export default function EnhancedSignupQuestionnaire() {
       setLoading(true);
       setError(null);
 
-      // 1. Crear cuenta de usuario en Supabase Auth
+      // 1. Verificación final de email antes de proceder
+      console.log('🔍 Verificación final de email antes del registro...');
+      const emailAlreadyExists = await checkEmailExists(formData.personalInfo.email);
+      if (emailAlreadyExists) {
+        setError('Este correo electrónico ya está registrado. Por favor, inicia sesión con tu cuenta existente.');
+        return;
+      }
+
+      // 2. Crear cuenta de usuario en Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.personalInfo.email,
         password: formData.accountInfo.password,
@@ -257,7 +388,7 @@ export default function EnhancedSignupQuestionnaire() {
           data: {
             full_name: formData.personalInfo.fullName,
             role: formData.accountInfo.role
-          }
+          } as Record<string, string>
         }
       });
 
@@ -267,7 +398,7 @@ export default function EnhancedSignupQuestionnaire() {
       const userId = authData.user.id;
 
       // 2. Crear o seleccionar clínica si no es paciente
-      let clinicId = null;
+      let clinicId: string | null = null;
       if (formData.accountInfo.role !== 'patient') {
         if (formData.clinicInfo?.isNewClinic) {
           // Crear nueva clínica
@@ -288,7 +419,7 @@ export default function EnhancedSignupQuestionnaire() {
           if (clinicError) throw clinicError;
           clinicId = newClinic.id;
         } else {
-          clinicId = formData.clinicInfo?.clinicId;
+          clinicId = formData.clinicInfo?.clinicId || null;
         }
       }
 
@@ -375,7 +506,7 @@ export default function EnhancedSignupQuestionnaire() {
           .insert({
             clinic_id: clinicId,
             user_id: userId,
-            role_in_clinic: formData.accountInfo.role,
+            role_in_clinic: formData.accountInfo.role as string,
             is_active: true
           });
 
@@ -398,9 +529,9 @@ export default function EnhancedSignupQuestionnaire() {
         }
       }, 1000);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error durante el registro:', err);
-      setError(err.message || 'Error durante el registro');
+      setError(err instanceof Error ? err.message : 'Error durante el registro');
     } finally {
       setLoading(false);
     }
@@ -430,36 +561,57 @@ export default function EnhancedSignupQuestionnaire() {
     }
   };
 
-  const roleOptions = [
+  const roleOptions = useMemo(() => [
     {
       value: 'doctor',
       label: 'Doctor/Médico',
       icon: Stethoscope,
       description: 'Médico certificado con acceso completo a pacientes',
-      color: 'from-blue-500 to-cyan-600'
+      color: 'from-blue-500 to-cyan-600',
+      enabled: true
     },
     {
       value: 'health_staff',
       label: 'Personal de Salud',
       icon: UserCheck,
-      description: 'Enfermería, fisioterapia, dentistas, etc.',
-      color: 'from-green-500 to-emerald-600'
+      description: 'Enfermería, fisioterapia, dentistas, etc. (Próximamente disponible)',
+      color: 'from-green-500 to-emerald-600',
+      enabled: false
     },
     {
       value: 'admin_staff',
       label: 'Personal Administrativo',
       icon: Building,
       description: 'Administradores de clínica y personal de gestión',
-      color: 'from-purple-500 to-indigo-600'
+      color: 'from-purple-500 to-indigo-600',
+      enabled: true
     },
     {
       value: 'patient',
       label: 'Paciente',
       icon: Heart,
-      description: 'Usuario paciente con acceso a su información médica',
-      color: 'from-pink-500 to-rose-600'
+      description: 'Usuario paciente con acceso a su información médica (Próximamente disponible)',
+      color: 'from-pink-500 to-rose-600',
+      enabled: false
     }
-  ];
+  ], []);
+
+  // Verificar y resetear rol si está deshabilitado
+  useEffect(() => {
+    if (formData.accountInfo.role) {
+      const selectedRole = roleOptions.find(role => role.value === formData.accountInfo.role);
+      if (!selectedRole?.enabled) {
+        console.log('🔄 Reseteando rol deshabilitado:', formData.accountInfo.role);
+        setFormData(prev => ({
+          ...prev,
+          accountInfo: {
+            ...prev.accountInfo,
+            role: 'doctor' // Valor por defecto a doctor
+          }
+        }));
+      }
+    }
+  }, [formData.accountInfo.role, roleOptions]);
 
   const experienceOptions = [
     { value: '0-1', label: 'Recién graduado (0-1 año)' },
@@ -549,9 +701,27 @@ export default function EnhancedSignupQuestionnaire() {
         {/* Content */}
         <div className="p-8">
           {error && (
-            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center">
-              <AlertCircle className="h-5 w-5 mr-3 flex-shrink-0" />
-              {error}
+            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 mr-3 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-red-300">{error}</p>
+                  {(error.includes('ya está registrado') || error.includes('already')) && (
+                    <div className="mt-2 pt-2 border-t border-red-700">
+                      <p className="text-red-200 text-sm">
+                        ¿Ya tienes una cuenta? 
+                        <button
+                          type="button"
+                          onClick={() => navigate('/auth')}
+                          className="ml-1 px-2 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-xs transition-colors"
+                        >
+                          Iniciar Sesión
+                        </button>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -585,21 +755,69 @@ export default function EnhancedSignupQuestionnaire() {
                       type="email"
                       value={formData.personalInfo.email}
                       onChange={(e) => updateFormData('personalInfo', 'email', e.target.value)}
-                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent ${
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 transition-colors ${
                         initialEmail 
-                          ? 'bg-gray-600/50 border-gray-500 cursor-not-allowed' 
-                          : 'bg-gray-700 border border-gray-600'
+                          ? 'bg-gray-600/50 border-gray-500 cursor-not-allowed focus:ring-gray-500 focus:border-gray-500' 
+                          : emailExists
+                          ? 'bg-gray-700 border-red-600 focus:ring-red-400 focus:border-red-400'
+                          : emailCheckLoading
+                          ? 'bg-gray-700 border-yellow-600 focus:ring-yellow-400 focus:border-yellow-400'
+                          : 'bg-gray-700 border-gray-600 focus:ring-cyan-400 focus:border-cyan-400'
                       }`}
                       placeholder="correo@ejemplo.com"
                       required
                       readOnly={!!initialEmail}
                       disabled={!!initialEmail}
                     />
-                    <Mail className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      {emailCheckLoading ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-400"></div>
+                      ) : emailExists ? (
+                        <AlertCircle className="h-5 w-5 text-red-400" />
+                      ) : formData.personalInfo.email && !initialEmail ? (
+                        <CheckCircle className="h-5 w-5 text-green-400" />
+                      ) : (
+                        <Mail className="h-5 w-5 text-gray-400" />
+                      )}
+                    </div>
                   </div>
+                  
+                  {/* Estados del email */}
                   {initialEmail && (
                     <p className="text-xs text-cyan-400 mt-1">
                       ✅ Email confirmado desde el paso anterior
+                    </p>
+                  )}
+                  {!initialEmail && emailCheckLoading && (
+                    <p className="text-xs text-yellow-400 mt-1">
+                      🔍 Verificando disponibilidad del email...
+                    </p>
+                  )}
+                  {!initialEmail && emailExists && (
+                    <div className="mt-2 p-3 bg-red-900/30 border border-red-700 rounded-lg">
+                      <div className="flex items-start">
+                        <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 mr-2 flex-shrink-0" />
+                        <div>
+                          <p className="text-red-300 text-sm font-medium">
+                            Este correo ya está registrado
+                          </p>
+                          <p className="text-red-200 text-xs mt-1">
+                            ¿Ya tienes una cuenta? 
+                            <button
+                              type="button"
+                              onClick={() => navigate('/auth')}
+                              className="ml-1 underline hover:text-red-100 transition-colors"
+                            >
+                              Inicia sesión aquí
+                            </button>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!initialEmail && formData.personalInfo.email && !emailExists && !emailCheckLoading && (
+                    <p className="text-xs text-green-400 mt-1">
+                      ✅ Email disponible
                     </p>
                   )}
                 </div>
@@ -693,25 +911,70 @@ export default function EnhancedSignupQuestionnaire() {
                 <label className="block text-sm font-medium text-gray-300 mb-4">
                   Tipo de cuenta *
                 </label>
+                <div className="mb-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <div className="w-5 h-5 bg-blue-400 rounded-full flex items-center justify-center">
+                        <span className="text-blue-900 text-xs font-bold">ℹ</span>
+                      </div>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-blue-300 text-sm font-medium mb-1">
+                        Tipos de cuenta disponibles
+                      </p>
+                      <p className="text-blue-200 text-xs">
+                        Actualmente solo pueden registrarse <strong>Doctores/Médicos</strong> y <strong>Personal Administrativo</strong>. 
+                        Los otros tipos de cuenta estarán disponibles próximamente.
+                      </p>
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {roleOptions.map((role) => {
                     const Icon = role.icon;
+                    const isSelected = formData.accountInfo.role === role.value;
+                    const isDisabled = !role.enabled;
+                    
                     return (
                       <button
                         key={role.value}
                         type="button"
-                        onClick={() => updateFormData('accountInfo', 'role', role.value)}
-                        className={`p-6 rounded-lg border text-left transition-all ${
-                          formData.accountInfo.role === role.value
+                        onClick={() => {
+                          if (role.enabled) {
+                            updateFormData('accountInfo', 'role', role.value);
+                          }
+                        }}
+                        disabled={isDisabled}
+                        className={`p-6 rounded-lg border text-left transition-all relative ${
+                          isDisabled
+                            ? 'border-gray-700 bg-gray-800/30 cursor-not-allowed opacity-50'
+                            : isSelected
                             ? 'border-cyan-400 bg-cyan-900/30'
-                            : 'border-gray-600 bg-gray-700/50 hover:border-gray-500'
+                            : 'border-gray-600 bg-gray-700/50 hover:border-gray-500 cursor-pointer'
                         }`}
                       >
-                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-r ${role.color} flex items-center justify-center mb-3`}>
+                        {isDisabled && (
+                          <div className="absolute top-2 right-2">
+                            <div className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+                              Próximamente
+                            </div>
+                          </div>
+                        )}
+                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-r ${role.color} flex items-center justify-center mb-3 ${
+                          isDisabled ? 'opacity-50' : ''
+                        }`}>
                           <Icon className="h-6 w-6 text-white" />
                         </div>
-                        <div className="font-medium text-white mb-1">{role.label}</div>
-                        <div className="text-sm text-gray-400">{role.description}</div>
+                        <div className={`font-medium mb-1 ${
+                          isDisabled ? 'text-gray-500' : 'text-white'
+                        }`}>
+                          {role.label}
+                        </div>
+                        <div className={`text-sm ${
+                          isDisabled ? 'text-gray-600' : 'text-gray-400'
+                        }`}>
+                          {role.description}
+                        </div>
                       </button>
                     );
                   })}
@@ -824,8 +1087,19 @@ export default function EnhancedSignupQuestionnaire() {
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Especialidad médica *
+                      {useBackupSpecialties && (
+                        <span className="ml-2 text-xs text-yellow-400">(datos locales)</span>
+                      )}
                     </label>
-                    {formData.professionalInfo?.specialtyId && !specialtySearch && (
+                    
+                    {specialtiesLoading && (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-400"></div>
+                        <span className="ml-2 text-gray-400">Cargando especialidades...</span>
+                      </div>
+                    )}
+                    
+                    {!specialtiesLoading && formData.professionalInfo?.specialtyId && (
                       <div className="mb-2 px-3 py-2 bg-green-900/30 border border-green-700 rounded-lg text-green-300 text-sm">
                         ✅ Especialidad seleccionada: {specialties.find(s => s.id === formData.professionalInfo?.specialtyId)?.name}
                         <button
@@ -841,7 +1115,8 @@ export default function EnhancedSignupQuestionnaire() {
                         </button>
                       </div>
                     )}
-                    {!formData.professionalInfo?.specialtyId && (
+                    
+                    {!specialtiesLoading && !formData.professionalInfo?.specialtyId && (
                       <div className="relative">
                         <input
                           type="text"
@@ -850,41 +1125,56 @@ export default function EnhancedSignupQuestionnaire() {
                             setSpecialtySearch(e.target.value);
                             setIsSpecialtyDropdownOpen(true);
                           }}
-                          onFocus={() => setIsSpecialtyDropdownOpen(true)}
-                          onBlur={() => {
-                            // Delay hiding to allow click on options
-                            setTimeout(() => setIsSpecialtyDropdownOpen(false), 200);
+                          onFocus={() => {
+                            setIsSpecialtyDropdownOpen(true);
+                            if (!specialtySearch && filteredSpecialties.length === 0) {
+                              setFilteredSpecialties(specialties);
+                            }
                           }}
                           className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                          placeholder="Buscar especialidad... (ej: cardiología, medicina)"
+                          placeholder={specialties.length > 0 ? "Buscar especialidad... (ej: cardiología, medicina)" : "No hay especialidades disponibles"}
+                          disabled={specialties.length === 0}
                         />
                         <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                       </div>
                     )}
                     
                     {isSpecialtyDropdownOpen && filteredSpecialties.length > 0 && (
-                      <div className="mt-2 max-h-48 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-10">
-                        {filteredSpecialties.map((specialty) => (
-                          <button
-                            key={specialty.id}
-                            type="button"
-                            onClick={() => {
-                              updateFormData('professionalInfo', 'specialtyId', specialty.id);
-                              setSpecialtySearch(specialty.name);
-                              setIsSpecialtyDropdownOpen(false);
-                            }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-600 text-white border-b border-gray-600 last:border-b-0 transition-colors"
-                          >
-                            <div className="font-medium">{specialty.name}</div>
-                            <div className="text-sm text-gray-400 capitalize">{specialty.category}</div>
-                          </button>
-                        ))}
+                      <div className="relative">
+                        <div className="absolute top-2 left-0 right-0 max-h-48 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-50">
+                          {filteredSpecialties.map((specialty) => (
+                            <button
+                              key={specialty.id}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                updateFormData('professionalInfo', 'specialtyId', specialty.id);
+                                setSpecialtySearch('');
+                                setIsSpecialtyDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-600 text-white border-b border-gray-600 last:border-b-0 transition-colors"
+                            >
+                              <div className="font-medium">{specialty.name}</div>
+                              <div className="text-sm text-gray-400 capitalize">{specialty.category}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => setIsSpecialtyDropdownOpen(false)}
+                        ></div>
                       </div>
                     )}
                     
                     {isSpecialtyDropdownOpen && filteredSpecialties.length === 0 && specialtySearch && (
                       <div className="mt-2 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-400 text-sm">
                         No se encontraron especialidades que coincidan con "{specialtySearch}"
+                      </div>
+                    )}
+                    
+                    {specialties.length === 0 && !specialtiesLoading && (
+                      <div className="mt-2 px-4 py-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+                        ⚠️ No se pudieron cargar las especialidades. Por favor, contacta a soporte.
                       </div>
                     )}
                   </div>
@@ -1072,7 +1362,7 @@ export default function EnhancedSignupQuestionnaire() {
                         value={formData.clinicInfo?.clinicData?.type || 'clinic'}
                         onChange={(e) => updateFormData('clinicInfo', 'clinicData', {
                           ...formData.clinicInfo?.clinicData,
-                          type: e.target.value as any
+                          type: e.target.value as 'hospital' | 'clinic' | 'private_practice' | 'other'
                         })}
                         className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
                       >
