@@ -61,39 +61,51 @@ export default function Auth() {
             return;
           }
           
-          // Verificar si el email existe usando una función RPC segura
+          // Verificar si el email existe usando múltiples métodos
           console.log('🔍 Verificando disponibilidad del email...');
           
-          // Usar la función RPC segura (si está disponible)
-          const { data: availabilityCheck, error: rpcError } = await supabase
-            .rpc('check_email_availability', { check_email: email.toLowerCase().trim() });
+          // Método 1: Usar la función RPC segura (si está disponible)
+          let emailExists = false;
           
-          if (rpcError) {
-            // Si la función RPC no existe todavía, usar método alternativo
-            console.warn('RPC no disponible, usando método alternativo');
+          try {
+            const { data: availabilityCheck, error: rpcError } = await supabase
+              .rpc('check_email_availability', { check_email: email.toLowerCase().trim() });
             
-            // Intentar verificar con un query a profiles
-            const { data: existingProfile, error: profileError } = await supabase
-              .from('profiles')
-              .select('id')
-              .eq('email', email.toLowerCase().trim())
-              .maybeSingle();
-            
-            if (profileError && profileError.code !== 'PGRST116') {
-              console.error('Error verificando email:', profileError);
-              setError('Error al verificar el email. Por favor, intenta nuevamente.');
-              return;
+            if (!rpcError && availabilityCheck) {
+              emailExists = !availabilityCheck.available;
+              if (emailExists) {
+                console.log('❌ Email ya registrado (RPC):', availabilityCheck.message);
+              }
+            } else {
+              // Si la función RPC no existe, usar método alternativo
+              console.warn('RPC no disponible, usando método alternativo');
+              
+              // Método 2: Verificar con un query a profiles
+              const { data: existingProfile, error: profileError } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', email.toLowerCase().trim())
+                .maybeSingle();
+              
+              if (profileError && profileError.code !== 'PGRST116') {
+                console.error('Error verificando email en profiles:', profileError);
+                
+                // Si profiles falla, no podemos verificar en auth.users desde el cliente
+                // Por seguridad, procederemos y dejaremos que Supabase maneje el error
+                console.warn('No se puede verificar en profiles, se verificará al intentar crear el usuario');
+              } else if (existingProfile) {
+                emailExists = true;
+                console.log('❌ Email ya registrado (profiles)');
+              }
             }
-            
-            if (existingProfile) {
-              console.log('❌ Email ya registrado');
-              setError('Este correo electrónico ya está registrado. Por favor, inicia sesión.');
-              setIsLogin(true);
-              return;
-            }
-          } else if (availabilityCheck && !availabilityCheck.available) {
-            console.log('❌ Email no disponible:', availabilityCheck.message);
-            setError('Este correo electrónico ya está registrado. Por favor, inicia sesión.');
+          } catch (checkError) {
+            console.error('Error general verificando email:', checkError);
+            setError('Error al verificar el email. Por favor, intenta nuevamente.');
+            return;
+          }
+          
+          if (emailExists) {
+            setError('Este correo electrónico ya está registrado. Por favor, inicia sesión en lugar de registrarte.');
             setIsLogin(true);
             return;
           }
@@ -257,8 +269,26 @@ export default function Auth() {
                     {checkingEmail ? '🔍 Verificando disponibilidad del email...' : '✨ Solo necesitamos tu email para comenzar'}
                   </p>
                 </div>
-                {/* Campo oculto para que el formulario no falle */}
-                <input type="hidden" name="password" value="temporal_password_123" />
+                
+                <div>
+                  <label htmlFor="password-register" className="block text-sm font-medium text-gray-300 mb-2">Contraseña inicial</label>
+                  <div className="relative">
+                    <input
+                      id="password-register"
+                      type="password"
+                      name="password"
+                      placeholder="••••••••"
+                      required
+                      minLength={6}
+                      disabled={checkingEmail}
+                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
+                    />
+                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Mínimo 6 caracteres. La configurarás después en el cuestionario.
+                  </p>
+                </div>
               </div>
 
               <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
@@ -270,12 +300,12 @@ export default function Auth() {
                   </div>
                   <div>
                     <p className="text-blue-300 text-sm font-medium mb-1">
-                      Proceso de registro simplificado
+                      ✨ Registro inteligente y seguro
                     </p>
                     <p className="text-blue-200 text-xs">
-                      • Tu contraseña se configurará más adelante<br/>
-                      • Cuestionario personalizado según tu rol<br/>
-                      • Información profesional y de clínica
+                      • Usuario creado solo al completar todo el proceso<br/>
+                      • Sin usuarios basura en la base de datos<br/>
+                      • Cuestionario personalizado según tu rol médico
                     </p>
                   </div>
                 </div>

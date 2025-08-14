@@ -18,6 +18,12 @@ export default function EnhancedSignupQuestionnaire() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
+  // Constantes para fecha de nacimiento
+  const months = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  
   // Data states
   const [specialties, setSpecialties] = useState<MedicalSpecialty[]>([]);
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -87,6 +93,128 @@ export default function EnhancedSignupQuestionnaire() {
       notes: ''
     }
   });
+
+  // Funciones auxiliares para fecha de nacimiento
+  const generateYearOptions = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let year = currentYear - 100; year <= currentYear - 18; year++) {
+      years.push(year);
+    }
+    return years.reverse();
+  };
+
+  const generateDayOptions = () => {
+    const selectedMonth = getBirthDatePart('month');
+    const selectedYear = getBirthDatePart('year');
+    
+    if (!selectedMonth || !selectedYear) {
+      return Array.from({ length: 31 }, (_, i) => i + 1);
+    }
+    
+    const month = parseInt(selectedMonth) - 1;
+    const year = parseInt(selectedYear);
+    
+    // Obtener el último día del mes
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    
+    return Array.from({ length: lastDay }, (_, i) => i + 1);
+  };
+
+  const getBirthDatePart = (part: 'day' | 'month' | 'year') => {
+    if (!formData.personalInfo.birthDate) return '';
+    
+    const date = new Date(formData.personalInfo.birthDate);
+    if (isNaN(date.getTime())) return '';
+    
+    switch (part) {
+      case 'day':
+        return date.getDate().toString().padStart(2, '0');
+      case 'month':
+        return (date.getMonth() + 1).toString().padStart(2, '0');
+      case 'year':
+        return date.getFullYear().toString();
+      default:
+        return '';
+    }
+  };
+
+  const updateBirthDate = (part: 'day' | 'month' | 'year', value: string) => {
+    const currentDate = formData.personalInfo.birthDate ? new Date(formData.personalInfo.birthDate) : new Date();
+    
+    if (isNaN(currentDate.getTime())) {
+      currentDate.setFullYear(new Date().getFullYear() - 25); // Año por defecto
+    }
+    
+    switch (part) {
+      case 'day':
+        currentDate.setDate(parseInt(value) || 1);
+        break;
+      case 'month':
+        currentDate.setMonth((parseInt(value) - 1) || 0);
+        // Al cambiar mes, ajustar día si es necesario
+        const maxDays = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+        if (currentDate.getDate() > maxDays) {
+          currentDate.setDate(maxDays);
+        }
+        break;
+      case 'year':
+        currentDate.setFullYear(parseInt(value) || new Date().getFullYear() - 25);
+        // Al cambiar año, verificar si es año bisiesto para febrero
+        if (currentDate.getMonth() === 1) { // Febrero
+          const maxDays = new Date(currentDate.getFullYear(), 2, 0).getDate();
+          if (currentDate.getDate() > maxDays) {
+            currentDate.setDate(maxDays);
+          }
+        }
+        break;
+    }
+    
+    const newDateString = currentDate.toISOString().split('T')[0];
+    updateFormData('personalInfo', 'birthDate', newDateString);
+  };
+
+  const formatBirthDateForDisplay = (dateString: string) => {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    
+    const day = date.getDate();
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    return `${day} de ${month} de ${year}`;
+  };
+
+  const isValidAge = (dateString: string) => {
+    if (!dateString) return false;
+    
+    const birthDate = new Date(dateString);
+    if (isNaN(birthDate.getTime())) return false;
+    
+    const today = new Date();
+    const age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      return age - 1 >= 18;
+    }
+    
+    return age >= 18;
+  };
+
+  const getStep1Progress = () => {
+    let completed = 0;
+    const total = 4;
+    
+    if (formData.personalInfo.fullName.trim()) completed++;
+    if (formData.personalInfo.email.trim()) completed++;
+    if (formData.personalInfo.phone.trim()) completed++;
+    if (formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate)) completed++;
+    
+    return Math.round((completed / total) * 100);
+  };
 
   const loadInitialData = useCallback(async () => {
     // Especialidades de respaldo ampliadas en caso de que la BD no esté disponible
@@ -308,6 +436,14 @@ export default function EnhancedSignupQuestionnaire() {
           setError('El teléfono es requerido');
           return false;
         }
+        if (!formData.personalInfo.birthDate) {
+          setError('La fecha de nacimiento es requerida');
+          return false;
+        }
+        if (!isValidAge(formData.personalInfo.birthDate)) {
+          setError('Debes ser mayor de 18 años para registrarte');
+          return false;
+        }
         return true;
 
       case 2: // Información de cuenta y rol
@@ -451,6 +587,26 @@ export default function EnhancedSignupQuestionnaire() {
         
         console.log('🔐 Creando usuario con email/contraseña...');
         
+        // VERIFICACIÓN FINAL: Verificar una vez más que el email no exista
+        console.log('🔍 Verificación final del email antes de crear usuario...');
+        const { data: existingUser, error: checkError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', email.toLowerCase().trim())
+          .maybeSingle();
+        
+        if (checkError && checkError.code !== 'PGRST116') {
+          console.error('Error verificando email final:', checkError);
+          throw new Error('Error al verificar la disponibilidad del email');
+        }
+        
+        if (existingUser) {
+          console.error('❌ Email ya registrado en verificación final');
+          throw new Error('Este correo electrónico ya está registrado. Por favor, inicia sesión en lugar de registrarte.');
+        }
+        
+        console.log('✅ Email disponible en verificación final, procediendo con la creación...');
+        
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: email,
           password: password,
@@ -466,6 +622,14 @@ export default function EnhancedSignupQuestionnaire() {
 
         if (authError) {
           console.error('Error de registro:', authError);
+          
+          // Manejo específico de errores de email ya registrado
+          if (authError.message?.includes('already registered') || 
+              authError.message?.includes('User already registered') ||
+              authError.message?.includes('email address is already in use')) {
+            throw new Error('Este correo electrónico ya está registrado. Por favor, inicia sesión en lugar de registrarte.');
+          }
+          
           throw new Error(authError.message || 'Error al crear la cuenta');
         }
         
@@ -602,7 +766,11 @@ export default function EnhancedSignupQuestionnaire() {
       if (err instanceof Error) {
         const errorMsg = err.message.toLowerCase();
         
-        if (errorMsg.includes('invalid') && errorMsg.includes('password')) {
+        if (errorMsg.includes('already registered') || 
+            errorMsg.includes('ya está registrado') ||
+            errorMsg.includes('email address is already in use')) {
+          setError('Este correo electrónico ya está registrado. Si ya tienes una cuenta, por favor inicia sesión en lugar de registrarte.');
+        } else if (errorMsg.includes('invalid') && errorMsg.includes('password')) {
           setError('La contraseña debe tener al menos 6 caracteres');
         } else if (errorMsg.includes('email') && errorMsg.includes('valid')) {
           setError('Por favor, ingresa un correo electrónico válido');
@@ -612,6 +780,8 @@ export default function EnhancedSignupQuestionnaire() {
           setError('Demasiados intentos. Por favor, espera unos minutos antes de intentar nuevamente');
         } else if (errorMsg.includes('password') && errorMsg.includes('should be')) {
           setError('La contraseña debe tener al menos 6 caracteres');
+        } else if (errorMsg.includes('session') && errorMsg.includes('expir')) {
+          setError('La sesión de registro ha expirado. Por favor, inicia el proceso nuevamente.');
         } else {
           setError(err.message);
         }
@@ -796,6 +966,39 @@ export default function EnhancedSignupQuestionnaire() {
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
             <div className="space-y-6">
+              {/* Indicador de progreso del paso 1 */}
+              <div className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-medium text-white">Información Personal</h3>
+                  <span className="text-sm text-gray-400">
+                    {getStep1Progress()}% completado
+                  </span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div 
+                    className="bg-gradient-to-r from-cyan-400 to-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${getStep1Progress()}%` }}
+                  ></div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <div className={`flex items-center ${formData.personalInfo.fullName.trim() ? 'text-green-400' : 'text-gray-500'}`}>
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Nombre
+                  </div>
+                  <div className={`flex items-center ${formData.personalInfo.email.trim() ? 'text-green-400' : 'text-gray-500'}`}>
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Email
+                  </div>
+                  <div className={`flex items-center ${formData.personalInfo.phone.trim() ? 'text-green-400' : 'text-gray-500'}`}>
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Teléfono
+                  </div>
+                  <div className={`flex items-center ${formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate) ? 'text-green-400' : 'text-gray-500'}`}>
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Fecha
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -864,18 +1067,101 @@ export default function EnhancedSignupQuestionnaire() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Fecha de nacimiento
+                  <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center justify-between">
+                    <div className="flex items-center">
+                      <span>Fecha de nacimiento *</span>
+                      <div className="ml-2 relative group">
+                        <div className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center cursor-help">
+                          <span className="text-xs text-gray-300">?</span>
+                        </div>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                          Selecciona tu fecha de nacimiento. Debes ser mayor de 18 años.
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                        </div>
+                      </div>
+                    </div>
+                    {formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate) && (
+                      <span className="text-xs bg-green-600 text-white px-2 py-1 rounded-full">
+                        ✓ Completado
+                      </span>
+                    )}
                   </label>
-                  <div className="relative">
-                    <input
-                      type="date"
-                      value={formData.personalInfo.birthDate}
-                      onChange={(e) => updateFormData('personalInfo', 'birthDate', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                    />
-                    <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* Día */}
+                    <div className="relative">
+                      <label className="block text-xs text-gray-400 mb-1">Día</label>
+                      <select
+                        value={getBirthDatePart('day')}
+                        onChange={(e) => updateBirthDate('day', e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center"
+                      >
+                        <option value="">--</option>
+                        {generateDayOptions().map(day => (
+                          <option key={day} value={day.toString().padStart(2, '0')}>
+                            {day.toString().padStart(2, '0')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Mes */}
+                    <div className="relative">
+                      <label className="block text-xs text-gray-400 mb-1">Mes</label>
+                      <select
+                        value={getBirthDatePart('month')}
+                        onChange={(e) => updateBirthDate('month', e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center"
+                      >
+                        <option value="">--</option>
+                        {months.map((month, index) => (
+                          <option key={index} value={(index + 1).toString().padStart(2, '0')}>
+                            {month}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Año */}
+                    <div className="relative">
+                      <label className="block text-xs text-gray-400 mb-1">Año</label>
+                      <select
+                        value={getBirthDatePart('year')}
+                        onChange={(e) => updateBirthDate('year', e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center"
+                      >
+                        <option value="">----</option>
+                        {generateYearOptions().map(year => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
+                  
+                  {/* Mostrar fecha formateada */}
+                  {formData.personalInfo.birthDate && (
+                    <div className="mt-2 text-sm text-gray-400 flex items-center">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Fecha seleccionada: {formatBirthDateForDisplay(formData.personalInfo.birthDate)}
+                    </div>
+                  )}
+                  
+                  {/* Validación de edad */}
+                  {formData.personalInfo.birthDate && !isValidAge(formData.personalInfo.birthDate) && (
+                    <div className="mt-2 text-sm text-red-400 flex items-center">
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Debes ser mayor de 18 años para registrarte
+                    </div>
+                  )}
+                  
+                  {/* Indicador de completado */}
+                  {formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate) && (
+                    <div className="mt-2 text-sm text-green-400 flex items-center">
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Fecha válida ✓
+                    </div>
+                  )}
                 </div>
 
                 <div>
