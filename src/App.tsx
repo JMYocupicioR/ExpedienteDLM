@@ -15,8 +15,14 @@ import MedicalScales from './pages/MedicalScales';
 import MedicalScaleBarthel from './pages/MedicalScaleBarthel';
 import MedicalScaleBoston from './pages/MedicalScaleBoston';
 import PatientsList from './pages/PatientsList';
+import ClinicAdminPage from './pages/ClinicAdminPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import NotFound from './pages/NotFound';
+import ClinicSummary from './pages/ClinicSummary';
+import ClinicPatients from './pages/ClinicPatients';
+import ClinicStaff from './pages/ClinicStaff';
+import ClinicSettings from './pages/ClinicSettings';
+import PatientPublicRegistration from './pages/PatientPublicRegistration';
 import AppLayout from './components/Layout/AppLayout';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthCallback from './pages/AuthCallback';
@@ -82,6 +88,10 @@ function App() {
             path="/auth/callback" 
             element={<AuthCallback />} 
           />
+          <Route 
+            path="/register/patient/:token" 
+            element={<PatientPublicRegistration />} 
+          />
 
           {/* Protected routes with layout */}
           <Route element={<AppLayout />}>
@@ -128,6 +138,30 @@ function App() {
             <Route 
               path="/citas" 
               element={isAuthenticated ? <AppointmentsPage /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/clinic/admin" 
+              element={isAuthenticated ? <ClinicAdminPage /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/clinic-admin" 
+              element={isAuthenticated ? <ClinicAdminPage /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/clinic/summary" 
+              element={isAuthenticated ? <ClinicSummary /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/clinic/patients" 
+              element={isAuthenticated ? <ClinicPatients /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/clinic/staff" 
+              element={isAuthenticated ? <ClinicStaff /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="/clinic/settings" 
+              element={isAuthenticated ? <ClinicSettings /> : <Navigate to="/auth" />} 
             />
           </Route>
           

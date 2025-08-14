@@ -1,12 +1,12 @@
-/* Estilos integrados de tablas médicas accesibles (antes en styles/medical-tables.css) */
+/* Sistema de diseño unificado */
+@import './styles/unified-design-system.css';
 
+/* Tailwind CSS */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Mejoras globales de accesibilidad para el sistema médico */
-
-/* Variables CSS para accesibilidad */
+/* Variables adicionales para accesibilidad médica */
 :root {
   --focus-ring-color: #3b82f6;
   --focus-ring-width: 2px;
@@ -14,40 +14,6 @@
   --table-transition-duration: 0.2s;
   --table-animation-duration: 0.3s;
   --min-touch-target: 44px;
-  
-  /* Variables para gradientes consistentes */
-  --gradient-primary: linear-gradient(to right, #06b6d4, #3b82f6);
-  --gradient-bg: linear-gradient(to bottom, #111827, #1f2937, #000000);
-  --gradient-text: linear-gradient(to right, #06b6d4, #3b82f6);
-  
-  /* Layout variables para espaciado consistente */
-  --mobile-header-height: 60px;
-  --mobile-bottom-nav-height: 72px;
-  --desktop-sidebar-width: 256px;
-  --desktop-sidebar-collapsed: 64px;
-  --mobile-padding: 16px;
-  --desktop-padding: 24px;
-  --content-max-width: 1280px;
-  
-  /* Variables para responsive design */
-  --breakpoint-sm: 640px;
-  --breakpoint-md: 768px;
-  --breakpoint-lg: 1024px;
-  --breakpoint-xl: 1280px;
-  
-  /* Spacing variables */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-2xl: 48px;
-  
-  /* Safe area variables para dispositivos modernos */
-  --safe-area-top: env(safe-area-inset-top, 0px);
-  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-area-left: env(safe-area-inset-left, 0px);
-  --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 /* Fallbacks para gradientes que pueden fallar */

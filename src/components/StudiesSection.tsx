@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
 import { Plus, Upload, FileText, Trash2, Image as ImageIcon, Video as VideoIcon, Loader2, FlaskConical, Microscope, X, ExternalLink } from 'lucide-react';
 import UploadDropzone from './UploadDropzone';
 import type { Database } from '../lib/database.types';
@@ -20,6 +21,7 @@ const CATEGORIES = [
 ] as const;
 
 export default function StudiesSection({ patientId, doctorId }: StudiesSectionProps) {
+  const { profile } = useAuth();
   const [activeCategory, setActiveCategory] = useState<typeof CATEGORIES[number]['id']>('gabinete');
   const [studies, setStudies] = useState<MedicalTest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,12 +94,14 @@ export default function StudiesSection({ patientId, doctorId }: StudiesSectionPr
   const handleUploadFile = async (study: MedicalTest, file: File) => {
     try {
       setUploadingId(study.id);
-      const path = `studies/${patientId}/${study.id}/${Date.now()}-${file.name}`;
+      const clinicId = (profile as any)?.clinic_id as string | undefined;
+      if (!clinicId) throw new Error('No hay clínica asociada en el perfil.');
+      const path = `${clinicId}/${patientId}/${study.id}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
-        .from('medical-files')
+        .from('patient-documents')
         .upload(path, file);
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from('medical-files').getPublicUrl(path);
+      const { data: urlData } = supabase.storage.from('patient-documents').getPublicUrl(path);
       const { data: userData } = await supabase.auth.getUser();
       const { error: insertError } = await supabase.from('medical_test_files').insert({
         medical_test_id: study.id,

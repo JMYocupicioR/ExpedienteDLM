@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../hooks/useTheme';
+import { useProfilePhotos } from '../hooks/useProfilePhotos';
 
 interface SettingSection {
   id: string;
@@ -16,6 +17,19 @@ interface SettingSection {
   description: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 }
+
+// Fallback local list if remote catalog is empty or restricted by RLS
+const DEFAULT_SPECIALTIES: string[] = [
+  'Medicina General',
+  'Cardiología',
+  'Dermatología',
+  'Neurología',
+  'Pediatría',
+  'Ginecología',
+  'Traumatología',
+  'Psiquiatría',
+  'Medicina de Rehabilitación',
+];
 
 interface NotificationState {
   type: 'success' | 'error' | 'info';
@@ -145,9 +159,13 @@ function ImageUploader({
 export default function Settings() {
   const { user, profile } = useAuth();
   const { theme, setTheme, fontScale, setFontScale, accentPrimary, accentSecondary, setAccentColors, contrastMode, setContrastMode } = useTheme();
+  const { uploadClinicLogo } = useProfilePhotos();
   const [activeSection, setActiveSection] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [notification, setNotification] = useState<NotificationState>({ type: 'info', message: '', show: false });
+  const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingSpecialties, setLoadingSpecialties] = useState<boolean>(false);
+  const [isClinicAdmin, setIsClinicAdmin] = useState<boolean>(false);
   
   // Form data states
   const [profileData, setProfileData] = useState<ProfileData>({
@@ -226,25 +244,48 @@ export default function Settings() {
   // Load user data on component mount
   useEffect(() => {
     if (profile) {
-      const extendedProfile = profile as ExtendedProfile;
+      const extendedProfile = profile as unknown as ExtendedProfile & { additional_info?: any; specialty_id?: string; clinic_id?: string };
+      setIsClinicAdmin((extendedProfile.role || '') === 'admin_staff');
       setProfileData({
         full_name: extendedProfile.full_name || '',
         email: extendedProfile.email || '',
         specialty: extendedProfile.specialty || '',
         license_number: extendedProfile.license_number || '',
         phone: extendedProfile.phone || '',
-        clinic_name: extendedProfile.clinic_name || '',
+        clinic_name: extendedProfile?.additional_info?.clinic_name || '',
         clinic_address: {
-          street: extendedProfile.clinic_address?.street || '',
-          city: extendedProfile.clinic_address?.city || '',
-          state: extendedProfile.clinic_address?.state || '',
-          zip: extendedProfile.clinic_address?.zip || ''
+          street: extendedProfile?.additional_info?.clinic_address?.street || '',
+          city: extendedProfile?.additional_info?.clinic_address?.city || '',
+          state: extendedProfile?.additional_info?.clinic_address?.state || '',
+          zip: extendedProfile?.additional_info?.clinic_address?.zip || ''
         },
-        photo_url: extendedProfile.photo_url,
-        clinic_logo_url: extendedProfile.clinic_logo_url
+        photo_url: extendedProfile?.additional_info?.photo_url,
+        clinic_logo_url: extendedProfile?.additional_info?.clinic_logo_url
       });
     }
   }, [profile]);
+
+  // Cargar especialidades desde la base de datos
+  useEffect(() => {
+    const loadSpecialties = async () => {
+      try {
+        setLoadingSpecialties(true);
+        const { data, error } = await supabase
+          .from('medical_specialties')
+          .select('id, name, is_active')
+          .eq('is_active', true)
+          .order('name');
+        if (error) throw error;
+        const rows = (data || []).map((r: any) => ({ id: r.id, name: r.name }));
+        setSpecialties(rows);
+      } catch (err) {
+        console.error('Error loading specialties:', err);
+      } finally {
+        setLoadingSpecialties(false);
+      }
+    };
+    loadSpecialties();
+  }, []);
 
   const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
     setNotification({ type, message, show: true });
@@ -279,42 +320,208 @@ export default function Settings() {
     
     try {
       const formData = new FormData(e.currentTarget);
-      const updatedData: Partial<ProfileData> = {
-        full_name: formData.get('full_name') as string,
-        specialty: formData.get('specialty') as string,
-        license_number: formData.get('license_number') as string,
-        phone: formData.get('phone') as string,
-        clinic_name: formData.get('clinic_name') as string,
-        clinic_address: {
-          street: formData.get('clinic_street') as string,
-          city: formData.get('clinic_city') as string,
-          state: formData.get('clinic_state') as string,
-          zip: formData.get('clinic_zip') as string,
-        }
-      };
+      const fullName = formData.get('full_name') as string;
+      const specialtyId = (formData.get('specialty_id') as string | null) || null;
+      const specialtyNameFallback = (formData.get('specialty_name_fallback') as string | null) || '';
+      const licenseNumber = formData.get('license_number') as string;
+      const phone = formData.get('phone') as string;
+      const clinicName = (formData.get('clinic_name') as string) || '';
+      const clinicStreet = (formData.get('clinic_street') as string) || '';
+      const clinicCity = (formData.get('clinic_city') as string) || '';
+      const clinicState = (formData.get('clinic_state') as string) || '';
+      const clinicZip = (formData.get('clinic_zip') as string) || '';
+
+      // Derivar nombre de especialidad a partir del ID seleccionado
+      const hasRemoteSpecialties = specialties && specialties.length > 0;
+      const specialtyName = specialtyId && hasRemoteSpecialties
+        ? (specialties.find(s => s.id === specialtyId)?.name || profileData.specialty || '')
+        : (specialtyNameFallback || profileData.specialty || '');
+
+      // Subir imágenes si se seleccionaron
+      let newPhotoUrl: string | undefined;
+      let newClinicLogoUrl: string | undefined;
 
       // Upload profile picture if selected
       if (profilePictureFile) {
-        const photoUrl = await uploadFile(profilePictureFile, 'profile_pictures');
-        updatedData.photo_url = photoUrl;
+        newPhotoUrl = await uploadFile(profilePictureFile, 'profile_pictures');
       }
 
-      // Upload clinic logo if selected
-      if (clinicLogoFile) {
-        const logoUrl = await uploadFile(clinicLogoFile, 'clinic_logos');
-        updatedData.clinic_logo_url = logoUrl;
+      // Upload clinic logo if selected (usa bucket clinic-assets)
+      if (clinicLogoFile && ((profile as any)?.role === 'super_admin' || (profile as any)?.role === 'admin_staff')) {
+        const cid = (profile as any)?.clinic_id || clinicId;
+        if (!cid) throw new Error('No hay clínica asociada para guardar el logo');
+        const res = await uploadClinicLogo(cid, clinicLogoFile);
+        if (res.error) throw new Error(res.error);
+        newClinicLogoUrl = res.url;
       }
 
-      // Update profile in database
+      // Si se activa admin de clínica, asegurar clinic_id y relación
+      let clinicId: string | null = (profile as any)?.clinic_id || null;
+      
+      // Si es administrador de clínica, debe tener una clínica asociada
+      if (isClinicAdmin) {
+        if (!clinicId) {
+          // Crear nueva clínica si no existe
+          if (!clinicName || clinicName.trim() === '') {
+            throw new Error('Debes especificar el nombre de la clínica para activar la administración.');
+          }
+          
+          // Verificar si ya existe una clínica con ese nombre
+          const { data: existingClinic } = await supabase
+            .from('clinics')
+            .select('id')
+            .eq('name', clinicName.trim())
+            .maybeSingle();
+            
+          if (existingClinic) {
+            clinicId = existingClinic.id;
+          } else {
+            // Crear nueva clínica con información completa
+            const addressStr = [clinicStreet, clinicCity, clinicState, clinicZip].filter(Boolean).join(', ');
+            const { data: createdClinic, error: clinicErr } = await supabase
+              .from('clinics')
+              .insert({
+                name: clinicName.trim(),
+                type: 'general', // Tipo por defecto
+                address: addressStr || '',
+                phone: phone || '',
+                email: user.email || '',
+                website: '',
+                tax_id: '',
+                director_name: fullName || '',
+                director_license: licenseNumber || '',
+                is_active: true,
+                settings: {
+                  appointment_duration: 30,
+                  working_hours: {
+                    monday: { start: '09:00', end: '18:00' },
+                    tuesday: { start: '09:00', end: '18:00' },
+                    wednesday: { start: '09:00', end: '18:00' },
+                    thursday: { start: '09:00', end: '18:00' },
+                    friday: { start: '09:00', end: '18:00' },
+                    saturday: { start: '09:00', end: '13:00' },
+                    sunday: { closed: true }
+                  }
+                },
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+              
+            if (clinicErr) {
+              console.error('Error creating clinic:', clinicErr);
+              throw new Error('Error al crear la clínica: ' + clinicErr.message);
+            }
+            
+            clinicId = createdClinic.id;
+            showNotification('success', 'Clínica creada exitosamente');
+          }
+        } else {
+          // Actualizar información de la clínica existente si es necesario
+          const addressStr = [clinicStreet, clinicCity, clinicState, clinicZip].filter(Boolean).join(', ');
+          
+          if (clinicName || addressStr) {
+            const updateData: any = {};
+            if (clinicName) updateData.name = clinicName.trim();
+            if (addressStr) updateData.address = addressStr;
+            if (phone) updateData.phone = phone;
+            updateData.updated_at = new Date().toISOString();
+            
+            const { error: updateErr } = await supabase
+              .from('clinics')
+              .update(updateData)
+              .eq('id', clinicId);
+              
+            if (updateErr) {
+              console.error('Error updating clinic:', updateErr);
+            }
+          }
+        }
+      }
+
+      const newAdditionalInfo = {
+        ...(profile as any)?.additional_info,
+        clinic_name: clinicName,
+        clinic_address: {
+          street: clinicStreet,
+          city: clinicCity,
+          state: clinicState,
+          zip: clinicZip
+        },
+        ...(newPhotoUrl ? { photo_url: newPhotoUrl } : {}),
+        ...(newClinicLogoUrl ? { clinic_logo_url: newClinicLogoUrl } : {}),
+        is_clinic_admin: isClinicAdmin
+      } as any;
+
+      // Construir actualización con columnas válidas
+      const updatedProfile: any = {
+        full_name: fullName,
+        specialty: specialtyName,
+        specialty_id: hasRemoteSpecialties ? (specialtyId || null) : null,
+        license_number: licenseNumber,
+        phone,
+        additional_info: newAdditionalInfo,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (clinicId) {
+        updatedProfile.clinic_id = clinicId;
+      }
+
+      // Ajustar rol según el toggle (respetar super_admin)
+      const currentRole: string = (profile as any)?.role || '';
+      if (currentRole !== 'super_admin') {
+        updatedProfile.role = isClinicAdmin ? 'admin_staff' : (currentRole === 'admin_staff' ? 'doctor' : currentRole || 'doctor');
+      }
+
+      // Actualizar perfil
       const { error } = await supabase
         .from('profiles')
-        .update(updatedData)
+        .update(updatedProfile)
         .eq('id', user.id);
 
       if (error) throw error;
 
-      // Update local state
-      setProfileData(prev => ({ ...prev, ...updatedData }));
+      // Asegurar relación de administración si aplica
+      if (isClinicAdmin && clinicId) {
+        const { data: rel, error: relErr } = await supabase
+          .from('clinic_user_relationships')
+          .select('id, role_in_clinic, is_active')
+          .eq('user_id', user.id)
+          .eq('clinic_id', clinicId)
+          .maybeSingle();
+        if (!relErr) {
+          if (!rel) {
+            await supabase.from('clinic_user_relationships').insert({
+              clinic_id: clinicId,
+              user_id: user.id,
+              role_in_clinic: 'admin_staff',
+              is_active: true,
+              start_date: new Date().toISOString(),
+              permissions_override: {}
+            });
+          } else if (rel.role_in_clinic !== 'admin_staff' || !rel.is_active) {
+            await supabase
+              .from('clinic_user_relationships')
+              .update({ role_in_clinic: 'admin_staff', is_active: true })
+              .eq('id', rel.id);
+          }
+        }
+      }
+
+      // Actualizar estado local
+      setProfileData(prev => ({
+        ...prev,
+        full_name: fullName,
+        specialty: specialtyName,
+        license_number: licenseNumber,
+        phone,
+        clinic_name: clinicName,
+        clinic_address: { street: clinicStreet, city: clinicCity, state: clinicState, zip: clinicZip },
+        ...(newPhotoUrl ? { photo_url: newPhotoUrl } : {}),
+        ...(newClinicLogoUrl ? { clinic_logo_url: newClinicLogoUrl } : {}),
+      }));
       showNotification('success', 'Perfil actualizado correctamente');
       setProfilePictureFile(null);
       setClinicLogoFile(null);
@@ -337,19 +544,19 @@ export default function Settings() {
         return (
           <form onSubmit={handleProfileSave} className="space-y-8">
             {/* Header */}
-            <div>
-              <h3 className="text-2xl font-bold text-white mb-2 flex items-center">
+            <div className="section-header">
+              <h3 className="section-title flex items-center">
                 <User className="h-6 w-6 mr-3 text-cyan-400" />
                 Perfil y Clínica
               </h3>
-              <p className="text-gray-400">
+              <p className="section-subtitle">
                 Gestiona tu información personal y los detalles de tu clínica. Esta información aparecerá en tus recetas y documentos médicos.
               </p>
             </div>
 
             {/* Profile Images */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Camera className="h-5 w-5 mr-2 text-cyan-400" />
                 Imágenes de Perfil
               </h4>
@@ -361,19 +568,21 @@ export default function Settings() {
                   onFileSelect={setProfilePictureFile}
                   aspectRatio="aspect-square"
                 />
-                <ImageUploader
-                  label="Logo de la Clínica"
-                  description="Logo que aparecerá en tus recetas y documentos"
-                  currentImageUrl={profileData.clinic_logo_url}
-                  onFileSelect={setClinicLogoFile}
-                  aspectRatio="aspect-video"
-                />
+                {(profile as any)?.role === 'super_admin' || (profile as any)?.role === 'admin_staff' ? (
+                  <ImageUploader
+                    label="Logo de la Clínica"
+                    description="Logo que aparecerá en tus recetas y documentos"
+                    currentImageUrl={profileData.clinic_logo_url}
+                    onFileSelect={setClinicLogoFile}
+                    aspectRatio="aspect-video"
+                  />
+                ) : null}
               </div>
             </div>
 
             {/* Personal Information */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <User className="h-5 w-5 mr-2 text-cyan-400" />
                 Información Personal
               </h4>
@@ -387,7 +596,7 @@ export default function Settings() {
                     name="full_name"
                     defaultValue={profileData.full_name}
                     required
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                    className="form-input"
                     placeholder="Dr. Juan Pérez García"
                   />
                 </div>
@@ -411,7 +620,7 @@ export default function Settings() {
                     type="tel"
                     name="phone"
                     defaultValue={profileData.phone}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                    className="form-input"
                     placeholder="+52 555 123 4567"
                   />
                 </div>
@@ -419,14 +628,33 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Especialidad *
                   </label>
-                  <input
-                    type="text"
-                    name="specialty"
-                    defaultValue={profileData.specialty}
-                    required
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
-                    placeholder="Cardiología, Medicina General, etc."
-                  />
+                  {loadingSpecialties ? (
+                    <div className="text-gray-400 text-sm py-3">Cargando especialidades...</div>
+                  ) : specialties.length > 0 ? (
+                    <select
+                      name="specialty_id"
+                      defaultValue={(profile as any)?.specialty_id || ''}
+                      required
+                      className="form-input"
+                    >
+                      <option value="">Seleccionar especialidad</option>
+                      {specialties.map(opt => (
+                        <option key={opt.id} value={opt.id}>{opt.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      name="specialty_name_fallback"
+                      defaultValue={profileData.specialty || ''}
+                      required
+                      className="form-input"
+                    >
+                      <option value="">Seleccionar especialidad</option>
+                      {DEFAULT_SPECIALTIES.map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -437,7 +665,7 @@ export default function Settings() {
                     name="license_number"
                     defaultValue={profileData.license_number}
                     required
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                    className="form-input"
                     placeholder="12345678"
                   />
                 </div>
@@ -445,12 +673,22 @@ export default function Settings() {
             </div>
 
             {/* Clinic Information */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Building className="h-5 w-5 mr-2 text-cyan-400" />
                 Información de la Clínica
               </h4>
               <div className="space-y-6">
+                <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div>
+                    <p className="text-white font-medium">Soy administrador de esta clínica</p>
+                    <p className="text-gray-400 text-sm">Activa funciones de administración para gestionar tu clínica</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={isClinicAdmin} onChange={(e) => setIsClinicAdmin(e.target.checked)} />
+                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                  </label>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Nombre de la Clínica
@@ -459,7 +697,7 @@ export default function Settings() {
                     type="text"
                     name="clinic_name"
                     defaultValue={profileData.clinic_name}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                    className="form-input"
                     placeholder="Clínica Médica Integral"
                   />
                 </div>
@@ -471,7 +709,7 @@ export default function Settings() {
                     type="text"
                     name="clinic_street"
                     defaultValue={profileData.clinic_address.street}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                    className="form-input"
                     placeholder="Av. Revolución 1234, Col. Centro"
                   />
                 </div>
@@ -484,7 +722,7 @@ export default function Settings() {
                       type="text"
                       name="clinic_city"
                       defaultValue={profileData.clinic_address.city}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                      className="form-input"
                       placeholder="Ciudad de México"
                     />
                   </div>
@@ -496,7 +734,7 @@ export default function Settings() {
                       type="text"
                       name="clinic_state"
                       defaultValue={profileData.clinic_address.state}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                      className="form-input"
                       placeholder="CDMX"
                     />
                   </div>
@@ -508,7 +746,7 @@ export default function Settings() {
                       type="text"
                       name="clinic_zip"
                       defaultValue={profileData.clinic_address.zip}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                      className="form-input"
                       placeholder="06000"
                     />
                   </div>
@@ -541,7 +779,7 @@ export default function Settings() {
 
       case 'clinic':
         return (
-          <div className="space-y-8">
+          <div className="page-container p-0">
             {/* Header */}
             <div>
               <h3 className="text-2xl font-bold text-white mb-2 flex items-center">
@@ -554,8 +792,8 @@ export default function Settings() {
             </div>
 
             {/* Medical Specialties */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <FileText className="h-5 w-5 mr-2 text-cyan-400" />
                 Especialidades y Certificaciones
               </h4>
@@ -565,18 +803,22 @@ export default function Settings() {
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Especialidad Principal
                     </label>
-                    <select className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400">
-                      <option value="">Seleccionar especialidad</option>
-                      <option value="medicina-general">Medicina General</option>
-                      <option value="cardiologia">Cardiología</option>
-                      <option value="dermatologia">Dermatología</option>
-                      <option value="neurologia">Neurología</option>
-                      <option value="pediatria">Pediatría</option>
-                      <option value="ginecologia">Ginecología</option>
-                      <option value="traumatologia">Traumatología</option>
-                      <option value="psiquiatria">Psiquiatría</option>
-                      <option value="otros">Otros</option>
-                    </select>
+                    {loadingSpecialties ? (
+                      <div className="text-gray-400 text-sm py-3">Cargando especialidades...</div>
+                    ) : specialties.length > 0 ? (
+                      <select className="form-input">
+                        <option value="">Seleccionar especialidad</option>
+                        {specialties.map(opt => (
+                          <option key={opt.id} value={opt.id}>{opt.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select className="form-input">
+                        {DEFAULT_SPECIALTIES.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -584,7 +826,7 @@ export default function Settings() {
                     </label>
                     <input
                       type="text"
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                      className="form-input"
                       placeholder="Ej: Cardiología Intervencionista"
                     />
                   </div>
@@ -595,7 +837,7 @@ export default function Settings() {
                   </label>
                   <textarea
                     rows={3}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    className="form-input"
                     placeholder="Listado de certificaciones, diplomas, y cursos relevantes"
                   />
                 </div>
@@ -603,8 +845,8 @@ export default function Settings() {
             </div>
 
             {/* Medical Practice Settings */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Activity className="h-5 w-5 mr-2 text-cyan-400" />
                 Configuración de Práctica
               </h4>
@@ -653,7 +895,7 @@ export default function Settings() {
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Duración de Consulta (minutos)
                     </label>
-                    <select className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                    <select className="form-input">
                       <option value="15">15 minutos</option>
                       <option value="20">20 minutos</option>
                       <option value="30">30 minutos</option>
@@ -706,8 +948,8 @@ export default function Settings() {
             </div>
 
             {/* Prescription Settings */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <FileText className="h-5 w-5 mr-2 text-cyan-400" />
                 Configuración de Recetas
               </h4>
@@ -717,7 +959,7 @@ export default function Settings() {
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Formato de Receta Preferido
                     </label>
-                    <select className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                    <select className="form-input">
                       <option value="tradicional">Formato Tradicional</option>
                       <option value="moderno">Formato Moderno</option>
                       <option value="minimal">Formato Minimalista</option>
@@ -767,19 +1009,19 @@ export default function Settings() {
         return (
           <div className="space-y-8">
             {/* Header */}
-            <div>
-              <h3 className="text-2xl font-bold text-white mb-2 flex items-center">
+            <div className="section-header">
+              <h3 className="section-title flex items-center">
                 <Bell className="h-6 w-6 mr-3 text-cyan-400" />
                 Notificaciones
               </h3>
-              <p className="text-gray-400">
+              <p className="section-subtitle">
                 Configura cómo y cuándo recibir notificaciones sobre tu práctica médica.
               </p>
             </div>
 
             {/* Email Notifications */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Mail className="h-5 w-5 mr-2 text-cyan-400" />
                 Notificaciones por Email
               </h4>
@@ -831,8 +1073,8 @@ export default function Settings() {
             </div>
 
             {/* Push Notifications */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Smartphone className="h-5 w-5 mr-2 text-cyan-400" />
                 Notificaciones Push
               </h4>
@@ -862,8 +1104,8 @@ export default function Settings() {
             </div>
 
             {/* Notification Schedule */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Clock className="h-5 w-5 mr-2 text-cyan-400" />
                 Horario de Notificaciones
               </h4>
@@ -875,7 +1117,7 @@ export default function Settings() {
                   <input
                     type="time"
                     defaultValue="22:00"
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    className="form-input"
                   />
                 </div>
                 <div>
@@ -885,7 +1127,7 @@ export default function Settings() {
                   <input
                     type="time"
                     defaultValue="07:00"
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    className="form-input"
                   />
                 </div>
               </div>
@@ -909,7 +1151,7 @@ export default function Settings() {
 
       case 'security':
         return (
-          <div className="space-y-8">
+          <div className="page-container p-0">
             {/* Header */}
             <div>
               <h3 className="text-2xl font-bold text-white mb-2 flex items-center">
@@ -922,8 +1164,8 @@ export default function Settings() {
             </div>
 
             {/* Password Change */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Key className="h-5 w-5 mr-2 text-cyan-400" />
                 Cambiar Contraseña
               </h4>
@@ -935,7 +1177,7 @@ export default function Settings() {
                   <div className="relative">
                     <input
                       type={showPasswords.current ? "text" : "password"}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 pr-12"
+                      className="form-input pr-12"
                       placeholder="Ingresa tu contraseña actual"
                     />
                     <button
@@ -954,7 +1196,7 @@ export default function Settings() {
                   <div className="relative">
                     <input
                       type={showPasswords.new ? "text" : "password"}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 pr-12"
+                      className="form-input pr-12"
                       placeholder="Mínimo 8 caracteres"
                     />
                     <button
@@ -976,7 +1218,7 @@ export default function Settings() {
                   <div className="relative">
                     <input
                       type={showPasswords.confirm ? "text" : "password"}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 pr-12"
+                      className="form-input pr-12"
                       placeholder="Confirma tu nueva contraseña"
                     />
                     <button
@@ -996,8 +1238,8 @@ export default function Settings() {
             </div>
 
             {/* Two-Factor Authentication */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Shield className="h-5 w-5 mr-2 text-cyan-400" />
                 Autenticación de Dos Factores
               </h4>
@@ -1027,8 +1269,8 @@ export default function Settings() {
             </div>
 
             {/* Active Sessions */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Monitor className="h-5 w-5 mr-2 text-cyan-400" />
                 Sesiones Activas
               </h4>
@@ -1063,8 +1305,8 @@ export default function Settings() {
             </div>
 
             {/* Privacy Settings */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Shield className="h-5 w-5 mr-2 text-cyan-400" />
                 Configuración de Privacidad
               </h4>
@@ -1084,7 +1326,7 @@ export default function Settings() {
                     <p className="text-white font-medium">Tiempo de sesión automática</p>
                     <p className="text-gray-400 text-sm">Cerrar sesión automáticamente por inactividad</p>
                   </div>
-                  <select className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                  <select className="form-input">
                     <option value="15">15 minutos</option>
                     <option value="30">30 minutos</option>
                     <option value="60">1 hora</option>
@@ -1109,7 +1351,7 @@ export default function Settings() {
 
       case 'appearance':
         return (
-          <div className="space-y-8">
+          <div className="page-container p-0">
             {/* Header */}
             <div>
               <h3 className="text-2xl font-bold text-white mb-2 flex items-center">
@@ -1122,8 +1364,8 @@ export default function Settings() {
             </div>
 
             {/* Theme Settings */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Monitor className="h-5 w-5 mr-2 text-cyan-400" />
                 Tema de la Aplicación
               </h4>
@@ -1162,8 +1404,8 @@ export default function Settings() {
             </div>
 
             {/* Language and Region */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Globe className="h-5 w-5 mr-2 text-cyan-400" />
                 Idioma y Región
               </h4>
@@ -1172,7 +1414,7 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Idioma de la Interfaz
                   </label>
-                  <select className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                  <select className="form-input">
                     <option value="es">Español</option>
                     <option value="en">English</option>
                     <option value="fr">Français</option>
@@ -1183,7 +1425,7 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Zona Horaria
                   </label>
-                  <select className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                  <select className="form-input">
                     <option value="America/Mexico_City">Ciudad de México (GMT-6)</option>
                     <option value="America/New_York">Nueva York (GMT-5)</option>
                     <option value="America/Los_Angeles">Los Ángeles (GMT-8)</option>
@@ -1194,8 +1436,8 @@ export default function Settings() {
             </div>
 
             {/* Color Customization */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Palette className="h-5 w-5 mr-2 text-cyan-400" />
                 Personalización de Colores
               </h4>
@@ -1244,8 +1486,8 @@ export default function Settings() {
             </div>
 
             {/* Display Settings */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Monitor className="h-5 w-5 mr-2 text-cyan-400" />
                 Configuración de Pantalla
               </h4>
@@ -1293,7 +1535,7 @@ export default function Settings() {
 
       case 'system':
         return (
-          <div className="space-y-8">
+          <div className="page-container p-0">
             {/* Header */}
             <div>
               <h3 className="text-2xl font-bold text-white mb-2 flex items-center">
@@ -1320,8 +1562,8 @@ export default function Settings() {
             </div>
 
             {/* System Controls */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Database className="h-5 w-5 mr-2 text-cyan-400" />
                 Control del Sistema
               </h4>
@@ -1362,8 +1604,8 @@ export default function Settings() {
             </div>
 
             {/* System Actions */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Activity className="h-5 w-5 mr-2 text-cyan-400" />
                 Acciones del Sistema
               </h4>
@@ -1391,7 +1633,7 @@ export default function Settings() {
 
       case 'privacy':
         return (
-          <div className="space-y-8">
+          <div className="page-container p-0">
             {/* Header */}
             <div>
               <h3 className="text-2xl font-bold text-white mb-2 flex items-center">
@@ -1467,8 +1709,8 @@ export default function Settings() {
             </div>
 
             {/* Data Retention */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Calendar className="h-5 w-5 mr-2 text-cyan-400" />
                 Retención de Datos
               </h4>
@@ -1493,8 +1735,8 @@ export default function Settings() {
             </div>
 
             {/* Contact Information */}
-            <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-6 flex items-center">
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-6 flex items-center">
                 <Mail className="h-5 w-5 mr-2 text-cyan-400" />
                 Contacto de Privacidad
               </h4>

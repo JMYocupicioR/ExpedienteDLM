@@ -121,9 +121,10 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
           id: 'clinic',
           label: 'Clínica',
           icon: Building,
-          href: '/clinic',
+          href: '/clinic-admin',
           submenu: [
-            { id: 'clinic-overview', label: 'Resumen', icon: Activity, href: '/clinic' },
+            { id: 'clinic-overview', label: 'Resumen', icon: Activity, href: '/clinic/summary' },
+            { id: 'clinic-patients', label: 'Pacientes', icon: Users, href: '/clinic/patients' },
             { id: 'clinic-staff', label: 'Personal', icon: Users, href: '/clinic/staff' },
             { id: 'clinic-settings', label: 'Configuración', icon: Settings, href: '/clinic/settings' }
           ]

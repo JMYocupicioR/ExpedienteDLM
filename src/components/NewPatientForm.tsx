@@ -63,6 +63,53 @@ export default function NewPatientForm({ isOpen, onClose, onSave, initialName = 
 
     setLoading(true);
     try {
+      // Obtener usuario actual
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        throw authError;
+      }
+      const currentUser = userData?.user;
+      if (!currentUser) {
+        addError('Sesión requerida', 'Debes iniciar sesión para crear pacientes.');
+        setLoading(false);
+        return;
+      }
+
+      // Obtener clinic_id desde perfil o relación activa
+      let clinicId: string | null = null;
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('clinic_id')
+        .eq('id', currentUser.id)
+        .single();
+      if (profileError) {
+        console.warn('No se pudo obtener clinic_id desde profiles:', profileError.message);
+      } else {
+        clinicId = profile?.clinic_id ?? null;
+      }
+
+      if (!clinicId) {
+        const { data: rel, error: relError } = await supabase
+          .from('clinic_user_relationships')
+          .select('clinic_id')
+          .eq('user_id', currentUser.id)
+          .eq('is_active', true)
+          .order('start_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (relError) {
+          console.warn('No se pudo obtener clinic_id desde relaciones:', relError.message);
+        }
+        clinicId = rel?.clinic_id ?? null;
+      }
+
+      if (!clinicId) {
+        addError('Clínica no encontrada', 'Tu usuario no está asociado a ninguna clínica activa.');
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('patients')
         .insert({
@@ -76,6 +123,8 @@ export default function NewPatientForm({ isOpen, onClose, onSave, initialName = 
           insurance_info: formData.insurance_info.trim() || null,
           notes: formData.notes.trim() || null,
           is_active: true,
+          clinic_id: clinicId,
+          primary_doctor_id: currentUser.id,
         })
         .select()
         .single();

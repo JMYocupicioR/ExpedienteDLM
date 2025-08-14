@@ -89,75 +89,76 @@ export default function EnhancedSignupQuestionnaire() {
 
   const loadInitialData = useCallback(async () => {
     // Especialidades de respaldo ampliadas en caso de que la BD no esté disponible
+    // USANDO UUIDs VÁLIDOS PARA EVITAR ERRORES DE BASE DE DATOS
     const backupSpecialties: MedicalSpecialty[] = [
       // MÉDICAS
-      { id: '1', name: 'Medicina General', category: 'medical', description: 'Atención médica integral y preventiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '2', name: 'Cardiología', category: 'medical', description: 'Enfermedades cardiovasculares y del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '3', name: 'Pediatría', category: 'medical', description: 'Medicina pediátrica integral (0-18 años)', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '4', name: 'Neurología', category: 'medical', description: 'Enfermedades del sistema nervioso central y periférico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '5', name: 'Dermatología', category: 'medical', description: 'Enfermedades de la piel, pelo y uñas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '6', name: 'Medicina Interna', category: 'medical', description: 'Medicina interna de adultos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '7', name: 'Endocrinología', category: 'medical', description: 'Enfermedades endocrinas y metabólicas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '8', name: 'Gastroenterología', category: 'medical', description: 'Enfermedades digestivas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '9', name: 'Neumología', category: 'medical', description: 'Enfermedades respiratorias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '10', name: 'Reumatología', category: 'medical', description: 'Enfermedades reumáticas y autoinmunes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '11', name: 'Oncología', category: 'medical', description: 'Tratamiento del cáncer', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '12', name: 'Psiquiatría', category: 'medical', description: 'Salud mental y trastornos psiquiátricos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '13', name: 'Anestesiología', category: 'medical', description: 'Medicina perioperatoria y anestesia', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '14', name: 'Medicina de Urgencias', category: 'medical', description: 'Medicina de emergencias y urgencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '15', name: 'Alergología e Inmunología', category: 'medical', description: 'Alergias e inmunodeficiencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '16', name: 'Hematología', category: 'medical', description: 'Enfermedades de la sangre', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '17', name: 'Infectología', category: 'medical', description: 'Enfermedades infecciosas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '18', name: 'Medicina del Deporte', category: 'medical', description: 'Medicina deportiva y ejercicio', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '19', name: 'Medicina Familiar', category: 'medical', description: 'Atención integral familiar', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '20', name: 'Genética Médica', category: 'medical', description: 'Enfermedades genéticas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Medicina General', category: 'medical', description: 'Atención médica integral y preventiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'b2c3d4e5-f6g7-8901-bcde-f12345678901', name: 'Cardiología', category: 'medical', description: 'Enfermedades cardiovasculares y del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'c3d4e5f6-g7h8-9012-cdef-123456789012', name: 'Pediatría', category: 'medical', description: 'Medicina pediátrica integral (0-18 años)', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'd4e5f6g7-h8i9-0123-def1-234567890123', name: 'Neurología', category: 'medical', description: 'Enfermedades del sistema nervioso central y periférico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'e5f6g7h8-i9j0-1234-ef12-345678901234', name: 'Dermatología', category: 'medical', description: 'Enfermedades de la piel, pelo y uñas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'f6g7h8i9-j0k1-2345-f123-456789012345', name: 'Medicina Interna', category: 'medical', description: 'Medicina interna de adultos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'g7h8i9j0-k1l2-3456-1234-567890123456', name: 'Endocrinología', category: 'medical', description: 'Enfermedades endocrinas y metabólicas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'h8i9j0k1-l2m3-4567-2345-678901234567', name: 'Gastroenterología', category: 'medical', description: 'Enfermedades digestivas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'i9j0k1l2-m3n4-5678-3456-789012345678', name: 'Neumología', category: 'medical', description: 'Enfermedades respiratorias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'j0k1l2m3-n4o5-6789-4567-890123456789', name: 'Reumatología', category: 'medical', description: 'Enfermedades reumáticas y autoinmunes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'k1l2m3n4-o5p6-7890-5678-901234567890', name: 'Oncología', category: 'medical', description: 'Tratamiento del cáncer', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'l2m3n4o5-p6q7-8901-6789-012345678901', name: 'Psiquiatría', category: 'medical', description: 'Salud mental y trastornos psiquiátricos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'm3n4o5p6-q7r8-9012-7890-123456789012', name: 'Anestesiología', category: 'medical', description: 'Medicina perioperatoria y anestesia', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'n4o5p6q7-r8s9-0123-8901-234567890123', name: 'Medicina de Urgencias', category: 'medical', description: 'Medicina de emergencias y urgencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'o5p6q7r8-s9t0-1234-9012-345678901234', name: 'Alergología e Inmunología', category: 'medical', description: 'Alergias e inmunodeficiencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'p6q7r8s9-t0u1-2345-0123-456789012345', name: 'Hematología', category: 'medical', description: 'Enfermedades de la sangre', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'q7r8s9t0-u1v2-3456-1234-567890123456', name: 'Infectología', category: 'medical', description: 'Enfermedades infecciosas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'r8s9t0u1-v2w3-4567-2345-678901234567', name: 'Medicina del Deporte', category: 'medical', description: 'Medicina deportiva y ejercicio', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 's9t0u1v2-w3x4-5678-3456-789012345678', name: 'Medicina Familiar', category: 'medical', description: 'Atención integral familiar', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 't0u1v2w3-x4y5-6789-4567-890123456789', name: 'Genética Médica', category: 'medical', description: 'Enfermedades genéticas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
       
       // QUIRÚRGICAS
-      { id: '21', name: 'Cirugía General', category: 'surgical', description: 'Cirugía general y abdominal', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '22', name: 'Ginecología y Obstetricia', category: 'surgical', description: 'Salud femenina y reproductiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '23', name: 'Ortopedia y Traumatología', category: 'surgical', description: 'Cirugía de huesos y articulaciones', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '24', name: 'Oftalmología', category: 'surgical', description: 'Cirugía ocular y oftalmológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '25', name: 'Urología', category: 'surgical', description: 'Cirugía urológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '26', name: 'Neurocirugía', category: 'surgical', description: 'Cirugía del sistema nervioso', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '27', name: 'Cirugía Cardiovascular', category: 'surgical', description: 'Cirugía del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '28', name: 'Cirugía Torácica', category: 'surgical', description: 'Cirugía del tórax', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '29', name: 'Cirugía Plástica', category: 'surgical', description: 'Cirugía estética y reconstructiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '30', name: 'Otorrinolaringología', category: 'surgical', description: 'Cirugía de oído, nariz y garganta', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'u1v2w3x4-y5z6-7890-5678-901234567890', name: 'Cirugía General', category: 'surgical', description: 'Cirugía general y abdominal', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'v2w3x4y5-z6a7-8901-6789-012345678901', name: 'Ginecología y Obstetricia', category: 'surgical', description: 'Salud femenina y reproductiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'w3x4y5z6-a7b8-9012-7890-123456789012', name: 'Ortopedia y Traumatología', category: 'surgical', description: 'Cirugía de huesos y articulaciones', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'x4y5z6a7-b8c9-0123-8901-234567890123', name: 'Oftalmología', category: 'surgical', description: 'Cirugía ocular y oftalmológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'y5z6a7b8-c9d0-1234-9012-345678901234', name: 'Urología', category: 'surgical', description: 'Cirugía urológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'z6a7b8c9-d0e1-2345-0123-456789012345', name: 'Neurocirugía', category: 'surgical', description: 'Cirugía del sistema nervioso', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'a7b8c9d0-e1f2-3456-1234-567890123456', name: 'Cirugía Cardiovascular', category: 'surgical', description: 'Cirugía del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'b8c9d0e1-f2g3-4567-2345-678901234567', name: 'Cirugía Torácica', category: 'surgical', description: 'Cirugía del tórax', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'c9d0e1f2-g3h4-5678-3456-789012345678', name: 'Cirugía Plástica', category: 'surgical', description: 'Cirugía estética y reconstructiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'd0e1f2g3-h4i5-6789-4567-890123456789', name: 'Otorrinolaringología', category: 'surgical', description: 'Cirugía de oído, nariz y garganta', requires_license: true, is_active: true, created_at: new Date().toISOString() },
       
       // DIAGNÓSTICAS
-      { id: '31', name: 'Radiología', category: 'diagnostic', description: 'Diagnóstico por imágenes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '32', name: 'Patología', category: 'diagnostic', description: 'Diagnóstico anatomopatológico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '33', name: 'Medicina Nuclear', category: 'diagnostic', description: 'Diagnóstico y tratamiento nuclear', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '34', name: 'Laboratorio Clínico', category: 'diagnostic', description: 'Análisis clínicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '35', name: 'Radiología Intervencionista', category: 'diagnostic', description: 'Procedimientos radiológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'e1f2g3h4-i5j6-7890-5678-901234567890', name: 'Radiología', category: 'diagnostic', description: 'Diagnóstico por imágenes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'f2g3h4i5-j6k7-8901-6789-012345678901', name: 'Patología', category: 'diagnostic', description: 'Diagnóstico anatomopatológico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'g3h4i5j6-k7l8-9012-7890-123456789012', name: 'Medicina Nuclear', category: 'diagnostic', description: 'Diagnóstico y tratamiento nuclear', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'h4i5j6k7-l8m9-0123-8901-234567890123', name: 'Laboratorio Clínico', category: 'diagnostic', description: 'Análisis clínicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'i5j6k7l8-m9n0-1234-9012-345678901234', name: 'Radiología Intervencionista', category: 'diagnostic', description: 'Procedimientos radiológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
       
       // TERAPIAS
-      { id: '36', name: 'Fisioterapia', category: 'therapy', description: 'Terapia física y rehabilitación', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '37', name: 'Terapia Respiratoria', category: 'therapy', description: 'Terapia respiratoria', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '38', name: 'Psicología Clínica', category: 'therapy', description: 'Terapia psicológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '39', name: 'Nutrición Clínica', category: 'therapy', description: 'Terapia nutricional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '40', name: 'Terapia Ocupacional', category: 'therapy', description: 'Terapia ocupacional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'j6k7l8m9-n0o1-2345-0123-456789012345', name: 'Fisioterapia', category: 'therapy', description: 'Terapia física y rehabilitación', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'k7l8m9n0-o1p2-3456-1234-567890123456', name: 'Terapia Respiratoria', category: 'therapy', description: 'Terapia respiratoria', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'l8m9n0o1-p2q3-4567-2345-678901234567', name: 'Psicología Clínica', category: 'therapy', description: 'Terapia psicológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'm9n0o1p2-q3r4-5678-3456-789012345678', name: 'Nutrición Clínica', category: 'therapy', description: 'Terapia nutricional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'n0o1p2q3-r4s5-6789-4567-890123456789', name: 'Terapia Ocupacional', category: 'therapy', description: 'Terapia ocupacional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
       
       // ENFERMERÍA
-      { id: '41', name: 'Enfermería General', category: 'nursing', description: 'Cuidados de enfermería general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '42', name: 'Enfermería Especializada', category: 'nursing', description: 'Cuidados especializados', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '43', name: 'Enfermería de Urgencias', category: 'nursing', description: 'Cuidados en emergencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '44', name: 'Enfermería Quirúrgica', category: 'nursing', description: 'Cuidados perioperatorios', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '45', name: 'Enfermería Oncológica', category: 'nursing', description: 'Cuidados oncológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'o1p2q3r4-s5t6-7890-5678-901234567890', name: 'Enfermería General', category: 'nursing', description: 'Cuidados de enfermería general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'p2q3r4s5-t6u7-8901-6789-012345678901', name: 'Enfermería Especializada', category: 'nursing', description: 'Cuidados especializados', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'q3r4s5t6-u7v8-9012-7890-123456789012', name: 'Enfermería de Urgencias', category: 'nursing', description: 'Cuidados en emergencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'r4s5t6u7-v8w9-0123-8901-234567890123', name: 'Enfermería Quirúrgica', category: 'nursing', description: 'Cuidados perioperatorios', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 's5t6u7v8-w9x0-1234-9012-345678901234', name: 'Enfermería Oncológica', category: 'nursing', description: 'Cuidados oncológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
       
       // ODONTOLOGÍA
-      { id: '46', name: 'Odontología General', category: 'medical', description: 'Atención dental general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '47', name: 'Ortodoncia', category: 'medical', description: 'Corrección dental', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '48', name: 'Endodoncia', category: 'medical', description: 'Tratamiento de conductos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '49', name: 'Periodoncia', category: 'medical', description: 'Tratamiento de encías', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '50', name: 'Cirugía Oral', category: 'surgical', description: 'Cirugía oral y maxilofacial', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 't6u7v8w9-x0y1-2345-0123-456789012345', name: 'Odontología General', category: 'medical', description: 'Atención dental general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'u7v8w9x0-y1z2-3456-1234-567890123456', name: 'Ortodoncia', category: 'medical', description: 'Corrección dental', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'v8w9x0y1-z2a3-4567-2345-678901234567', name: 'Endodoncia', category: 'medical', description: 'Tratamiento de conductos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'w9x0y1z2-a3b4-5678-3456-789012345678', name: 'Periodoncia', category: 'medical', description: 'Tratamiento de encías', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: 'x0y1z2a3-b4c5-6789-4567-890123456789', name: 'Cirugía Oral', category: 'surgical', description: 'Cirugía oral y maxilofacial', requires_license: true, is_active: true, created_at: new Date().toISOString() },
       
       // ADMINISTRACIÓN
-      { id: '51', name: 'Administración Hospitalaria', category: 'administration', description: 'Gestión hospitalaria', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: '52', name: 'Gestión de Calidad', category: 'administration', description: 'Control de calidad médica', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: '53', name: 'Facturación Médica', category: 'administration', description: 'Facturación y seguros', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: '54', name: 'Gestión de Riesgos Sanitarios', category: 'administration', description: 'Gestión de riesgos en salud', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: '55', name: 'Gestión de Tecnología Sanitaria', category: 'administration', description: 'Tecnología médica', requires_license: false, is_active: true, created_at: new Date().toISOString() }
+      { id: 'y1z2a3b4-c5d6-7890-5678-901234567890', name: 'Administración Hospitalaria', category: 'administration', description: 'Gestión hospitalaria', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: 'z2a3b4c5-d6e7-8901-6789-012345678901', name: 'Gestión de Calidad', category: 'administration', description: 'Control de calidad médica', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: 'a3b4c5d6-e7f8-9012-7890-123456789012', name: 'Facturación Médica', category: 'administration', description: 'Facturación y seguros', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: 'b4c5d6e7-f8g9-0123-8901-234567890123', name: 'Gestión de Riesgos Sanitarios', category: 'administration', description: 'Gestión de riesgos en salud', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: 'c5d6e7f8-g9h0-1234-9012-345678901234', name: 'Gestión de Tecnología Sanitaria', category: 'administration', description: 'Tecnología médica', requires_license: false, is_active: true, created_at: new Date().toISOString() }
     ];
 
     setSpecialtiesLoading(true);
@@ -433,7 +434,7 @@ export default function EnhancedSignupQuestionnaire() {
           throw new Error('No se encontraron los datos de registro. Por favor, inicia el proceso nuevamente.');
         }
         
-        let registrationData: any = {};
+        let registrationData: { email?: string; password?: string; timestamp?: number } = {};
         if (pendingRegistrationStr) {
           registrationData = JSON.parse(pendingRegistrationStr);
           
@@ -458,7 +459,7 @@ export default function EnhancedSignupQuestionnaire() {
               role: formData.accountInfo.role,
               phone: formData.personalInfo.phone,
               profile_completed: true
-            } as Record<string, string>
+            }
           }
         });
 
@@ -567,12 +568,13 @@ export default function EnhancedSignupQuestionnaire() {
 
       // 5. Crear relación clínica-usuario si corresponde
       if (clinicId && formData.accountInfo.role !== 'patient') {
+        const roleInClinic = formData.accountInfo.role === 'admin_staff' ? 'admin_staff' : 'doctor';
         const { error: relationError } = await supabase
           .from('clinic_user_relationships')
           .insert({
             clinic_id: clinicId,
             user_id: userId,
-            role_in_clinic: formData.accountInfo.role as string,
+            role_in_clinic: roleInClinic,
             is_active: true
           });
 

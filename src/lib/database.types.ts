@@ -184,7 +184,7 @@ export interface Database {
           id: string
           clinic_id: string
           user_id: string
-          role_in_clinic: string
+          role_in_clinic: 'doctor' | 'admin_staff'
           start_date: string
           end_date: string | null
           is_active: boolean
@@ -196,7 +196,7 @@ export interface Database {
           id?: string
           clinic_id: string
           user_id: string
-          role_in_clinic: string
+          role_in_clinic: 'doctor' | 'admin_staff'
           start_date?: string
           end_date?: string | null
           is_active?: boolean
@@ -208,7 +208,7 @@ export interface Database {
           id?: string
           clinic_id?: string
           user_id?: string
-          role_in_clinic?: string
+          role_in_clinic?: 'doctor' | 'admin_staff'
           start_date?: string
           end_date?: string | null
           is_active?: boolean
@@ -231,7 +231,7 @@ export interface Database {
           social_security_number: string | null
           created_at: string
           updated_at: string | null
-          clinic_id: string | null
+          clinic_id: string
           primary_doctor_id: string | null
           patient_user_id: string | null
           insurance_info: Json
@@ -251,7 +251,7 @@ export interface Database {
           social_security_number?: string | null
           created_at?: string
           updated_at?: string | null
-          clinic_id?: string | null
+          clinic_id?: string
           primary_doctor_id?: string | null
           patient_user_id?: string | null
           insurance_info?: Json
@@ -271,12 +271,44 @@ export interface Database {
           social_security_number?: string | null
           created_at?: string
           updated_at?: string | null
-          clinic_id?: string | null
+          clinic_id?: string
           primary_doctor_id?: string | null
           patient_user_id?: string | null
           insurance_info?: Json
           emergency_contact?: Json
           is_active?: boolean
+        }
+      }
+      patient_registration_tokens: {
+        Row: {
+          id: string
+          token: string
+          doctor_id: string
+          clinic_id: string
+          selected_scale_ids: string[] | null
+          expires_at: string
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          token: string
+          doctor_id: string
+          clinic_id: string
+          selected_scale_ids?: string[] | null
+          expires_at: string
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          token?: string
+          doctor_id?: string
+          clinic_id?: string
+          selected_scale_ids?: string[] | null
+          expires_at?: string
+          status?: string
+          created_at?: string
         }
       }
       hereditary_backgrounds: {

@@ -25,6 +25,7 @@ INSERT INTO public.medical_specialties (name, category, description, requires_li
 ('Medicina Paliativa', 'medical', 'Cuidados paliativos', true),
 ('Medicina Integrativa', 'medical', 'Medicina complementaria', true),
 ('Medicina Funcional', 'medical', 'Medicina funcional y preventiva', true),
+('Medicina de Rehabilitación', 'medical', 'Rehabilitación médica integral', true),
 
 -- ESPECIALIDADES QUIRÚRGICAS ADICIONALES
 ('Cirugía Torácica', 'surgical', 'Cirugía del tórax', true),

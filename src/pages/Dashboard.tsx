@@ -15,17 +15,22 @@ import {
   TrendingUp,
   User,
   Phone,
-  Mail
+  Mail,
+  Building2,
+  UserCheck
 } from 'lucide-react';
 import { format, isToday, isTomorrow, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from '../components/ui/button';
 import NewPatientForm from '../components/NewPatientForm';
+import GenerateInvitationLinkModal from '../components/GenerateInvitationLinkModal';
 import { appointmentService, Appointment } from '../lib/services/appointment-service';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<{ email?: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [quickSearchResults, setQuickSearchResults] = useState<Array<{ id: string; full_name: string; phone?: string | null; email?: string | null }>>([]);
@@ -38,10 +43,11 @@ const Dashboard = () => {
     todayAppointments: 0,
     upcomingAppointments: 0
   });
-  const [recentPatients, setRecentPatients] = useState<Array<{ id: string; full_name: string; created_at: string }>>([]);
+  const [recentPatients, setRecentPatients] = useState<Array<{ id: string; full_name: string; created_at: string; phone?: string | null; email?: string | null; last_consultation?: string }>>([]);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   useEffect(() => {
     const getUser = async () => {
@@ -49,6 +55,28 @@ const Dashboard = () => {
         const { data: { user } } = await supabase.auth.getUser();
         setUser(user);
         if (user) {
+          // Cargar perfil para verificar si es admin
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*, clinic_id, role')
+            .eq('id', user.id)
+            .single();
+            
+          setUserProfile(profile);
+          
+          // Verificar si es admin
+          if (profile?.clinic_id && (profile?.role === 'admin_staff' || profile?.role === 'super_admin')) {
+            const { data: rel } = await supabase
+              .from('clinic_user_relationships')
+              .select('role_in_clinic')
+              .eq('user_id', user.id)
+              .eq('clinic_id', profile.clinic_id)
+              .eq('is_active', true)
+              .maybeSingle();
+              
+            setIsAdmin(rel?.role_in_clinic === 'admin_staff' || profile?.role === 'super_admin');
+          }
+          
           await loadDashboardData();
           await loadUpcomingAppointments(user.id);
         }
@@ -80,9 +108,19 @@ const Dashboard = () => {
         supabase.from('consultations').select('id', { count: 'exact' }),
         supabase.from('prescriptions').select('id', { count: 'exact' }),
         supabase.from('patients')
-          .select('id, full_name, phone, email, created_at')
+          .select(`
+            id, 
+            full_name, 
+            phone, 
+            email, 
+            created_at,
+            consultations (
+              id,
+              created_at
+            )
+          `)
           .order('created_at', { ascending: false })
-          .limit(5)
+          .limit(isAdmin ? 10 : 5)
       ]);
 
       // Consultas de hoy
@@ -102,7 +140,17 @@ const Dashboard = () => {
         upcomingAppointments: 0 // Se actualizará en loadUpcomingAppointments
       });
 
-      setRecentPatients(recentPatientsResult.data || []);
+      // Procesar pacientes recientes con última consulta
+      const processedPatients = (recentPatientsResult.data || []).map(patient => ({
+        ...patient,
+        last_consultation: patient.consultations && patient.consultations.length > 0 
+          ? patient.consultations.sort((a: any, b: any) => 
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )[0]?.created_at
+          : null
+      }));
+      
+      setRecentPatients(processedPatients);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
@@ -238,26 +286,26 @@ const Dashboard = () => {
       {/* Main Content - sin padding adicional ya que AppLayout lo maneja */}
       <main className="w-full max-w-none">{/* Removido el padding y margin que causaba espacios extra */}
         {/* Welcome Section */}
-        <section className="welcome-section page-section">
+        <section className="section">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex-1">
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2 leading-tight">
+              <h1 className="section-title text-3xl mb-2">
                 Bienvenido, {user?.email}
               </h1>
-              <p className="text-gray-400 text-sm sm:text-base lg:text-lg">
+              <p className="section-subtitle">
                 Panel de control de Expediente DLM
               </p>
             </div>
             
             {/* Quick Search */}
-            <div className="quick-search-container relative w-full lg:w-[28rem]">
+            <div className="relative w-full lg:w-[28rem]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-5 w-5" />
               <input
                 type="text"
                 placeholder="Búsqueda rápida de pacientes..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-3 py-3 bg-gray-800/70 backdrop-blur border border-gray-700/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 focus:bg-gray-800 transition-all duration-200"
+                className="form-input w-full pl-10"
               />
               
               {/* Quick Search Results */}
@@ -309,9 +357,9 @@ const Dashboard = () => {
         </section>
 
         {/* Stats Cards */}
-        <section className="stats-section page-section">
-          <div className="dashboard-grid stats-grid">
-            <Link to="/patients" className="dashboard-card group">
+        <section className="section">
+          <div className="stats-grid">
+            <Link to="/patients" className="card group">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="stats-card-icon p-3 bg-blue-500 rounded-xl group-hover:scale-110 transition-transform duration-200">
@@ -326,7 +374,7 @@ const Dashboard = () => {
               </div>
             </Link>
           
-            <div className="dashboard-card">
+            <div className="card">
               <div className="flex items-center">
                 <div className="stats-card-icon p-3 bg-green-500 rounded-xl">
                   <FileText className="h-6 w-6 text-white" />
@@ -342,7 +390,7 @@ const Dashboard = () => {
               </div>
             </div>
           
-            <Link to="/recetas" className="dashboard-card group">
+            <Link to="/recetas" className="card group">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="stats-card-icon p-3 bg-purple-500 rounded-xl group-hover:scale-110 transition-transform duration-200">
@@ -357,7 +405,7 @@ const Dashboard = () => {
               </div>
             </Link>
           
-            <div className="dashboard-card">
+            <div className="card">
               <div className="flex items-center">
                 <div className="stats-card-icon p-3 bg-orange-500 rounded-xl">
                   <Clock className="h-6 w-6 text-white" />
@@ -375,7 +423,7 @@ const Dashboard = () => {
               </div>
             </div>
           
-            <Link to="/citas" className="dashboard-card group">
+            <Link to="/citas" className="card group">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <div className="stats-card-icon p-3 bg-teal-500 rounded-xl group-hover:scale-110 transition-transform duration-200">
@@ -396,10 +444,121 @@ const Dashboard = () => {
           </div>
         </section>
 
+        {/* Admin Section - Lista de Pacientes */}
+        {isAdmin && (
+          <section className="section">
+            <div className="card">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl lg:text-2xl font-semibold text-white flex items-center">
+                  <UserCheck className="h-6 w-6 mr-3 text-cyan-400" />
+                  Pacientes de la Clínica
+                </h2>
+                <div className="flex items-center space-x-4">
+                  <Link to="/clinic-admin" className="text-cyan-400 text-sm hover:text-cyan-300 flex items-center transition-colors">
+                    <Building2 className="h-4 w-4 mr-1" />
+                    Administrar Clínica
+                  </Link>
+                  <Link to="/patients" className="text-cyan-400 text-sm hover:text-cyan-300 flex items-center transition-colors">
+                    Ver todos los pacientes
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Lista de pacientes recientes con más detalles */}
+              <div className="space-y-3">
+                {recentPatients.length > 0 ? (
+                  recentPatients.map((patient) => (
+                    <div
+                      key={patient.id}
+                      onClick={() => navigate(`/expediente/${patient.id}`)}
+                      className="p-4 bg-gray-700 rounded-lg hover:bg-gray-600 cursor-pointer transition-colors group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
+                            <span className="text-white font-semibold text-sm">
+                              {patient.full_name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                            </span>
+                          </div>
+                          <div>
+                            <h3 className="text-white font-medium">{patient.full_name}</h3>
+                            <div className="flex items-center space-x-3 text-sm text-gray-400">
+                              {patient.phone && (
+                                <div className="flex items-center">
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  {patient.phone}
+                                </div>
+                              )}
+                              {patient.email && (
+                                <div className="flex items-center">
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  {patient.email}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <div className="text-right">
+                            <p className="text-xs text-gray-400">Última consulta</p>
+                            <p className="text-sm text-white">
+                              {patient.last_consultation 
+                                ? new Date(patient.last_consultation).toLocaleDateString('es-ES', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })
+                                : 'Sin consultas'}
+                            </p>
+                          </div>
+                          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+                    <p className="text-gray-400 mb-4">No hay pacientes registrados en tu clínica</p>
+                    <Button 
+                      onClick={() => setShowNewPatientForm(true)}
+                      className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Agregar Primer Paciente
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Estadísticas rápidas de la clínica */}
+              {recentPatients.length > 0 && (
+                <div className="mt-6 pt-4 border-t border-gray-700">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-2xl font-bold text-white">{realStats.patients}</p>
+                      <p className="text-xs text-gray-400">Total Pacientes</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{realStats.consultations}</p>
+                      <p className="text-xs text-gray-400">Consultas Totales</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-white">{realStats.todayConsultations}</p>
+                      <p className="text-xs text-gray-400">Consultas Hoy</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Quick Actions */}
-        <section className="actions-section page-section">
+        <section className="section">
           <div className="dashboard-grid content-grid">
-            <div className="dashboard-card">
+            <div className="card">
               <h2 className="text-xl lg:text-2xl font-semibold text-white mb-6">Acciones Rápidas</h2>
             <div className="grid grid-cols-2 gap-4">
               <Button 
@@ -414,6 +573,10 @@ const Dashboard = () => {
                   <Pill className="h-4 w-4 mr-2" />
                   Nueva Receta
                 </Link>
+              </Button>
+              <Button onClick={() => setShowInviteModal(true)} variant="outline" className="border-emerald-400 text-emerald-400 hover:bg-emerald-400 hover:text-gray-900">
+                <Plus className="h-4 w-4 mr-2" />
+                Enlace de Registro
               </Button>
               <Button asChild variant="outline" className="border-green-400 text-green-400 hover:bg-green-400 hover:text-gray-900">
                 <Link to="/plantillas">
@@ -433,10 +596,18 @@ const Dashboard = () => {
                   Configuración
                 </Link>
               </Button>
+              {isAdmin && (
+                <Button asChild variant="outline" className="border-cyan-500 text-cyan-500 hover:bg-cyan-500 hover:text-gray-900 col-span-2">
+                  <Link to="/clinic-admin">
+                    <Building2 className="h-4 w-4 mr-2" />
+                    Administrar Clínica
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
-                      <div className="dashboard-card">
+                      <div className="card">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl lg:text-2xl font-semibold text-white flex items-center">
                   <Calendar className="h-6 w-6 mr-3 text-cyan-400" />
@@ -557,8 +728,8 @@ const Dashboard = () => {
         </section>
 
         {/* Recent Activity */}
-        <section className="page-section">
-          <div className="dashboard-card">
+        <section className="section">
+          <div className="card">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl lg:text-2xl font-semibold text-white">Actividad Reciente</h2>
             <div className="flex items-center space-x-2">
@@ -628,6 +799,7 @@ const Dashboard = () => {
         onClose={() => setShowNewPatientForm(false)}
         onSave={handleNewPatientCreated}
       />
+      <GenerateInvitationLinkModal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />
     </>
   );
 };

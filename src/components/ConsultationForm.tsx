@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Mic, Upload, FlaskConical, Microscope, Pill, Plus, Trash2 } from 'lucide-react';
+import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Mic, Upload, FlaskConical, Microscope, Pill, Plus, Trash2, Lightbulb, FileEdit, Calendar } from 'lucide-react';
 import UploadDropzone from './UploadDropzone';
 import { useForm } from 'react-hook-form';
 // ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
@@ -13,8 +13,12 @@ import ScalePicker from './ScalePicker';
 import ScaleStepper from './ScaleStepper';
 import AppointmentQuickScheduler from './AppointmentQuickScheduler';
 import MedicalScalesPanel from './MedicalScalesPanel';
+// ===== NUEVAS IMPORTACIONES PARA PLANTILLAS INTELIGENTES =====
+import TemplateAssistant from './TemplateAssistant';
+import TemplateRunnerModal, { TemplateResponses } from './TemplateRunnerModal';
 import type { 
-  Database 
+  Database,
+  MedicalTemplate
 } from '../lib/database.types';
 import { calculatePrescriptionExpiry } from '../lib/medicalConfig';
 
@@ -136,6 +140,16 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   const [rxMedications, setRxMedications] = useState<RxMedication[]>([
     { name: '', dosage: '', frequency: '', duration: '', instructions: '' }
   ]);
+  
+  // ===== NUEVOS ESTADOS PARA PLANTILLAS INTELIGENTES =====
+  const [showTemplateAssistant, setShowTemplateAssistant] = useState(false);
+  const [templateRunnerModal, setTemplateRunnerModal] = useState<{
+    isOpen: boolean;
+    template: MedicalTemplate | null;
+    responses?: TemplateResponses;
+  }>({ isOpen: false, template: null });
+  const [treatmentTemplates, setTreatmentTemplates] = useState<MedicalTemplate[]>([]);
+  const [showTreatmentTemplates, setShowTreatmentTemplates] = useState(false);
 
   // ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
   const { validateCompleteForm, validateVitalSignsField, validateMedicationsField } = useValidation();
@@ -625,6 +639,171 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
     setHasUnsavedChanges(false);
   };
 
+  // ===== NUEVAS FUNCIONES PARA PLANTILLAS INTELIGENTES =====
+  
+  // Manejar selección de plantilla desde el asistente
+  const handleTemplateAssistantSelect = (template: MedicalTemplate, templateType: 'interrogatorio' | 'exploracion' | 'prescripcion') => {
+    if (templateType === 'interrogatorio') {
+      setTemplateRunnerModal({ isOpen: true, template });
+    } else if (templateType === 'exploracion') {
+      handleTemplateSelect(template as any); // Convertir a PhysicalExamTemplate
+    } else if (templateType === 'prescripcion') {
+      handleTreatmentTemplateSelect(template);
+    }
+    setShowTemplateAssistant(false);
+  };
+
+  // Completar interrogatorio guiado
+  const handleInterrogatorioComplete = (responses: TemplateResponses) => {
+    // Generar texto formateado desde las respuestas
+    const formattedText = formatTemplateResponses(responses, templateRunnerModal.template!);
+    
+    // Agregar al padecimiento actual
+    const currentValue = watchedData.current_condition || '';
+    const newValue = currentValue.trim() 
+      ? `${currentValue.trim()}\n\n=== ${templateRunnerModal.template!.name} ===\n${formattedText}`
+      : `=== ${templateRunnerModal.template!.name} ===\n${formattedText}`;
+    
+    setValue('current_condition', newValue, { shouldValidate: true, shouldDirty: true });
+    setHasUnsavedChanges(true);
+    setTemplateRunnerModal({ isOpen: false, template: null });
+  };
+
+  // Formatear respuestas de plantilla
+  const formatTemplateResponses = (responses: TemplateResponses, template: MedicalTemplate): string => {
+    const sections = template.content.sections || [];
+    let formattedText = '';
+
+    sections.forEach(section => {
+      const sectionResponses = responses[section.id];
+      if (!sectionResponses) return;
+
+      formattedText += `\n${section.title}:\n`;
+      
+      section.fields?.forEach(field => {
+        const response = sectionResponses[field.id];
+        if (!response && response !== 0) return;
+
+        const responseText = Array.isArray(response) ? response.join(', ') : String(response);
+        formattedText += `• ${field.label}: ${responseText}\n`;
+      });
+    });
+
+    return formattedText.trim();
+  };
+
+  // Manejar selección de plantilla de tratamiento
+  const handleTreatmentTemplateSelect = (template: MedicalTemplate) => {
+    // Extraer contenido de la plantilla y aplicarlo al tratamiento
+    let treatmentText = '';
+    
+    template.content.sections.forEach(section => {
+      if (section.content) {
+        treatmentText += `${section.title}:\n${section.content}\n\n`;
+      }
+      
+      // Si tiene ejercicios (para fisioterapia)
+      if (section.exercises) {
+        treatmentText += `${section.title}:\n`;
+        section.exercises.forEach(exercise => {
+          treatmentText += `• ${exercise.name}: ${exercise.description}\n`;
+          treatmentText += `  Repeticiones: ${exercise.repetitions}, Frecuencia: ${exercise.frequency}\n`;
+          if (exercise.precautions) {
+            treatmentText += `  Precauciones: ${exercise.precautions.join(', ')}\n`;
+          }
+          treatmentText += '\n';
+        });
+      }
+      
+      // Si tiene categorías de dieta
+      if (section.categories) {
+        treatmentText += `${section.title}:\n`;
+        section.categories.forEach(category => {
+          treatmentText += `• ${category.category}: ${category.servings}\n`;
+          treatmentText += `  Ejemplos: ${category.examples}\n`;
+          if (category.notes) {
+            treatmentText += `  Notas: ${category.notes}\n`;
+          }
+          treatmentText += '\n';
+        });
+      }
+    });
+
+    // Aplicar al campo de tratamiento
+    const currentTreatment = watchedData.treatment || '';
+    const newTreatment = currentTreatment.trim()
+      ? `${currentTreatment.trim()}\n\n=== ${template.name} ===\n${treatmentText.trim()}`
+      : `=== ${template.name} ===\n${treatmentText.trim()}`;
+    
+    setValue('treatment', newTreatment, { shouldValidate: true, shouldDirty: true });
+    setHasUnsavedChanges(true);
+    setShowTreatmentTemplates(false);
+  };
+
+  // Cargar plantillas de tratamiento
+  const loadTreatmentTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('medical_templates')
+        .select('*')
+        .eq('type', 'prescripcion')
+        .eq('is_active', true)
+        .or(`user_id.eq.${doctorId},is_public.eq.true`)
+        .order('usage_count', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setTreatmentTemplates(data || []);
+    } catch (error) {
+      console.error('Error loading treatment templates:', error);
+    }
+  };
+
+  // Cargar plantillas cuando se abre el panel
+  useEffect(() => {
+    if (showTreatmentTemplates && treatmentTemplates.length === 0) {
+      loadTreatmentTemplates();
+    }
+  }, [showTreatmentTemplates]);
+
+  // Combinar múltiples plantillas de examen físico
+  const combinePhysicalExamTemplates = (templates: PhysicalExamTemplate[]): PhysicalExamTemplate => {
+    if (templates.length === 1) return templates[0];
+
+    const combinedSections: any[] = [];
+    let sectionOrder = 0;
+
+    templates.forEach((template, templateIndex) => {
+      if (template.definition?.sections) {
+        template.definition.sections.forEach(section => {
+          combinedSections.push({
+            ...section,
+            id: `${section.id}_${templateIndex}`,
+            title: `${template.name} - ${section.title}`,
+            order: sectionOrder++
+          });
+        });
+      }
+    });
+
+    return {
+      id: `combined_${Date.now()}`,
+      name: `Combinada: ${templates.map(t => t.name).join(' + ')}`,
+      doctor_id: doctorId,
+      definition: {
+        sections: combinedSections,
+        version: '1.0',
+        metadata: {
+          lastModified: new Date().toISOString(),
+          author: doctorId,
+          description: `Plantilla combinada de: ${templates.map(t => t.name).join(', ')}`
+        }
+      },
+      created_at: new Date().toISOString(),
+      is_active: true
+    };
+  };
+
   // ✅ NUEVO: Generate PDF
   const generatePDF = async () => {
     try {
@@ -780,21 +959,32 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
           )}
 
           <div className="space-y-6">
-            {/* ✅ MEJORADO: Padecimiento Actual con validación y botón de IA */}
+            {/* ✅ MEJORADO: Padecimiento Actual con validación y botones de asistencia */}
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-medium text-gray-300">
                   Padecimiento Actual *
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsTranscriptionModalOpen(true)}
-                  className="flex items-center px-3 py-1 text-xs font-medium text-cyan-300 bg-cyan-900/50 rounded-md hover:bg-cyan-800/70 transition-colors"
-                  title="Usar Asistente de Transcripción con IA"
-                >
-                  <Mic className="h-4 w-4 mr-2" />
-                  Asistente IA
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplateAssistant(true)}
+                    className="flex items-center px-3 py-1 text-xs font-medium text-blue-300 bg-blue-900/50 rounded-md hover:bg-blue-800/70 transition-colors"
+                    title="Asistente Inteligente de Plantillas"
+                  >
+                    <Lightbulb className="h-4 w-4 mr-2" />
+                    Plantillas IA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsTranscriptionModalOpen(true)}
+                    className="flex items-center px-3 py-1 text-xs font-medium text-cyan-300 bg-cyan-900/50 rounded-md hover:bg-cyan-800/70 transition-colors"
+                    title="Usar Asistente de Transcripción con IA"
+                  >
+                    <Mic className="h-4 w-4 mr-2" />
+                    Transcripción IA
+                  </button>
+                </div>
               </div>
               <textarea
                 {...register('current_condition', { 
@@ -822,7 +1012,13 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
                 <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 bg-gray-750">
                   <PhysicalExamTemplates
                     onSelectTemplate={handleTemplateSelect}
+                    onSelectMultiple={(templates) => {
+                      // Combinar múltiples plantillas en una sola
+                      const combinedTemplate = combinePhysicalExamTemplates(templates);
+                      handleTemplateSelect(combinedTemplate);
+                    }}
                     doctorId={doctorId}
+                    allowMultipleSelection={true}
                   />
                 </div>
               ) : (
@@ -1273,11 +1469,22 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
               </p>
             </div>
 
-            {/* ✅ MEJORADO: Tratamiento con validación */}
+            {/* ✅ MEJORADO: Tratamiento con validación y plantillas */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Tratamiento *
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Tratamiento *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowTreatmentTemplates(true)}
+                  className="flex items-center px-3 py-1 text-xs font-medium text-green-300 bg-green-900/50 rounded-md hover:bg-green-800/70 transition-colors"
+                  title="Usar Plantilla de Tratamiento"
+                >
+                  <FileEdit className="h-4 w-4 mr-2" />
+                  Plantillas
+                </button>
+              </div>
               <textarea
                 {...register('treatment', { 
                   required: 'El tratamiento es requerido',
@@ -1294,6 +1501,51 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
               <p className="mt-1 text-xs text-gray-400">
                 {watchedData.treatment?.length || 0}/1000 caracteres
               </p>
+
+              {/* Panel de plantillas de tratamiento */}
+              {showTreatmentTemplates && (
+                <div className="mt-3 bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-medium text-white">Plantillas de Tratamiento</h4>
+                    <button
+                      onClick={() => setShowTreatmentTemplates(false)}
+                      className="text-gray-400 hover:text-white transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  
+                  {treatmentTemplates.length === 0 ? (
+                    <div className="text-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-400">Cargando plantillas...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {treatmentTemplates.map(template => (
+                        <div
+                          key={template.id}
+                          className="flex items-center justify-between p-3 bg-gray-600/50 rounded-lg hover:bg-gray-600 transition-colors cursor-pointer"
+                          onClick={() => handleTreatmentTemplateSelect(template)}
+                        >
+                          <div>
+                            <h5 className="text-sm font-medium text-white">{template.name}</h5>
+                            <p className="text-xs text-gray-400">{template.description}</p>
+                            {template.specialty && (
+                              <span className="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded mt-1 inline-block">
+                                {template.specialty}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Usado {template.usage_count} veces
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1539,6 +1791,26 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
           onClose={() => setIsTranscriptionModalOpen(false)}
           onApplyText={handleApplyTranscription}
         />
+
+      {/* ===== NUEVOS MODALES PARA PLANTILLAS INTELIGENTES ===== */}
+      <TemplateAssistant
+        currentCondition={watchedData.current_condition || ''}
+        diagnosis={watchedData.diagnosis || ''}
+        doctorId={doctorId}
+        onSelectTemplate={handleTemplateAssistantSelect}
+        isOpen={showTemplateAssistant}
+        onClose={() => setShowTemplateAssistant(false)}
+      />
+
+      {templateRunnerModal.template && (
+        <TemplateRunnerModal
+          template={templateRunnerModal.template}
+          isOpen={templateRunnerModal.isOpen}
+          onClose={() => setTemplateRunnerModal({ isOpen: false, template: null })}
+          onComplete={handleInterrogatorioComplete}
+          initialResponses={templateRunnerModal.responses}
+        />
+      )}
 
       {stepperScale && (
         <ScaleStepper

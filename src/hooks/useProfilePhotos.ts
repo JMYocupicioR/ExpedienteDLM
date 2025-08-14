@@ -77,6 +77,75 @@ export const useProfilePhotos = () => {
     }
   }, [user]);
 
+  // Subir logo de la clínica (bucket: clinic-assets)
+  const uploadClinicLogo = useCallback(async (clinicId: string, file: File): Promise<PhotoUploadResult> => {
+    if (!user) {
+      return { url: null, error: 'Usuario no autenticado' };
+    }
+
+    if (!clinicId) {
+      return { url: null, error: 'Perfil sin clínica asociada' };
+    }
+
+    try {
+      setUploading(true);
+      setError(null);
+
+      // Validar tamaño/tipo
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('El logo debe ser menor a 5MB');
+      }
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error('Formato no válido. Use JPG, PNG, WebP o SVG');
+      }
+
+      // Verificar permisos: admin de clínica o super_admin
+      const [{ data: rel }, { data: prof }] = await Promise.all([
+        supabase
+          .from('clinic_user_relationships')
+          .select('role_in_clinic, is_active')
+          .eq('user_id', user.id)
+          .eq('clinic_id', clinicId)
+          .eq('is_active', true)
+          .maybeSingle(),
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single(),
+      ]);
+
+      const isClinicAdmin = rel?.role_in_clinic === 'admin_staff' || prof?.role === 'super_admin';
+      if (!isClinicAdmin) {
+        throw new Error('No tienes permisos para actualizar el logo de la clínica');
+      }
+
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const filePath = `${clinicId}/logo.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('clinic-assets')
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('clinic-assets')
+        .getPublicUrl(filePath);
+
+      return { url: publicUrlData.publicUrl, error: null };
+    } catch (err: any) {
+      const errorMessage = err.message || 'Error al subir el logo';
+      setError(errorMessage);
+      return { url: null, error: errorMessage };
+    } finally {
+      setUploading(false);
+    }
+  }, [user]);
+
   // Función para subir icono de receta
   const uploadPrescriptionIcon = useCallback(async (file: File): Promise<PhotoUploadResult> => {
     if (!user) {
@@ -370,6 +439,7 @@ export const useProfilePhotos = () => {
     error,
     uploadProfilePhoto,
     uploadPrescriptionIcon,
+    uploadClinicLogo,
     getProfilePhotoUrl,
     getPrescriptionIconUrl,
     deleteProfilePhoto,

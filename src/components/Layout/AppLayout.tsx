@@ -50,23 +50,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="app-container" style={{ background: 'var(--gradient-bg)', color: 'var(--text-primary)' }}>
+    <div className="app-container">
       <Navbar onNewPatientClick={handleNewPatientClick} />
       
       {/* Main Content Area */}
-      <main className={`
-        transition-all duration-300 ease-in-out min-h-screen
-        ${isNavCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
-      `}>
-        <div className={`
-          main-content-container min-h-screen
-          ${isNavCollapsed ? 'sidebar-collapsed' : ''}
-        `}>
-          <div className="dashboard-content">
+      <div className="main-layout">
+        <div className={`content-wrapper ${isNavCollapsed ? 'sidebar-collapsed' : ''}`}>
+          <div className="page-container">
             {children || <Outlet />}
           </div>
         </div>
-      </main>
+      </div>
 
       <NewPatientForm
         isOpen={showNewPatientForm}
