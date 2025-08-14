@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
+import ClinicSwitcher from '../Layout/ClinicSwitcher';
 
 interface NavItem {
   id: string;
@@ -246,6 +247,14 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
               </div>
             )}
           </div>
+          
+          {/* Clinic Switcher */}
+          {!isCollapsed && (profile?.role === 'doctor' || profile?.role === 'admin_staff' || profile?.role === 'super_admin') && (
+            <div className="mt-3 px-1">
+              <div className="text-xs text-gray-500 mb-2 px-2">Clínica Activa</div>
+              <ClinicSwitcher />
+            </div>
+          )}
         </div>
 
         {/* Navigation Items */}
@@ -378,6 +387,14 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
                   </p>
                 </div>
               </div>
+              
+              {/* Mobile Clinic Switcher */}
+              {(profile?.role === 'doctor' || profile?.role === 'admin_staff' || profile?.role === 'super_admin') && (
+                <div className="mt-3">
+                  <div className="text-xs text-gray-500 mb-2">Clínica Activa</div>
+                  <ClinicSwitcher />
+                </div>
+              )}
             </div>
 
             {/* Mobile navigation */}

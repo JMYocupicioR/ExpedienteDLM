@@ -64,17 +64,16 @@ const Dashboard = () => {
             
           setUserProfile(profile);
           
-          // Verificar si es admin
+          // Verificar si es admin (usando clinic_members)
           if (profile?.clinic_id && (profile?.role === 'admin_staff' || profile?.role === 'super_admin')) {
             const { data: rel } = await supabase
-              .from('clinic_user_relationships')
-              .select('role_in_clinic')
+              .from('clinic_members')
+              .select('role')
               .eq('user_id', user.id)
               .eq('clinic_id', profile.clinic_id)
-              .eq('is_active', true)
               .maybeSingle();
-              
-            setIsAdmin(rel?.role_in_clinic === 'admin_staff' || profile?.role === 'super_admin');
+
+            setIsAdmin(rel?.role === 'admin' || profile?.role === 'super_admin');
           }
           
           await loadDashboardData();

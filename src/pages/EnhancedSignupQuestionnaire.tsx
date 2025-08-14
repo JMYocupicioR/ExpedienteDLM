@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { EnhancedRegistrationData, MedicalSpecialty, Clinic } from '../lib/database.types';
+import { ClinicRegistrationForm } from '../components/ClinicRegistrationForm';
 
 export default function EnhancedSignupQuestionnaire() {
   const navigate = useNavigate();

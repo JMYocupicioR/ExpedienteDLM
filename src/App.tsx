@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { ClinicProvider } from './context/ClinicContext';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
 import Auth from './pages/Auth';
@@ -59,16 +60,17 @@ function App() {
 
   return (
     <ErrorBoundary>
-      {/* Skip links para navegación accesible */}
-      <a href="#main-content" className="skip-link">
-        Saltar al contenido principal
-      </a>
-      <a href="#navigation" className="skip-link">
-        Saltar a la navegación
-      </a>
-      
-      <Router>
-        <Routes>
+      <ClinicProvider>
+        {/* Skip links para navegación accesible */}
+        <a href="#main-content" className="skip-link">
+          Saltar al contenido principal
+        </a>
+        <a href="#navigation" className="skip-link">
+          Saltar a la navegación
+        </a>
+        
+        <Router>
+          <Routes>
           {/* Public routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/about" element={<AboutPage />} />
@@ -169,6 +171,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
+      </ClinicProvider>
     </ErrorBoundary>
   );
 }
