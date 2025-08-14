@@ -27,16 +27,26 @@ export default function EnhancedSignupQuestionnaire() {
   const [isSpecialtyDropdownOpen, setIsSpecialtyDropdownOpen] = useState(false);
   const [specialtiesLoading, setSpecialtiesLoading] = useState(false);
   const [useBackupSpecialties, setUseBackupSpecialties] = useState(false);
-  const [emailCheckLoading, setEmailCheckLoading] = useState(false);
-  const [emailExists, setEmailExists] = useState(false);
+  // Eliminado emailCheckLoading y emailExists - ya se verifica en Auth.tsx
 
-  // Obtener email del estado de navegación
+  // Obtener email del estado de navegación o sessionStorage
   const initialEmail = location.state?.email || '';
+  const fromRegistration = location.state?.fromRegistration || false;
+  const fromOAuth = location.state?.fromOAuth || false;
+  const oauthData = location.state?.oauthData || null;
+  
+  // Recuperar datos pendientes de sessionStorage
+  const pendingRegistration = sessionStorage.getItem('pendingRegistration');
+  const pendingData = pendingRegistration ? JSON.parse(pendingRegistration) : null;
+  
+  // Recuperar datos de OAuth si existen
+  const oauthRegistration = sessionStorage.getItem('oauthRegistration');
+  const oauthSessionData = oauthRegistration ? JSON.parse(oauthRegistration) : null;
   
   const [formData, setFormData] = useState<EnhancedRegistrationData>({
     personalInfo: {
-      fullName: '',
-      email: initialEmail,
+      fullName: oauthData?.fullName || oauthSessionData?.fullName || '',
+      email: initialEmail || pendingData?.email || oauthSessionData?.email || '',
       phone: '',
       birthDate: '',
       gender: '',
@@ -44,8 +54,8 @@ export default function EnhancedSignupQuestionnaire() {
     },
     accountInfo: {
       role: 'doctor',
-      password: '',
-      confirmPassword: ''
+      password: pendingData?.password || '',
+      confirmPassword: pendingData?.password || ''
     },
     professionalInfo: {
       licenseNumber: '',
@@ -78,28 +88,76 @@ export default function EnhancedSignupQuestionnaire() {
   });
 
   const loadInitialData = useCallback(async () => {
-    // Especialidades de respaldo en caso de que la BD no esté disponible
+    // Especialidades de respaldo ampliadas en caso de que la BD no esté disponible
     const backupSpecialties: MedicalSpecialty[] = [
-      { id: '1', name: 'Medicina General', category: 'medical', description: 'Atención médica general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '2', name: 'Cardiología', category: 'medical', description: 'Enfermedades del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '3', name: 'Pediatría', category: 'medical', description: 'Medicina pediátrica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '4', name: 'Neurología', category: 'medical', description: 'Enfermedades del sistema nervioso', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '5', name: 'Dermatología', category: 'medical', description: 'Enfermedades de la piel', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '6', name: 'Ginecología y Obstetricia', category: 'surgical', description: 'Salud femenina y reproductiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '7', name: 'Traumatología', category: 'surgical', description: 'Cirugía de huesos y articulaciones', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '8', name: 'Psiquiatría', category: 'medical', description: 'Salud mental', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '9', name: 'Medicina Interna', category: 'medical', description: 'Medicina interna de adultos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '10', name: 'Cirugía General', category: 'surgical', description: 'Cirugía general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '11', name: 'Oftalmología', category: 'surgical', description: 'Cirugía ocular', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '12', name: 'Urología', category: 'surgical', description: 'Cirugía urológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '13', name: 'Endocrinología', category: 'medical', description: 'Enfermedades endocrinas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '14', name: 'Gastroenterología', category: 'medical', description: 'Enfermedades digestivas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '15', name: 'Neumología', category: 'medical', description: 'Enfermedades respiratorias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '16', name: 'Reumatología', category: 'medical', description: 'Enfermedades reumáticas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '17', name: 'Oncología', category: 'medical', description: 'Tratamiento del cáncer', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '18', name: 'Radiología', category: 'diagnostic', description: 'Diagnóstico por imágenes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '19', name: 'Anestesiología', category: 'medical', description: 'Medicina perioperatoria', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: '20', name: 'Medicina de Urgencias', category: 'medical', description: 'Medicina de emergencias', requires_license: true, is_active: true, created_at: new Date().toISOString() }
+      // MÉDICAS
+      { id: '1', name: 'Medicina General', category: 'medical', description: 'Atención médica integral y preventiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '2', name: 'Cardiología', category: 'medical', description: 'Enfermedades cardiovasculares y del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '3', name: 'Pediatría', category: 'medical', description: 'Medicina pediátrica integral (0-18 años)', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '4', name: 'Neurología', category: 'medical', description: 'Enfermedades del sistema nervioso central y periférico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '5', name: 'Dermatología', category: 'medical', description: 'Enfermedades de la piel, pelo y uñas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '6', name: 'Medicina Interna', category: 'medical', description: 'Medicina interna de adultos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '7', name: 'Endocrinología', category: 'medical', description: 'Enfermedades endocrinas y metabólicas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '8', name: 'Gastroenterología', category: 'medical', description: 'Enfermedades digestivas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '9', name: 'Neumología', category: 'medical', description: 'Enfermedades respiratorias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '10', name: 'Reumatología', category: 'medical', description: 'Enfermedades reumáticas y autoinmunes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '11', name: 'Oncología', category: 'medical', description: 'Tratamiento del cáncer', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '12', name: 'Psiquiatría', category: 'medical', description: 'Salud mental y trastornos psiquiátricos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '13', name: 'Anestesiología', category: 'medical', description: 'Medicina perioperatoria y anestesia', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '14', name: 'Medicina de Urgencias', category: 'medical', description: 'Medicina de emergencias y urgencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '15', name: 'Alergología e Inmunología', category: 'medical', description: 'Alergias e inmunodeficiencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '16', name: 'Hematología', category: 'medical', description: 'Enfermedades de la sangre', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '17', name: 'Infectología', category: 'medical', description: 'Enfermedades infecciosas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '18', name: 'Medicina del Deporte', category: 'medical', description: 'Medicina deportiva y ejercicio', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '19', name: 'Medicina Familiar', category: 'medical', description: 'Atención integral familiar', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '20', name: 'Genética Médica', category: 'medical', description: 'Enfermedades genéticas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      
+      // QUIRÚRGICAS
+      { id: '21', name: 'Cirugía General', category: 'surgical', description: 'Cirugía general y abdominal', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '22', name: 'Ginecología y Obstetricia', category: 'surgical', description: 'Salud femenina y reproductiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '23', name: 'Ortopedia y Traumatología', category: 'surgical', description: 'Cirugía de huesos y articulaciones', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '24', name: 'Oftalmología', category: 'surgical', description: 'Cirugía ocular y oftalmológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '25', name: 'Urología', category: 'surgical', description: 'Cirugía urológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '26', name: 'Neurocirugía', category: 'surgical', description: 'Cirugía del sistema nervioso', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '27', name: 'Cirugía Cardiovascular', category: 'surgical', description: 'Cirugía del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '28', name: 'Cirugía Torácica', category: 'surgical', description: 'Cirugía del tórax', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '29', name: 'Cirugía Plástica', category: 'surgical', description: 'Cirugía estética y reconstructiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '30', name: 'Otorrinolaringología', category: 'surgical', description: 'Cirugía de oído, nariz y garganta', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      
+      // DIAGNÓSTICAS
+      { id: '31', name: 'Radiología', category: 'diagnostic', description: 'Diagnóstico por imágenes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '32', name: 'Patología', category: 'diagnostic', description: 'Diagnóstico anatomopatológico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '33', name: 'Medicina Nuclear', category: 'diagnostic', description: 'Diagnóstico y tratamiento nuclear', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '34', name: 'Laboratorio Clínico', category: 'diagnostic', description: 'Análisis clínicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '35', name: 'Radiología Intervencionista', category: 'diagnostic', description: 'Procedimientos radiológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      
+      // TERAPIAS
+      { id: '36', name: 'Fisioterapia', category: 'therapy', description: 'Terapia física y rehabilitación', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '37', name: 'Terapia Respiratoria', category: 'therapy', description: 'Terapia respiratoria', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '38', name: 'Psicología Clínica', category: 'therapy', description: 'Terapia psicológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '39', name: 'Nutrición Clínica', category: 'therapy', description: 'Terapia nutricional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '40', name: 'Terapia Ocupacional', category: 'therapy', description: 'Terapia ocupacional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      
+      // ENFERMERÍA
+      { id: '41', name: 'Enfermería General', category: 'nursing', description: 'Cuidados de enfermería general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '42', name: 'Enfermería Especializada', category: 'nursing', description: 'Cuidados especializados', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '43', name: 'Enfermería de Urgencias', category: 'nursing', description: 'Cuidados en emergencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '44', name: 'Enfermería Quirúrgica', category: 'nursing', description: 'Cuidados perioperatorios', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '45', name: 'Enfermería Oncológica', category: 'nursing', description: 'Cuidados oncológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      
+      // ODONTOLOGÍA
+      { id: '46', name: 'Odontología General', category: 'medical', description: 'Atención dental general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '47', name: 'Ortodoncia', category: 'medical', description: 'Corrección dental', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '48', name: 'Endodoncia', category: 'medical', description: 'Tratamiento de conductos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '49', name: 'Periodoncia', category: 'medical', description: 'Tratamiento de encías', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      { id: '50', name: 'Cirugía Oral', category: 'surgical', description: 'Cirugía oral y maxilofacial', requires_license: true, is_active: true, created_at: new Date().toISOString() },
+      
+      // ADMINISTRACIÓN
+      { id: '51', name: 'Administración Hospitalaria', category: 'administration', description: 'Gestión hospitalaria', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: '52', name: 'Gestión de Calidad', category: 'administration', description: 'Control de calidad médica', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: '53', name: 'Facturación Médica', category: 'administration', description: 'Facturación y seguros', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: '54', name: 'Gestión de Riesgos Sanitarios', category: 'administration', description: 'Gestión de riesgos en salud', requires_license: false, is_active: true, created_at: new Date().toISOString() },
+      { id: '55', name: 'Gestión de Tecnología Sanitaria', category: 'administration', description: 'Tecnología médica', requires_license: false, is_active: true, created_at: new Date().toISOString() }
     ];
 
     setSpecialtiesLoading(true);
@@ -124,7 +182,25 @@ export default function EnhancedSignupQuestionnaire() {
       } else {
         console.log('✅ Especialidades cargadas desde BD:', specialtiesData.length);
         console.log('📋 Lista de especialidades:', specialtiesData.map(s => s.name));
-        setSpecialties(specialtiesData);
+        
+        // Combinar especialidades de BD con las de respaldo para mayor cobertura
+        const combinedSpecialties = [...specialtiesData];
+        
+        // Agregar especialidades de respaldo que no estén en BD
+        backupSpecialties.forEach(backupSpec => {
+          const exists = combinedSpecialties.some(dbSpec => 
+            dbSpec.name.toLowerCase() === backupSpec.name.toLowerCase()
+          );
+          if (!exists) {
+            combinedSpecialties.push(backupSpec);
+          }
+        });
+        
+        // Ordenar por nombre
+        combinedSpecialties.sort((a, b) => a.name.localeCompare(b.name));
+        
+        console.log('🔗 Total de especialidades disponibles:', combinedSpecialties.length);
+        setSpecialties(combinedSpecialties);
         setUseBackupSpecialties(false);
       }
 
@@ -153,8 +229,11 @@ export default function EnhancedSignupQuestionnaire() {
 
   // Load initial data
   useEffect(() => {
+    console.log('🔄 Enhanced SignupQuestionnaire mounted');
+    console.log('📧 Initial email:', initialEmail);
+    console.log('📋 From registration:', fromRegistration);
     loadInitialData();
-  }, [loadInitialData]);
+  }, [loadInitialData, initialEmail, fromRegistration]);
 
   // Filter specialties when search changes
   useEffect(() => {
@@ -186,72 +265,15 @@ export default function EnhancedSignupQuestionnaire() {
     }
   }, [clinicSearch, clinics]);
 
-  // Función para verificar si el email ya existe
-  const checkEmailExists = useCallback(async (email: string): Promise<boolean> => {
-    if (!email || !email.includes('@')) return false;
-    
-    try {
-      setEmailCheckLoading(true);
-      
-      // Verificar en la tabla profiles
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('email', email)
-        .single();
-      
-      if (profileData && !profileError) {
-        console.log('📧 Email encontrado en profiles:', email);
-        return true;
-      }
-      
-      // También intentamos con signUp para verificar en auth.users
-      // Esto fallará si el email ya existe, lo cual es lo que queremos detectar
-      try {
-        const { error: authError } = await supabase.auth.signUp({
-          email: email,
-          password: 'temp_check_password_123!@#'
-        });
-        
-        if (authError && (
-          authError.message.includes('already') || 
-          authError.message.includes('registered') ||
-          authError.message.includes('exists') ||
-          authError.message.includes('User already')
-        )) {
-          console.log('📧 Email encontrado en auth.users:', email);
-          return true;
-        }
-      } catch (tempError) {
-        console.log('⚠️ Error en verificación auth:', tempError);
-      }
-      
-      return false;
-      
-    } catch (error) {
-      console.error('❌ Error verificando email:', error);
-      return false;
-    } finally {
-      setEmailCheckLoading(false);
-    }
-  }, []);
+  // Función checkEmailExists eliminada - la verificación se hace en Auth.tsx
 
-  // Verificar email cuando cambie y no esté pre-validado
+  // useEffects de verificación de email eliminados - ya se verifica en Auth.tsx
   useEffect(() => {
-    if (formData.personalInfo.email && 
-        !initialEmail && 
-        formData.personalInfo.email !== initialEmail) {
-      
-      const debounceTimer = setTimeout(async () => {
-        const exists = await checkEmailExists(formData.personalInfo.email);
-        setEmailExists(exists);
-      }, 1000); // Debounce de 1 segundo
-      
-      return () => clearTimeout(debounceTimer);
-    } else {
-      setEmailExists(false);
+    if (initialEmail && fromRegistration) {
+      console.log('✅ Email pre-verificado desde Auth.tsx:', initialEmail);
+      console.log('📋 El usuario puede proceder con el registro');
     }
-  }, [formData.personalInfo.email, initialEmail, checkEmailExists]);
+  }, [initialEmail, fromRegistration]);
 
   const updateFormData = <K extends keyof EnhancedRegistrationData>(
     section: K,
@@ -279,10 +301,7 @@ export default function EnhancedSignupQuestionnaire() {
           setError('El correo electrónico es requerido');
           return false;
         }
-        if (emailExists) {
-          setError('Este correo electrónico ya está registrado');
-          return false;
-        }
+        // Email ya verificado en Auth.tsx - no necesitamos verificar aquí
         if (!formData.personalInfo.phone.trim()) {
           setError('El teléfono es requerido');
           return false;
@@ -290,17 +309,20 @@ export default function EnhancedSignupQuestionnaire() {
         return true;
 
       case 2: // Información de cuenta y rol
-        if (!formData.accountInfo.password) {
-          setError('La contraseña es requerida');
-          return false;
-        }
-        if (formData.accountInfo.password.length < 6) {
-          setError('La contraseña debe tener al menos 6 caracteres');
-          return false;
-        }
-        if (formData.accountInfo.password !== formData.accountInfo.confirmPassword) {
-          setError('Las contraseñas no coinciden');
-          return false;
+        // Si es usuario OAuth, no necesita contraseña
+        if (!fromOAuth && !oauthSessionData) {
+          if (!formData.accountInfo.password) {
+            setError('La contraseña es requerida');
+            return false;
+          }
+          if (formData.accountInfo.password.length < 6) {
+            setError('La contraseña debe tener al menos 6 caracteres');
+            return false;
+          }
+          if (formData.accountInfo.password !== formData.accountInfo.confirmPassword) {
+            setError('Las contraseñas no coinciden');
+            return false;
+          }
         }
         if (!formData.accountInfo.role) {
           setError('Debe seleccionar un tipo de cuenta');
@@ -354,6 +376,7 @@ export default function EnhancedSignupQuestionnaire() {
   };
 
   const handleNextStep = () => {
+    // Simplificado - la verificación de email ya se hizo en Auth.tsx
     if (validateStep(currentStep)) {
       setCurrentStep(currentStep + 1);
       setError(null);
@@ -372,30 +395,88 @@ export default function EnhancedSignupQuestionnaire() {
       setLoading(true);
       setError(null);
 
-      // 1. Verificación final de email antes de proceder
-      console.log('🔍 Verificación final de email antes del registro...');
-      const emailAlreadyExists = await checkEmailExists(formData.personalInfo.email);
-      if (emailAlreadyExists) {
-        setError('Este correo electrónico ya está registrado. Por favor, inicia sesión con tu cuenta existente.');
-        return;
-      }
+      console.log('🚀 Completando registro para:', formData.personalInfo.email);
 
-      // 2. Crear cuenta de usuario en Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.personalInfo.email,
-        password: formData.accountInfo.password,
-        options: {
-          data: {
+      // NUEVO FLUJO: Manejar tanto usuarios OAuth como registro tradicional
+      
+      let userId: string;
+      
+      // Verificar si es un usuario OAuth
+      if (oauthSessionData) {
+        console.log('🔐 Completando perfil de usuario OAuth...');
+        userId = oauthSessionData.userId;
+        
+        // Actualizar el perfil existente con información completa
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
             full_name: formData.personalInfo.fullName,
-            role: formData.accountInfo.role
-          } as Record<string, string>
+            phone: formData.personalInfo.phone,
+            role: formData.accountInfo.role,
+            profile_completed: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId);
+          
+        if (updateError) {
+          console.error('Error actualizando perfil OAuth:', updateError);
+          throw new Error('Error al actualizar el perfil');
         }
-      });
+        
+        // Limpiar datos OAuth temporales
+        sessionStorage.removeItem('oauthRegistration');
+        
+      } else {
+        // Flujo tradicional: crear usuario con email/contraseña
+        const pendingRegistrationStr = sessionStorage.getItem('pendingRegistration');
+        if (!pendingRegistrationStr && !formData.accountInfo.password) {
+          throw new Error('No se encontraron los datos de registro. Por favor, inicia el proceso nuevamente.');
+        }
+        
+        let registrationData: any = {};
+        if (pendingRegistrationStr) {
+          registrationData = JSON.parse(pendingRegistrationStr);
+          
+          // Verificar que los datos no sean muy antiguos (máx 1 hora)
+          if (Date.now() - registrationData.timestamp > 3600000) {
+            sessionStorage.removeItem('pendingRegistration');
+            throw new Error('La sesión de registro ha expirado. Por favor, inicia nuevamente.');
+          }
+        }
+        
+        const email = formData.personalInfo.email || registrationData.email;
+        const password = formData.accountInfo.password || registrationData.password;
+        
+        console.log('🔐 Creando usuario con email/contraseña...');
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: email,
+          password: password,
+          options: {
+            data: {
+              full_name: formData.personalInfo.fullName,
+              role: formData.accountInfo.role,
+              phone: formData.personalInfo.phone,
+              profile_completed: true
+            } as Record<string, string>
+          }
+        });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('No se pudo crear el usuario');
-
-      const userId = authData.user.id;
+        if (authError) {
+          console.error('Error de registro:', authError);
+          throw new Error(authError.message || 'Error al crear la cuenta');
+        }
+        
+        if (!authData?.user) {
+          throw new Error('No se pudo crear el usuario');
+        }
+        
+        userId = authData.user.id;
+        console.log('✅ Usuario creado exitosamente:', userId);
+        
+        // Limpiar datos temporales
+        sessionStorage.removeItem('pendingRegistration');
+      }
 
       // 2. Crear o seleccionar clínica si no es paciente
       let clinicId: string | null = null;
@@ -446,35 +527,20 @@ export default function EnhancedSignupQuestionnaire() {
         }
       };
 
-      // Crear perfil de usuario - manejar errores de RLS
-      console.log('📝 Creando perfil de usuario...');
+      // Crear o actualizar perfil de usuario usando upsert
+      console.log('📝 Actualizando perfil de usuario...');
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert(profileData);
+        .upsert(profileData, { 
+          onConflict: 'id',
+          ignoreDuplicates: false 
+        });
 
       if (profileError) {
-        console.error('❌ Error al crear perfil:', profileError);
-        
-        // Si es error de RLS, intentar con una estrategia diferente
-        if (profileError.message.includes('row-level security policy')) {
-          console.log('⚠️ Error de RLS detectado, intentando estrategia alternativa...');
-          
-          // Intentar actualizar en lugar de insertar (upsert)
-          const { error: upsertError } = await supabase
-            .from('profiles')
-            .upsert(profileData, { onConflict: 'id' });
-          
-          if (upsertError) {
-            console.error('❌ Error en upsert:', upsertError);
-            throw new Error(`Error al crear perfil: ${upsertError.message}`);
-          } else {
-            console.log('✅ Perfil creado usando upsert');
-          }
-        } else {
-          throw new Error(`Error al crear perfil: ${profileError.message}`);
-        }
+        console.error('❌ Error al actualizar perfil:', profileError);
+        throw new Error(`Error al actualizar perfil: ${profileError.message}`);
       } else {
-        console.log('✅ Perfil creado exitosamente');
+        console.log('✅ Perfil actualizado exitosamente');
       }
 
       // 4. Si es paciente, crear registro en tabla patients
@@ -518,20 +584,37 @@ export default function EnhancedSignupQuestionnaire() {
       // Mostrar mensaje de éxito
       setError(null);
       
-      // Redirigir según el estado de confirmación de email
+      // Registro completado exitosamente
+      console.log('🎉 Registro completado exitosamente');
+      
+      // Redirigir al dashboard
       setTimeout(() => {
-        if (authData.user.email_confirmed_at) {
-          navigate('/dashboard');
-        } else {
-          // Mostrar mensaje de confirmación de email
-          setError('¡Cuenta creada! Revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.');
-          setTimeout(() => navigate('/auth'), 3000);
-        }
+        navigate('/dashboard');
       }, 1000);
 
     } catch (err: unknown) {
       console.error('Error durante el registro:', err);
-      setError(err instanceof Error ? err.message : 'Error durante el registro');
+      
+      // Mejorar mensajes de error específicos
+      if (err instanceof Error) {
+        const errorMsg = err.message.toLowerCase();
+        
+        if (errorMsg.includes('invalid') && errorMsg.includes('password')) {
+          setError('La contraseña debe tener al menos 6 caracteres');
+        } else if (errorMsg.includes('email') && errorMsg.includes('valid')) {
+          setError('Por favor, ingresa un correo electrónico válido');
+        } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
+          setError('Error de conexión. Por favor, verifica tu internet e intenta nuevamente');
+        } else if (errorMsg.includes('rate limit')) {
+          setError('Demasiados intentos. Por favor, espera unos minutos antes de intentar nuevamente');
+        } else if (errorMsg.includes('password') && errorMsg.includes('should be')) {
+          setError('La contraseña debe tener al menos 6 caracteres');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Error inesperado al completar el registro. Por favor, intenta nuevamente');
+      }
     } finally {
       setLoading(false);
     }
@@ -701,27 +784,9 @@ export default function EnhancedSignupQuestionnaire() {
         {/* Content */}
         <div className="p-8">
           {error && (
-            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 mr-3 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-red-300">{error}</p>
-                  {(error.includes('ya está registrado') || error.includes('already')) && (
-                    <div className="mt-2 pt-2 border-t border-red-700">
-                      <p className="text-red-200 text-sm">
-                        ¿Ya tienes una cuenta? 
-                        <button
-                          type="button"
-                          onClick={() => navigate('/auth')}
-                          className="ml-1 px-2 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-xs transition-colors"
-                        >
-                          Iniciar Sesión
-                        </button>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center">
+              <AlertCircle className="h-5 w-5 mr-3 flex-shrink-0" />
+              {error}
             </div>
           )}
 
@@ -758,10 +823,6 @@ export default function EnhancedSignupQuestionnaire() {
                       className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 transition-colors ${
                         initialEmail 
                           ? 'bg-gray-600/50 border-gray-500 cursor-not-allowed focus:ring-gray-500 focus:border-gray-500' 
-                          : emailExists
-                          ? 'bg-gray-700 border-red-600 focus:ring-red-400 focus:border-red-400'
-                          : emailCheckLoading
-                          ? 'bg-gray-700 border-yellow-600 focus:ring-yellow-400 focus:border-yellow-400'
                           : 'bg-gray-700 border-gray-600 focus:ring-cyan-400 focus:border-cyan-400'
                       }`}
                       placeholder="correo@ejemplo.com"
@@ -770,54 +831,14 @@ export default function EnhancedSignupQuestionnaire() {
                       disabled={!!initialEmail}
                     />
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      {emailCheckLoading ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-400"></div>
-                      ) : emailExists ? (
-                        <AlertCircle className="h-5 w-5 text-red-400" />
-                      ) : formData.personalInfo.email && !initialEmail ? (
-                        <CheckCircle className="h-5 w-5 text-green-400" />
-                      ) : (
-                        <Mail className="h-5 w-5 text-gray-400" />
-                      )}
+                      <Mail className="h-5 w-5 text-gray-400" />
                     </div>
                   </div>
                   
-                  {/* Estados del email */}
+                  {/* Mensaje para email pre-verificado */}
                   {initialEmail && (
                     <p className="text-xs text-cyan-400 mt-1">
-                      ✅ Email confirmado desde el paso anterior
-                    </p>
-                  )}
-                  {!initialEmail && emailCheckLoading && (
-                    <p className="text-xs text-yellow-400 mt-1">
-                      🔍 Verificando disponibilidad del email...
-                    </p>
-                  )}
-                  {!initialEmail && emailExists && (
-                    <div className="mt-2 p-3 bg-red-900/30 border border-red-700 rounded-lg">
-                      <div className="flex items-start">
-                        <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 mr-2 flex-shrink-0" />
-                        <div>
-                          <p className="text-red-300 text-sm font-medium">
-                            Este correo ya está registrado
-                          </p>
-                          <p className="text-red-200 text-xs mt-1">
-                            ¿Ya tienes una cuenta? 
-                            <button
-                              type="button"
-                              onClick={() => navigate('/auth')}
-                              className="ml-1 underline hover:text-red-100 transition-colors"
-                            >
-                              Inicia sesión aquí
-                            </button>
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {!initialEmail && formData.personalInfo.email && !emailExists && !emailCheckLoading && (
-                    <p className="text-xs text-green-400 mt-1">
-                      ✅ Email disponible
+                      ✅ Email verificado desde el registro
                     </p>
                   )}
                 </div>
@@ -1092,6 +1113,25 @@ export default function EnhancedSignupQuestionnaire() {
                       )}
                     </label>
                     
+                    {/* Información de especialidades disponibles */}
+                    {specialties.length > 0 && (
+                      <div className="mb-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-blue-300">
+                            📋 <strong>{specialties.length}</strong> especialidades disponibles
+                          </span>
+                          <span className="text-blue-200 text-xs">
+                            {Object.entries(
+                              specialties.reduce((acc, spec) => {
+                                acc[spec.category] = (acc[spec.category] || 0) + 1;
+                                return acc;
+                              }, {} as Record<string, number>)
+                            ).map(([cat, count]) => `${cat}: ${count}`).join(' | ')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    
                     {specialtiesLoading && (
                       <div className="flex items-center justify-center py-8">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-400"></div>
@@ -1132,16 +1172,45 @@ export default function EnhancedSignupQuestionnaire() {
                             }
                           }}
                           className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                          placeholder={specialties.length > 0 ? "Buscar especialidad... (ej: cardiología, medicina)" : "No hay especialidades disponibles"}
+                          placeholder={specialties.length > 0 ? `Buscar entre ${specialties.length} especialidades... (ej: cardiología, medicina, cirugía)` : "No hay especialidades disponibles"}
                           disabled={specialties.length === 0}
                         />
                         <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                        
+                        {/* Indicador de búsqueda */}
+                        {specialtySearch && (
+                          <div className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-gray-500">
+                            {filteredSpecialties.length} resultados
+                          </div>
+                        )}
+                        
+                        {/* Botón para ver todas */}
+                        {!specialtySearch && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFilteredSpecialties(specialties);
+                              setIsSpecialtyDropdownOpen(true);
+                            }}
+                            className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-900/30 px-2 py-1 rounded"
+                          >
+                            Ver todas
+                          </button>
+                        )}
                       </div>
                     )}
                     
                     {isSpecialtyDropdownOpen && filteredSpecialties.length > 0 && (
                       <div className="relative">
-                        <div className="absolute top-2 left-0 right-0 max-h-48 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-50">
+                        <div className="absolute top-2 left-0 right-0 max-h-64 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-50">
+                          {/* Header del dropdown */}
+                          <div className="sticky top-0 bg-gray-800 px-4 py-2 border-b border-gray-600">
+                            <div className="text-xs text-gray-400 font-medium">
+                              {filteredSpecialties.length} especialidades encontradas
+                            </div>
+                          </div>
+                          
+                          {/* Lista de especialidades */}
                           {filteredSpecialties.map((specialty) => (
                             <button
                               key={specialty.id}
@@ -1154,8 +1223,17 @@ export default function EnhancedSignupQuestionnaire() {
                               }}
                               className="w-full text-left px-4 py-3 hover:bg-gray-600 text-white border-b border-gray-600 last:border-b-0 transition-colors"
                             >
-                              <div className="font-medium">{specialty.name}</div>
-                              <div className="text-sm text-gray-400 capitalize">{specialty.category}</div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="font-medium text-white">{specialty.name}</div>
+                                  <div className="text-sm text-gray-400 capitalize">
+                                    {specialty.category} • {specialty.description}
+                                  </div>
+                                </div>
+                                <div className="ml-2 text-xs text-gray-500 bg-gray-600 px-2 py-1 rounded">
+                                  {specialty.requires_license ? 'Licencia' : 'Sin licencia'}
+                                </div>
+                              </div>
                             </button>
                           ))}
                         </div>
@@ -1547,7 +1625,12 @@ export default function EnhancedSignupQuestionnaire() {
                 <button
                   type="button"
                   onClick={handleNextStep}
-                  className="flex items-center px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-300"
+                  disabled={loading}
+                  className={`flex items-center px-6 py-3 rounded-lg transition-all duration-300 ${
+                    loading
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700'
+                  }`}
                 >
                   Siguiente
                   <ArrowRight className="h-4 w-4 ml-2" />

@@ -16,8 +16,10 @@ import MedicalScaleBarthel from './pages/MedicalScaleBarthel';
 import MedicalScaleBoston from './pages/MedicalScaleBoston';
 import PatientsList from './pages/PatientsList';
 import AppointmentsPage from './pages/AppointmentsPage';
+import NotFound from './pages/NotFound';
 import AppLayout from './components/Layout/AppLayout';
 import ErrorBoundary from './components/ErrorBoundary';
+import AuthCallback from './pages/AuthCallback';
 import { useTheme } from './hooks/useTheme';
 
 import './App.css';
@@ -76,6 +78,10 @@ function App() {
             path="/signup-questionnaire" 
             element={<EnhancedSignupQuestionnaire />} 
           />
+          <Route 
+            path="/auth/callback" 
+            element={<AuthCallback />} 
+          />
 
           {/* Protected routes with layout */}
           <Route element={<AppLayout />}>
@@ -124,6 +130,9 @@ function App() {
               element={isAuthenticated ? <AppointmentsPage /> : <Navigate to="/auth" />} 
             />
           </Route>
+          
+          {/* 404 route - must be last */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
     </ErrorBoundary>

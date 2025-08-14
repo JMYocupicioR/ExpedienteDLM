@@ -1,0 +1,5 @@
+# SPA fallback - redirect all routes to index.html
+/*    /index.html   200
+
+# Custom 404 page for better user experience
+/404  /index.html   200

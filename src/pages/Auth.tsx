@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Stethoscope, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import OAuthButtons from '../components/OAuthButtons';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -40,30 +41,76 @@ export default function Auth() {
         // navigate('/dashboard') se manejará automáticamente en App.tsx
         
       } else {
-        console.log('📝 Checking if email is already in use...');
+        console.log('📝 Starting registration process...');
         setCheckingEmail(true);
         
         try {
-          // Verificar si el email ya existe en la tabla profiles
-          const { data: existingProfile, error: profileCheckError } = await supabase
-            .from('profiles')
-            .select('email')
-            .eq('email', email)
-            .single();
+          // NUEVO FLUJO: Solo validar el email sin crear usuario
+          console.log('🔍 Validando formato de email:', email);
           
-          if (existingProfile) {
-            setError('Este correo electrónico ya está registrado. Por favor, inicia sesión o usa un correo diferente.');
+          // Validación básica del email
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            setError('Por favor, ingresa un correo electrónico válido');
             return;
           }
           
-          // NO crear usuarios temporales - solo verificar en la tabla profiles
-          // La verificación en auth.users no es necesaria y causa problemas
+          // Validación básica de la contraseña
+          if (password.length < 6) {
+            setError('La contraseña debe tener al menos 6 caracteres');
+            return;
+          }
           
-          console.log('✅ Email disponible, redirecting to enhanced signup...');
-          // Redirigir al nuevo cuestionario de registro mejorado con el email
+          // Verificar si el email existe usando una función RPC segura
+          console.log('🔍 Verificando disponibilidad del email...');
+          
+          // Usar la función RPC segura (si está disponible)
+          const { data: availabilityCheck, error: rpcError } = await supabase
+            .rpc('check_email_availability', { check_email: email.toLowerCase().trim() });
+          
+          if (rpcError) {
+            // Si la función RPC no existe todavía, usar método alternativo
+            console.warn('RPC no disponible, usando método alternativo');
+            
+            // Intentar verificar con un query a profiles
+            const { data: existingProfile, error: profileError } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('email', email.toLowerCase().trim())
+              .maybeSingle();
+            
+            if (profileError && profileError.code !== 'PGRST116') {
+              console.error('Error verificando email:', profileError);
+              setError('Error al verificar el email. Por favor, intenta nuevamente.');
+              return;
+            }
+            
+            if (existingProfile) {
+              console.log('❌ Email ya registrado');
+              setError('Este correo electrónico ya está registrado. Por favor, inicia sesión.');
+              setIsLogin(true);
+              return;
+            }
+          } else if (availabilityCheck && !availabilityCheck.available) {
+            console.log('❌ Email no disponible:', availabilityCheck.message);
+            setError('Este correo electrónico ya está registrado. Por favor, inicia sesión.');
+            setIsLogin(true);
+            return;
+          }
+          
+          console.log('✅ Email disponible, redirigiendo al cuestionario...');
+          
+          // Guardar datos temporalmente en sessionStorage (más seguro que crear usuario)
+          sessionStorage.setItem('pendingRegistration', JSON.stringify({
+            email: email.toLowerCase().trim(),
+            password: password,
+            timestamp: Date.now()
+          }));
+          
+          // Redirigir al cuestionario SIN crear usuario
           navigate('/signup-questionnaire', { 
             state: { 
-              email: email,
+              email: email.toLowerCase().trim(),
               fromRegistration: true 
             } 
           });
@@ -158,6 +205,14 @@ export default function Auth() {
               >
                 {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </button>
+              
+              {/* OAuth Buttons for Login */}
+              <div className="mt-6">
+                <OAuthButtons 
+                  mode="login" 
+                  onError={setError}
+                />
+              </div>
             </form>
           </div>
 
@@ -229,10 +284,27 @@ export default function Auth() {
               <button
                 type="submit"
                 disabled={loading || checkingEmail}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center"
               >
-                {checkingEmail ? 'Verificando email...' : loading ? 'Iniciando registro...' : 'Comenzar Registro →'}
+                {checkingEmail ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Verificando email...
+                  </>
+                ) : loading ? (
+                  'Iniciando registro...'
+                ) : (
+                  'Comenzar Registro →'
+                )}
               </button>
+              
+              {/* OAuth Buttons for Signup */}
+              <div className="mt-6">
+                <OAuthButtons 
+                  mode="signup" 
+                  onError={setError}
+                />
+              </div>
 
               <div className="text-center">
                 <button
