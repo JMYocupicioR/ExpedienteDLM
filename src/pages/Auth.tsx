@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, Stethoscope, User } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Stethoscope, User, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import OAuthButtons from '../components/OAuthButtons';
 
@@ -9,11 +9,82 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     console.log('🔍 Auth component mounted');
   }, []);
+
+  // Validación en tiempo real de contraseñas
+  useEffect(() => {
+    const passwordInput = document.getElementById('password-register') as HTMLInputElement;
+    const confirmPasswordInput = document.getElementById('confirm-password-register') as HTMLInputElement;
+    const strengthDiv = document.getElementById('password-strength');
+    const matchDiv = document.getElementById('password-match');
+
+    const validatePassword = () => {
+      if (!passwordInput || !strengthDiv) return;
+      
+      const password = passwordInput.value;
+      let strength = '';
+      let strengthClass = '';
+
+      if (password.length === 0) {
+        strength = '';
+      } else if (password.length < 6) {
+        strength = '✗ Muy débil';
+        strengthClass = 'text-red-400';
+      } else if (password.length < 8) {
+        strength = '⚠ Moderada';
+        strengthClass = 'text-yellow-400';
+      } else {
+        strength = '✓ Fuerte';
+        strengthClass = 'text-green-400';
+      }
+
+      strengthDiv.textContent = strength;
+      strengthDiv.className = `text-xs ${strengthClass}`;
+    };
+
+    const validatePasswordMatch = () => {
+      if (!passwordInput || !confirmPasswordInput || !matchDiv) return;
+      
+      const password = passwordInput.value;
+      const confirmPassword = confirmPasswordInput.value;
+
+      if (confirmPassword.length === 0) {
+        matchDiv.textContent = '';
+        matchDiv.className = 'text-xs mt-1';
+      } else if (password === confirmPassword) {
+        matchDiv.textContent = '✓ Las contraseñas coinciden';
+        matchDiv.className = 'text-xs mt-1 text-green-400';
+      } else {
+        matchDiv.textContent = '✗ Las contraseñas no coinciden';
+        matchDiv.className = 'text-xs mt-1 text-red-400';
+      }
+    };
+
+    if (passwordInput) {
+      passwordInput.addEventListener('input', validatePassword);
+      passwordInput.addEventListener('input', validatePasswordMatch);
+    }
+    
+    if (confirmPasswordInput) {
+      confirmPasswordInput.addEventListener('input', validatePasswordMatch);
+    }
+
+    return () => {
+      if (passwordInput) {
+        passwordInput.removeEventListener('input', validatePassword);
+        passwordInput.removeEventListener('input', validatePasswordMatch);
+      }
+      if (confirmPasswordInput) {
+        confirmPasswordInput.removeEventListener('input', validatePasswordMatch);
+      }
+    };
+  }, [isLogin]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -23,6 +94,7 @@ export default function Auth() {
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
+    const confirmPassword = formData.get('confirmPassword') as string;
 
     console.log(`🔑 Attempting ${isLogin ? 'login' : 'signup'} for:`, email);
 
@@ -58,6 +130,12 @@ export default function Auth() {
           // Validación básica de la contraseña
           if (password.length < 6) {
             setError('La contraseña debe tener al menos 6 caracteres');
+            return;
+          }
+          
+          // Validación de confirmación de contraseña
+          if (password !== confirmPassword) {
+            setError('Las contraseñas no coinciden');
             return;
           }
           
@@ -116,6 +194,7 @@ export default function Auth() {
           sessionStorage.setItem('pendingRegistration', JSON.stringify({
             email: email.toLowerCase().trim(),
             password: password,
+            confirmPassword: confirmPassword,
             timestamp: Date.now()
           }));
           
@@ -271,23 +350,58 @@ export default function Auth() {
                 </div>
                 
                 <div>
-                  <label htmlFor="password-register" className="block text-sm font-medium text-gray-300 mb-2">Contraseña inicial</label>
+                  <label htmlFor="password-register" className="block text-sm font-medium text-gray-300 mb-2">Contraseña *</label>
                   <div className="relative">
                     <input
                       id="password-register"
-                      type="password"
+                      type={showRegisterPassword ? 'text' : 'password'}
                       name="password"
                       placeholder="••••••••"
                       required
                       minLength={6}
                       disabled={checkingEmail}
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
+                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                      className="absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                      disabled={checkingEmail}
+                    >
+                      {showRegisterPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
                     <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Mínimo 6 caracteres. La configurarás después en el cuestionario.
-                  </p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-gray-400">Mínimo 6 caracteres</p>
+                    <div className="text-xs" id="password-strength"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="confirm-password-register" className="block text-sm font-medium text-gray-300 mb-2">Confirmar contraseña *</label>
+                  <div className="relative">
+                    <input
+                      id="confirm-password-register"
+                      type={showRegisterConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      placeholder="••••••••"
+                      required
+                      minLength={6}
+                      disabled={checkingEmail}
+                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegisterConfirmPassword(!showRegisterConfirmPassword)}
+                      className="absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                      disabled={checkingEmail}
+                    >
+                      {showRegisterConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                  </div>
+                  <div className="text-xs mt-1" id="password-match"></div>
                 </div>
               </div>
 
@@ -303,9 +417,9 @@ export default function Auth() {
                       ✨ Registro inteligente y seguro
                     </p>
                     <p className="text-blue-200 text-xs">
+                      • Credenciales verificadas antes del cuestionario<br/>
                       • Usuario creado solo al completar todo el proceso<br/>
-                      • Sin usuarios basura en la base de datos<br/>
-                      • Cuestionario personalizado según tu rol médico
+                      • Sin usuarios basura en la base de datos
                     </p>
                   </div>
                 </div>

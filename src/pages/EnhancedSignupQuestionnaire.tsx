@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   User, Phone, Award, Building, Stethoscope, ArrowLeft, ArrowRight, 
   CheckCircle, AlertCircle, Shield, Heart, UserCheck, MapPin,
-  Calendar, Mail, Lock, Eye, EyeOff, Plus, Search
+  Calendar, Mail, Plus, Search
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { EnhancedRegistrationData, MedicalSpecialty, Clinic } from '../lib/database.types';
@@ -15,8 +15,7 @@ export default function EnhancedSignupQuestionnaire() {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showRetryCleanup, setShowRetryCleanup] = useState(false);
   
   // Constantes para fecha de nacimiento
   const months = [
@@ -418,6 +417,44 @@ export default function EnhancedSignupQuestionnaire() {
       }
     }));
     setError(null);
+    setShowRetryCleanup(false);
+  };
+
+  const handleRetryCleanup = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('🧹 Intentando limpieza manual...');
+      
+      const email = formData.personalInfo.email;
+      if (!email) {
+        setError('No se encontró el email para limpiar');
+        return;
+      }
+
+      // Intentar eliminar perfiles incompletos
+      const { error: cleanupError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('email', email.toLowerCase().trim())
+        .or('profile_completed.is.null,profile_completed.eq.false,full_name.is.null,full_name.eq.');
+
+      if (cleanupError) {
+        console.error('Error en limpieza manual:', cleanupError);
+        setError('Error al limpiar registros previos. Por favor, contacta a soporte.');
+        return;
+      }
+
+      console.log('✅ Limpieza manual completada');
+      setError('Limpieza completada. Puedes intentar completar el registro nuevamente.');
+      setShowRetryCleanup(false);
+      
+    } catch (err) {
+      console.error('Error en handleRetryCleanup:', err);
+      setError('Error inesperado durante la limpieza');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const validateStep = (step: number): boolean => {
@@ -446,22 +483,7 @@ export default function EnhancedSignupQuestionnaire() {
         }
         return true;
 
-      case 2: // Información de cuenta y rol
-        // Si es usuario OAuth, no necesita contraseña
-        if (!fromOAuth && !oauthSessionData) {
-          if (!formData.accountInfo.password) {
-            setError('La contraseña es requerida');
-            return false;
-          }
-          if (formData.accountInfo.password.length < 6) {
-            setError('La contraseña debe tener al menos 6 caracteres');
-            return false;
-          }
-          if (formData.accountInfo.password !== formData.accountInfo.confirmPassword) {
-            setError('Las contraseñas no coinciden');
-            return false;
-          }
-        }
+      case 2: // Selección de rol
         if (!formData.accountInfo.role) {
           setError('Debe seleccionar un tipo de cuenta');
           return false;
@@ -568,41 +590,76 @@ export default function EnhancedSignupQuestionnaire() {
         // Flujo tradicional: crear usuario con email/contraseña
         const pendingRegistrationStr = sessionStorage.getItem('pendingRegistration');
         if (!pendingRegistrationStr && !formData.accountInfo.password) {
-          throw new Error('No se encontraron los datos de registro. Por favor, inicia el proceso nuevamente.');
+          throw new Error('No se encontraron los datos de registro. Por favor, inicia el proceso nuevamente desde Auth.');
         }
         
         let registrationData: { email?: string; password?: string; timestamp?: number } = {};
         if (pendingRegistrationStr) {
           registrationData = JSON.parse(pendingRegistrationStr);
           
-          // Verificar que los datos no sean muy antiguos (máx 1 hora)
-          if (Date.now() - registrationData.timestamp > 3600000) {
+          // Verificar que los datos no sean muy antiguos (máx 30 minutos)
+          const maxAge = 30 * 60 * 1000; // 30 minutos en milisegundos
+          if (Date.now() - registrationData.timestamp > maxAge) {
             sessionStorage.removeItem('pendingRegistration');
-            throw new Error('La sesión de registro ha expirado. Por favor, inicia nuevamente.');
+            throw new Error('La sesión de registro ha expirado (máx 30 min). Por favor, inicia el proceso nuevamente desde Auth.');
           }
+          
+          console.log('✅ Datos de registro válidos, edad:', Math.round((Date.now() - registrationData.timestamp) / 60000), 'minutos');
         }
         
         const email = formData.personalInfo.email || registrationData.email;
-        const password = formData.accountInfo.password || registrationData.password;
+        const password = registrationData.password;
+        
+        if (!password) {
+          throw new Error('No se encontró la contraseña. Por favor, inicia el proceso nuevamente desde Auth.');
+        }
         
         console.log('🔐 Creando usuario con email/contraseña...');
         
-        // VERIFICACIÓN FINAL: Verificar una vez más que el email no exista
-        console.log('🔍 Verificación final del email antes de crear usuario...');
-        const { data: existingUser, error: checkError } = await supabase
+        // VERIFICACIÓN FINAL INTELIGENTE: Verificar y limpiar si es necesario
+        console.log('🔍 Verificación final inteligente del email antes de crear usuario...');
+        
+        // Primero verificar en profiles
+        const { data: existingProfile, error: profileCheckError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id, profile_completed, full_name, created_at')
           .eq('email', email.toLowerCase().trim())
           .maybeSingle();
         
-        if (checkError && checkError.code !== 'PGRST116') {
-          console.error('Error verificando email final:', checkError);
+        if (profileCheckError && profileCheckError.code !== 'PGRST116') {
+          console.error('Error verificando email en profiles:', profileCheckError);
           throw new Error('Error al verificar la disponibilidad del email');
         }
         
-        if (existingUser) {
-          console.error('❌ Email ya registrado en verificación final');
-          throw new Error('Este correo electrónico ya está registrado. Por favor, inicia sesión en lugar de registrarte.');
+        if (existingProfile) {
+          console.log('📧 Email encontrado en profiles:', existingProfile);
+          
+          // Si el perfil está incompleto, intentar limpiarlo
+          if (!existingProfile.profile_completed || !existingProfile.full_name) {
+            console.log('🧹 Perfil incompleto detectado, intentando limpiar...');
+            
+            try {
+              // Eliminar el perfil incompleto (esto debería eliminar el usuario en auth.users también por CASCADE)
+              const { error: deleteError } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('id', existingProfile.id);
+              
+              if (deleteError) {
+                console.error('Error eliminando perfil incompleto:', deleteError);
+                throw new Error('Email ya registrado con registro incompleto. Por favor, contacta a soporte.');
+              }
+              
+              console.log('✅ Perfil incompleto eliminado, continuando con la creación...');
+            } catch (cleanupError) {
+              console.error('Error en limpieza:', cleanupError);
+              throw new Error('Este correo tiene un registro previo incompleto. Por favor, contacta a soporte para resolverlo.');
+            }
+          } else {
+            // Perfil completo, definitivamente ya registrado
+            console.error('❌ Email ya registrado con perfil completo');
+            throw new Error('Este correo electrónico ya está registrado con un perfil completo. Por favor, inicia sesión en lugar de registrarte.');
+          }
         }
         
         console.log('✅ Email disponible en verificación final, procediendo con la creación...');
@@ -622,12 +679,36 @@ export default function EnhancedSignupQuestionnaire() {
 
         if (authError) {
           console.error('Error de registro:', authError);
+          console.error('Código de error:', authError.status);
+          console.error('Mensaje original:', authError.message);
           
           // Manejo específico de errores de email ya registrado
           if (authError.message?.includes('already registered') || 
               authError.message?.includes('User already registered') ||
-              authError.message?.includes('email address is already in use')) {
-            throw new Error('Este correo electrónico ya está registrado. Por favor, inicia sesión en lugar de registrarte.');
+              authError.message?.includes('email address is already in use') ||
+              authError.message?.includes('User with this email already exists') ||
+              authError.status === 422) {
+            
+            // Si es error de email ya registrado, intentar una limpieza más profunda
+            console.log('🧹 Error de email duplicado, intentando limpieza profunda...');
+            
+            try {
+              // Intentar eliminar cualquier registro huérfano
+              const { error: cleanupError } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('email', email.toLowerCase().trim())
+                .is('profile_completed', null);
+              
+              if (!cleanupError) {
+                console.log('✅ Registros huérfanos eliminados, sugiriendo reintento...');
+                throw new Error('Se encontró un registro previo incompleto que fue eliminado. Por favor, intenta registrarte nuevamente.');
+              }
+            } catch {
+              // Si falla la limpieza, continuar con el error original
+            }
+            
+            throw new Error('Este correo electrónico ya está registrado. Si acabas de intentar registrarte, espera un momento e intenta nuevamente. Si el problema persiste, inicia sesión en lugar de registrarte.');
           }
           
           throw new Error(authError.message || 'Error al crear la cuenta');
@@ -768,8 +849,10 @@ export default function EnhancedSignupQuestionnaire() {
         
         if (errorMsg.includes('already registered') || 
             errorMsg.includes('ya está registrado') ||
-            errorMsg.includes('email address is already in use')) {
-          setError('Este correo electrónico ya está registrado. Si ya tienes una cuenta, por favor inicia sesión en lugar de registrarte.');
+            errorMsg.includes('email address is already in use') ||
+            errorMsg.includes('email ya está registrado')) {
+          setError('Este correo electrónico ya está registrado. Si acabas de intentar registrarte, puede haber un registro previo incompleto.');
+          setShowRetryCleanup(true);
         } else if (errorMsg.includes('invalid') && errorMsg.includes('password')) {
           setError('La contraseña debe tener al menos 6 caracteres');
         } else if (errorMsg.includes('email') && errorMsg.includes('valid')) {
@@ -796,7 +879,7 @@ export default function EnhancedSignupQuestionnaire() {
   const getStepTitle = (step: number): string => {
     switch (step) {
       case 1: return 'Información Personal';
-      case 2: return 'Configurar Contraseña y Rol';
+      case 2: return 'Tipo de Cuenta';
       case 3: return 'Información Profesional';
       case 4: return 'Clínica/Institución';
       case 5: return 'Información Adicional';
@@ -808,7 +891,7 @@ export default function EnhancedSignupQuestionnaire() {
   const getStepDescription = (step: number): string => {
     switch (step) {
       case 1: return 'Datos personales y de contacto';
-      case 2: return initialEmail ? 'Crear contraseña segura y seleccionar tipo de cuenta' : 'Credenciales de acceso y tipo de cuenta';
+      case 2: return 'Seleccionar tipo de cuenta profesional';
       case 3: return 'Licencias y especialidades médicas';
       case 4: return 'Afiliación institucional';
       case 5: return 'Horarios y preferencias';
@@ -957,9 +1040,39 @@ export default function EnhancedSignupQuestionnaire() {
         {/* Content */}
         <div className="p-8">
           {error && (
-            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center">
-              <AlertCircle className="h-5 w-5 mr-3 flex-shrink-0" />
-              {error}
+            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 mr-3 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p>{error}</p>
+                  {showRetryCleanup && (
+                    <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                      <button
+                        onClick={handleRetryCleanup}
+                        disabled={loading}
+                        className="flex items-center px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {loading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Limpiando...
+                          </>
+                        ) : (
+                          <>
+                            🧹 Limpiar registros previos
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => navigate('/auth')}
+                        className="flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        ↩️ Volver a iniciar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1200,7 +1313,7 @@ export default function EnhancedSignupQuestionnaire() {
             </div>
           )}
 
-          {/* Step 2: Account Info and Role Selection */}
+          {/* Step 2: Role Selection */}
           {currentStep === 2 && (
             <div className="space-y-6">
               {initialEmail && (
@@ -1208,10 +1321,10 @@ export default function EnhancedSignupQuestionnaire() {
                   <div className="flex items-center">
                     <CheckCircle className="h-5 w-5 text-green-400 mr-3 flex-shrink-0" />
                     <div>
-                      <p className="text-green-300 font-medium">Email confirmado</p>
+                      <p className="text-green-300 font-medium">Credenciales verificadas</p>
                       <p className="text-green-200 text-sm mt-1">
-                        Tu dirección de email <span className="font-mono">{initialEmail}</span> está lista. 
-                        Ahora configura tu contraseña y selecciona tu tipo de cuenta.
+                        Tu email <span className="font-mono">{initialEmail}</span> y contraseña están listos. 
+                        Ahora selecciona tu tipo de cuenta profesional.
                       </p>
                     </div>
                   </div>
@@ -1291,80 +1404,15 @@ export default function EnhancedSignupQuestionnaire() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Contraseña *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={formData.accountInfo.password}
-                      onChange={(e) => updateFormData('accountInfo', 'password', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                      placeholder="••••••••"
-                      required
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                  </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-xs text-gray-400">Mínimo 6 caracteres</p>
-                    {formData.accountInfo.password && (
-                      <div className="flex items-center text-xs">
-                        {formData.accountInfo.password.length >= 8 ? (
-                          <span className="text-green-400">✓ Fuerte</span>
-                        ) : formData.accountInfo.password.length >= 6 ? (
-                          <span className="text-yellow-400">⚠ Moderada</span>
-                        ) : (
-                          <span className="text-red-400">✗ Débil</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Confirmar contraseña *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={formData.accountInfo.confirmPassword}
-                      onChange={(e) => updateFormData('accountInfo', 'confirmPassword', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                      placeholder="••••••••"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                    >
-                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                  </div>
-                </div>
-              </div>
-
               <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
                 <div className="flex items-center">
                   <Shield className="h-5 w-5 text-blue-400 mr-3" />
                   <div>
                     <p className="text-blue-300 font-medium">
-                      Seguridad de la cuenta
+                      Perfil profesional seguro
                     </p>
                     <p className="text-blue-200 text-sm mt-1">
-                      Tu contraseña estará encriptada y protegida según estándares de seguridad médica.
+                      Tu información estará protegida según estándares de seguridad médica y HIPAA.
                     </p>
                   </div>
                 </div>
