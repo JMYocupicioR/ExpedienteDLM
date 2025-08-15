@@ -25,6 +25,8 @@ import ClinicStaff from './pages/ClinicStaff';
 import ClinicSettings from './pages/ClinicSettings';
 import PatientPublicRegistration from './pages/PatientPublicRegistration';
 import AppLayout from './components/Layout/AppLayout';
+import PatientPortalLayout from './components/Layout/PatientPortalLayout';
+import PrivacyDashboard from './pages/PrivacyDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthCallback from './pages/AuthCallback';
 import { useTheme } from './hooks/useTheme';
@@ -94,6 +96,30 @@ function App() {
             path="/register/patient/:token" 
             element={<PatientPublicRegistration />} 
           />
+
+          {/* Patient Portal Routes */}
+          <Route path="/portal" element={<PatientPortalLayout />}>
+            <Route 
+              index 
+              element={isAuthenticated ? <PrivacyDashboard /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="privacidad" 
+              element={isAuthenticated ? <PrivacyDashboard /> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="consultas" 
+              element={isAuthenticated ? <div className="p-6"><h1 className="text-2xl font-bold">Mis Consultas</h1><p className="text-gray-600 mt-2">Funcionalidad en desarrollo...</p></div> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="citas" 
+              element={isAuthenticated ? <div className="p-6"><h1 className="text-2xl font-bold">Mis Citas</h1><p className="text-gray-600 mt-2">Funcionalidad en desarrollo...</p></div> : <Navigate to="/auth" />} 
+            />
+            <Route 
+              path="estudios" 
+              element={isAuthenticated ? <div className="p-6"><h1 className="text-2xl font-bold">Mis Estudios</h1><p className="text-gray-600 mt-2">Funcionalidad en desarrollo...</p></div> : <Navigate to="/auth" />} 
+            />
+          </Route>
 
           {/* Protected routes with layout */}
           <Route element={<AppLayout />}>

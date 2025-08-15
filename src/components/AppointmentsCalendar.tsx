@@ -36,33 +36,35 @@ import { Button } from './ui/button';
 import AppointmentForm from './AppointmentForm';
 import ValidationNotification, { useValidationNotifications } from './ValidationNotification';
 import { 
-  Appointment, 
-  CreateAppointmentData, 
-  UpdateAppointmentData,
-  appointmentService 
-} from '../lib/services/appointment-service';
+  EnhancedAppointment, 
+  CreateAppointmentPayload, 
+  UpdateAppointmentPayload,
+  AppointmentStatus,
+  enhancedAppointmentService 
+} from '../lib/services/enhanced-appointment-service';
+import useEnhancedAppointments from '../hooks/useEnhancedAppointments';
 import { useAuth } from '../hooks/useAuth';
 
 interface AppointmentsCalendarProps {
-  onAppointmentSelect?: (appointment: Appointment) => void;
+  onAppointmentSelect?: (appointment: EnhancedAppointment) => void;
   onNavigateToPatient?: (patientId: string) => void;
 }
 
 const statusColors = {
   scheduled: 'bg-blue-600 border-blue-500',
-  confirmed: 'bg-green-600 border-green-500', 
-  in_progress: 'bg-yellow-600 border-yellow-500',
+  confirmed_by_patient: 'bg-green-600 border-green-500', 
   completed: 'bg-gray-600 border-gray-500',
-  cancelled: 'bg-red-600 border-red-500',
+  cancelled_by_clinic: 'bg-red-600 border-red-500',
+  cancelled_by_patient: 'bg-orange-600 border-orange-500',
   no_show: 'bg-red-700 border-red-600',
 };
 
 const statusLabels = {
   scheduled: 'Programada',
-  confirmed: 'Confirmada',
-  in_progress: 'En Progreso',
+  confirmed_by_patient: 'Confirmada',
   completed: 'Completada',
-  cancelled: 'Cancelada',
+  cancelled_by_clinic: 'Cancelada por Clínica',
+  cancelled_by_patient: 'Cancelada por Paciente',
   no_show: 'No Asistió',
 };
 
@@ -85,123 +87,99 @@ export default function AppointmentsCalendar({
   
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
-  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [editingAppointment, setEditingAppointment] = useState<EnhancedAppointment | null>(null);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
+  
+  // Usar el hook personalizado para manejar citas
+  const {
+    appointments,
+    loading,
+    error,
+    createAppointment,
+    updateAppointment,
+    cancelAppointment,
+    loadAppointments,
+    getAppointmentsByDate,
+    getStats
+  } = useEnhancedAppointments({
+    autoLoad: true,
+    filters: {
+      doctor_id: user?.id,
+      clinic_id: profile?.clinic_id,
+    }
+  });
 
-  // Cargar citas al cambiar el mes o el usuario
+  // Obtener citas del día seleccionado
+  const todayAppointments = getAppointmentsByDate(format(selectedDate, 'yyyy-MM-dd'))
+    .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time));
+
+  // Recargar cuando cambia el mes
   useEffect(() => {
-    loadAppointments();
-  }, [currentDate, user?.id]);
-
-  // Cargar citas del día seleccionado
-  useEffect(() => {
-    loadDayAppointments();
-  }, [selectedDate, appointments]);
-
-  const loadAppointments = async () => {
-    if (!user?.id) return;
-
-    try {
-      setLoading(true);
+    if (user?.id && profile?.clinic_id) {
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
       
-      const monthAppointments = await appointmentService.getAppointmentsByDateRange(
-        format(monthStart, 'yyyy-MM-dd'),
-        format(monthEnd, 'yyyy-MM-dd'),
-        user.id
-      );
-      
-      setAppointments(monthAppointments);
-    } catch (error) {
-      console.error('Error loading appointments:', error);
-      addError('Error', 'No se pudieron cargar las citas del mes');
-    } finally {
-      setLoading(false);
+      loadAppointments({
+        doctor_id: user.id,
+        clinic_id: profile.clinic_id,
+        date_from: format(monthStart, 'yyyy-MM-dd'),
+        date_to: format(monthEnd, 'yyyy-MM-dd'),
+      });
     }
-  };
+  }, [currentDate, user?.id, profile?.clinic_id, loadAppointments]);
 
-  const loadDayAppointments = async () => {
-    if (!user?.id) return;
-
+  const handleCreateAppointment = async (data: CreateAppointmentPayload) => {
     try {
-      const dayAppointments = appointments.filter(apt => 
-        isSameDay(new Date(apt.appointment_date), selectedDate)
-      );
-      
-      // Ordenar por hora
-      dayAppointments.sort((a, b) => 
-        a.appointment_time.localeCompare(b.appointment_time)
-      );
-      
-      setTodayAppointments(dayAppointments);
-    } catch (error) {
-      console.error('Error loading day appointments:', error);
-    }
-  };
-
-  const handleCreateAppointment = async (data: CreateAppointmentData) => {
-    try {
-      const newAppointment = await appointmentService.createAppointment(data);
-      
-      // Actualizar la lista de citas
-      setAppointments(prev => [...prev, newAppointment]);
-      
+      await createAppointment(data);
       addSuccess('Éxito', 'Cita creada correctamente');
       setShowAppointmentForm(false);
       setSelectedTimeSlot('');
     } catch (error) {
       console.error('Error creating appointment:', error);
-      addError('Error', 'No se pudo crear la cita');
+      addError('Error', error instanceof Error ? error.message : 'No se pudo crear la cita');
       throw error;
     }
   };
 
-  const handleUpdateAppointment = async (data: UpdateAppointmentData) => {
+  const handleUpdateAppointment = async (data: UpdateAppointmentPayload) => {
     if (!editingAppointment) return;
 
     try {
-      const updatedAppointment = await appointmentService.updateAppointment(
-        editingAppointment.id, 
-        data
-      );
-      
-      // Actualizar la lista de citas
-      setAppointments(prev => 
-        prev.map(apt => apt.id === editingAppointment.id ? updatedAppointment : apt)
-      );
-      
+      await updateAppointment(editingAppointment.id, data);
       addSuccess('Éxito', 'Cita actualizada correctamente');
       setEditingAppointment(null);
       setShowAppointmentForm(false);
     } catch (error) {
       console.error('Error updating appointment:', error);
-      addError('Error', 'No se pudo actualizar la cita');
+      addError('Error', error instanceof Error ? error.message : 'No se pudo actualizar la cita');
       throw error;
     }
   };
 
-  const handleDeleteAppointment = async (appointmentId: string) => {
-    if (!confirm('¿Está seguro de que desea eliminar esta cita?')) return;
+  const handleCancelAppointment = async (appointmentId: string, cancelledBy: 'clinic' | 'patient' = 'clinic') => {
+    if (!confirm('¿Está seguro que desea cancelar esta cita?')) return;
 
     try {
-      await appointmentService.deleteAppointment(appointmentId);
-      
-      // Actualizar la lista de citas
-      setAppointments(prev => prev.filter(apt => apt.id !== appointmentId));
-      
-      addSuccess('Éxito', 'Cita eliminada correctamente');
+      await cancelAppointment(appointmentId, cancelledBy);
+      addSuccess('Éxito', 'Cita cancelada correctamente');
     } catch (error) {
-      console.error('Error deleting appointment:', error);
-      addError('Error', 'No se pudo eliminar la cita');
+      console.error('Error cancelling appointment:', error);
+      addError('Error', error instanceof Error ? error.message : 'No se pudo cancelar la cita');
     }
   };
 
-  const handleEditAppointment = (appointment: Appointment) => {
+  const handleStatusChange = async (appointmentId: string, newStatus: AppointmentStatus) => {
+    try {
+      await updateAppointment(appointmentId, { status: newStatus });
+      addSuccess('Éxito', 'Estado de la cita actualizado correctamente');
+    } catch (error) {
+      console.error('Error updating appointment status:', error);
+      addError('Error', error instanceof Error ? error.message : 'No se pudo actualizar el estado');
+    }
+  };
+
+  const handleEditAppointment = (appointment: EnhancedAppointment) => {
     setEditingAppointment(appointment);
     setShowAppointmentForm(true);
   };
@@ -450,21 +428,41 @@ export default function AppointmentsCalendar({
                               <Edit className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => handleDeleteAppointment(appointment.id)}
+                              onClick={() => handleCancelAppointment(appointment.id, 'clinic')}
                               className="p-1 text-gray-400 hover:text-red-400"
-                              title="Eliminar"
+                              title="Cancelar Cita"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
                         </div>
 
-                        {/* Estado */}
-                        <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${statusColors[appointment.status]}`}>
-                          {appointment.status === 'scheduled' && <Clock className="h-3 w-3 mr-1" />}
-                          {appointment.status === 'confirmed' && <CheckCircle className="h-3 w-3 mr-1" />}
-                          {appointment.status === 'in_progress' && <AlertCircle className="h-3 w-3 mr-1" />}
-                          {statusLabels[appointment.status]}
+                        {/* Estado con dropdown para cambio rápido */}
+                        <div className="relative group">
+                          <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border cursor-pointer hover:opacity-80 ${statusColors[appointment.status]}`}>
+                            {appointment.status === 'scheduled' && <Clock className="h-3 w-3 mr-1" />}
+                            {appointment.status === 'confirmed_by_patient' && <CheckCircle className="h-3 w-3 mr-1" />}
+                            {appointment.status === 'completed' && <CheckCircle className="h-3 w-3 mr-1" />}
+                            {appointment.status.includes('cancelled') && <AlertCircle className="h-3 w-3 mr-1" />}
+                            {statusLabels[appointment.status]}
+                          </div>
+                          
+                          {/* Dropdown de estados */}
+                          <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 min-w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                            <div className="p-1">
+                              {Object.entries(statusLabels).map(([status, label]) => (
+                                <button
+                                  key={status}
+                                  onClick={() => handleStatusChange(appointment.id, status as AppointmentStatus)}
+                                  className={`w-full text-left px-3 py-2 text-xs rounded hover:bg-gray-700 transition-colors ${
+                                    appointment.status === status ? 'bg-gray-700 text-cyan-400' : 'text-gray-300'
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Información adicional */}
@@ -540,7 +538,7 @@ export default function AppointmentsCalendar({
       </div>
 
       {/* Modal de Formulario de Cita */}
-      {showAppointmentForm && user?.id && (
+      {showAppointmentForm && user?.id && profile?.clinic_id && (
         <AppointmentForm
           isOpen={showAppointmentForm}
           onClose={() => {
@@ -551,6 +549,7 @@ export default function AppointmentsCalendar({
           onSubmit={editingAppointment ? handleUpdateAppointment : handleCreateAppointment}
           appointment={editingAppointment}
           doctorId={user.id}
+          clinicId={profile.clinic_id}
           selectedDate={format(selectedDate, 'yyyy-MM-dd')}
           selectedTime={selectedTimeSlot}
         />

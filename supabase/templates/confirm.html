@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirma tu email - DeepLux Med</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #06b6d4;
+            padding-bottom: 20px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #06b6d4;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #64748b;
+            font-size: 16px;
+        }
+        .content {
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #06b6d4, #0891b2);
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            background: linear-gradient(135deg, #0891b2, #0e7490);
+            transform: translateY(-2px);
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 14px;
+            color: #64748b;
+            text-align: center;
+        }
+        .security-notice {
+            background: #f1f5f9;
+            border-left: 4px solid #06b6d4;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🏥 DeepLux Med</div>
+            <div class="subtitle">Sistema de Expedientes Médicos</div>
+        </div>
+        
+        <div class="content">
+            <h2 style="color: #1e293b; margin-bottom: 20px;">¡Bienvenido a DeepLux Med!</h2>
+            
+            <p>Hola,</p>
+            
+            <p>Gracias por registrarte en <strong>DeepLux Med</strong>. Para completar tu registro y empezar a usar nuestra plataforma, necesitas confirmar tu dirección de correo electrónico.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ .ConfirmationURL }}" class="button">
+                    ✅ Confirmar Email
+                </a>
+            </div>
+            
+            <div class="security-notice">
+                <strong>🔒 Nota de Seguridad:</strong><br>
+                Si no solicitaste esta cuenta, puedes ignorar este email. El enlace de confirmación expirará en 24 horas.
+            </div>
+            
+            <p>Si el botón no funciona, puedes copiar y pegar este enlace en tu navegador:</p>
+            <p style="word-break: break-all; color: #06b6d4; font-size: 14px;">{{ .ConfirmationURL }}</p>
+            
+            <p>Una vez confirmado tu email, podrás:</p>
+            <ul style="color: #475569;">
+                <li>✨ Acceder a tu dashboard personalizado</li>
+                <li>📋 Gestionar expedientes médicos</li>
+                <li>👥 Administrar pacientes y citas</li>
+                <li>🏥 Configurar tu clínica</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            <p><strong>DeepLux Med</strong> - Sistema de Gestión Médica</p>
+            <p>Si tienes problemas, contacta con soporte: <a href="mailto:soporte@deepluxmed.com" style="color: #06b6d4;">soporte@deepluxmed.com</a></p>
+            <p style="font-size: 12px; margin-top: 15px;">
+                Este email fue enviado automáticamente. Por favor no respondas a este mensaje.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

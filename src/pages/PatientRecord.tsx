@@ -15,6 +15,7 @@ import ConsultationDetails from '../components/ConsultationDetails';
 import ConsultationModal from '../components/ConsultationModal';
 import AppointmentQuickScheduler from '../components/AppointmentQuickScheduler';
 import StudiesSection from '../components/StudiesSection';
+import AuditTrailViewer from '../components/AuditTrailViewer';
 import { appointmentService, Appointment } from '../lib/services/appointment-service';
 import type { Database } from '../lib/database.types';
 
@@ -807,6 +808,23 @@ export default function PatientRecord() {
                     {patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length}
                   </span>
                 )}
+              </button>
+            </li>
+            
+            <li>
+              <button 
+                onClick={() => setSeccionActiva('auditoria')}
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'auditoria' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                <Settings className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Auditoría</span>
+                <span className="ml-auto bg-orange-500 text-white text-xs rounded-full px-2 py-1">
+                  NOM-024
+                </span>
               </button>
             </li>
           </ul>
@@ -1737,6 +1755,30 @@ export default function PatientRecord() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sección de Auditoría */}
+          {seccionActiva === 'auditoria' && patient && (
+            <div className="space-y-6">
+              <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white flex items-center">
+                      <Settings className="h-6 w-6 mr-2 text-orange-400" />
+                      Bitácora de Auditoría
+                    </h2>
+                    <p className="text-gray-400 text-sm mt-1">
+                      Historial inmutable de cambios - Cumplimiento NOM-024-SSA3-2013
+                    </p>
+                  </div>
+                </div>
+                
+                <AuditTrailViewer 
+                  patientId={patient.id}
+                  className="mt-6"
+                />
               </div>
             </div>
           )}

@@ -13,6 +13,7 @@ import { EnhancedProfile, MedicalSpecialty, Clinic } from '../lib/database.types
 import PhotoUploader from '../components/PhotoUploader';
 import MedicalStatsCard from '../components/MedicalStatsCard';
 import ActivityFeed from '../components/ActivityFeed';
+import ClinicStatusCard from '../components/ClinicStatusCard';
 
 interface ProfileStats {
   totalPatients: number;
@@ -654,41 +655,13 @@ export default function UserProfile() {
               maxItems={8}
             />
 
-            {/* Clinic Information */}
-            {profileData.clinic && (
-              <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
-                <h3 className="text-xl font-semibold mb-6 flex items-center">
-                  <Building className="h-6 w-6 text-cyan-400 mr-2" />
-                  Información de la Clínica
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-400">Nombre</p>
-                    <p className="font-medium">{profileData.clinic.name}</p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm text-gray-400">Tipo</p>
-                    <p className="font-medium capitalize">{profileData.clinic.type}</p>
-                  </div>
-                  
-                  {profileData.clinic.address && (
-                    <div className="md:col-span-2">
-                      <p className="text-sm text-gray-400">Dirección</p>
-                      <p className="font-medium">{profileData.clinic.address}</p>
-                    </div>
-                  )}
-                  
-                  {profileData.clinic.phone && (
-                    <div>
-                      <p className="text-sm text-gray-400">Teléfono</p>
-                      <p className="font-medium">{profileData.clinic.phone}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Clinic Status */}
+            <ClinicStatusCard 
+              onStatusUpdate={() => {
+                // Recargar datos del perfil cuando cambie el estado
+                loadUserProfile();
+              }}
+            />
           </div>
         </div>
       </div>

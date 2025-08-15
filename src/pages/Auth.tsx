@@ -217,7 +217,7 @@ export default function Auth() {
       if (err.message === 'Invalid login credentials') {
         setError('Credenciales inválidas. Verifica tu email y contraseña.');
       } else if (err.message?.includes('Email not confirmed')) {
-        setError('Por favor confirma tu correo electrónico antes de iniciar sesión.');
+        setError('Por favor confirma tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada y también tu carpeta de spam.');
       } else if (err.message?.includes('Too many requests')) {
         setError('Demasiados intentos. Espera unos minutos antes de intentar de nuevo.');
       } else {

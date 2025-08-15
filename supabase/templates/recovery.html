@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperar Contraseña - DeepLux Med</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #f59e0b;
+            padding-bottom: 20px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #f59e0b;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #64748b;
+            font-size: 16px;
+        }
+        .content {
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            background: linear-gradient(135deg, #d97706, #b45309);
+            transform: translateY(-2px);
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 14px;
+            color: #64748b;
+            text-align: center;
+        }
+        .security-notice {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🏥 DeepLux Med</div>
+            <div class="subtitle">Sistema de Expedientes Médicos</div>
+        </div>
+        
+        <div class="content">
+            <h2 style="color: #1e293b; margin-bottom: 20px;">🔐 Recuperar Contraseña</h2>
+            
+            <p>Hola,</p>
+            
+            <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta en <strong>DeepLux Med</strong>.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ .ConfirmationURL }}" class="button">
+                    🔑 Restablecer Contraseña
+                </a>
+            </div>
+            
+            <div class="security-notice">
+                <strong>🔒 Importante:</strong><br>
+                • Este enlace expirará en 1 hora por seguridad<br>
+                • Si no solicitaste este cambio, ignora este email<br>
+                • Nunca compartas este enlace con nadie
+            </div>
+            
+            <p>Si el botón no funciona, puedes copiar y pegar este enlace en tu navegador:</p>
+            <p style="word-break: break-all; color: #f59e0b; font-size: 14px;">{{ .ConfirmationURL }}</p>
+            
+            <p>Si tienes problemas o no solicitaste este cambio, contacta inmediatamente con nuestro equipo de soporte.</p>
+        </div>
+        
+        <div class="footer">
+            <p><strong>DeepLux Med</strong> - Sistema de Gestión Médica</p>
+            <p>Soporte técnico: <a href="mailto:soporte@deepluxmed.com" style="color: #f59e0b;">soporte@deepluxmed.com</a></p>
+            <p style="font-size: 12px; margin-top: 15px;">
+                Este email fue enviado automáticamente. Por favor no respondas a este mensaje.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

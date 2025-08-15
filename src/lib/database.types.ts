@@ -189,6 +189,12 @@ export interface Database {
           end_date: string | null
           is_active: boolean
           permissions_override: Json
+          status: 'pending' | 'approved' | 'rejected'
+          approved_by: string | null
+          approved_at: string | null
+          rejection_reason: string | null
+          rejected_by: string | null
+          rejected_at: string | null
           created_at: string
           updated_at: string
         }
@@ -201,6 +207,12 @@ export interface Database {
           end_date?: string | null
           is_active?: boolean
           permissions_override?: Json
+          status?: 'pending' | 'approved' | 'rejected'
+          approved_by?: string | null
+          approved_at?: string | null
+          rejection_reason?: string | null
+          rejected_by?: string | null
+          rejected_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -213,6 +225,12 @@ export interface Database {
           end_date?: string | null
           is_active?: boolean
           permissions_override?: Json
+          status?: 'pending' | 'approved' | 'rejected'
+          approved_by?: string | null
+          approved_at?: string | null
+          rejection_reason?: string | null
+          rejected_by?: string | null
+          rejected_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -643,6 +661,320 @@ export interface Database {
           created_at?: string
         }
       }
+      audit_logs: {
+        Row: {
+          id: string
+          table_name: string
+          record_id: string
+          action: string
+          old_values: Json | null
+          new_values: Json | null
+          user_id: string | null
+          timestamp: string
+        }
+        Insert: {
+          id?: string
+          table_name: string
+          record_id: string
+          action: string
+          old_values?: Json | null
+          new_values?: Json | null
+          user_id?: string | null
+          timestamp?: string
+        }
+        Update: {
+          id?: string
+          table_name?: string
+          record_id?: string
+          action?: string
+          old_values?: Json | null
+          new_values?: Json | null
+          user_id?: string | null
+          timestamp?: string
+        }
+      }
+      appointments: {
+        Row: {
+          id: string
+          doctor_id: string
+          patient_id: string
+          clinic_id: string
+          title: string
+          description: string | null
+          appointment_date: string
+          appointment_time: string
+          duration: number
+          status: 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show'
+          type: 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
+          location: string | null
+          notes: string | null
+          reminder_sent: boolean
+          external_calendar_event_id: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          doctor_id: string
+          patient_id: string
+          clinic_id: string
+          title: string
+          description?: string | null
+          appointment_date: string
+          appointment_time: string
+          duration?: number
+          status?: 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show'
+          type?: 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
+          location?: string | null
+          notes?: string | null
+          reminder_sent?: boolean
+          external_calendar_event_id?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          doctor_id?: string
+          patient_id?: string
+          clinic_id?: string
+          title?: string
+          description?: string | null
+          appointment_date?: string
+          appointment_time?: string
+          duration?: number
+          status?: 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show'
+          type?: 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
+          location?: string | null
+          notes?: string | null
+          reminder_sent?: boolean
+          external_calendar_event_id?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+        }
+      }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          message: string
+          title: string | null
+          is_read: boolean
+          related_entity_type: string | null
+          related_entity_id: string | null
+          action_url: string | null
+          priority: 'low' | 'normal' | 'high' | 'urgent'
+          created_at: string
+          read_at: string | null
+          suggested_action?: Json | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          message: string
+          title?: string | null
+          is_read?: boolean
+          related_entity_type?: string | null
+          related_entity_id?: string | null
+          action_url?: string | null
+          priority?: 'low' | 'normal' | 'high' | 'urgent'
+          created_at?: string
+          read_at?: string | null
+          suggested_action?: Json | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          message?: string
+          title?: string | null
+          is_read?: boolean
+          related_entity_type?: string | null
+          related_entity_id?: string | null
+          action_url?: string | null
+          priority?: 'low' | 'normal' | 'high' | 'urgent'
+          created_at?: string
+          read_at?: string | null
+          suggested_action?: Json | null
+        }
+      }
+      data_correction_requests: {
+        Row: {
+          id: string
+          patient_user_id: string
+          patient_id: string
+          request_type: 'access' | 'rectification' | 'cancellation' | 'opposition'
+          field_to_correct: string | null
+          current_value: string | null
+          requested_value: string | null
+          reason: string
+          additional_details: string | null
+          status: 'pending' | 'in_review' | 'approved' | 'rejected' | 'completed'
+          reviewed_by: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          patient_user_id: string
+          patient_id: string
+          request_type: 'access' | 'rectification' | 'cancellation' | 'opposition'
+          field_to_correct?: string | null
+          current_value?: string | null
+          requested_value?: string | null
+          reason: string
+          additional_details?: string | null
+          status?: 'pending' | 'in_review' | 'approved' | 'rejected' | 'completed'
+          reviewed_by?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          patient_user_id?: string
+          patient_id?: string
+          request_type?: 'access' | 'rectification' | 'cancellation' | 'opposition'
+          field_to_correct?: string | null
+          current_value?: string | null
+          requested_value?: string | null
+          reason?: string
+          additional_details?: string | null
+          status?: 'pending' | 'in_review' | 'approved' | 'rejected' | 'completed'
+          reviewed_by?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      patient_access_logs: {
+        Row: {
+          id: string
+          patient_user_id: string
+          patient_id: string
+          action: string
+          resource_accessed: string | null
+          ip_address: string | null
+          user_agent: string | null
+          success: boolean
+          error_message: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          patient_user_id: string
+          patient_id: string
+          action: string
+          resource_accessed?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          success?: boolean
+          error_message?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          patient_user_id?: string
+          patient_id?: string
+          action?: string
+          resource_accessed?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          success?: boolean
+          error_message?: string | null
+          created_at?: string
+        }
+      }
+      privacy_consents: {
+        Row: {
+          id: string
+          patient_user_id: string
+          consent_type: string
+          consent_version: string
+          granted: boolean
+          granted_at: string | null
+          revoked_at: string | null
+          ip_address: string | null
+          user_agent: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          patient_user_id: string
+          consent_type: string
+          consent_version: string
+          granted?: boolean
+          granted_at?: string | null
+          revoked_at?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          patient_user_id?: string
+          consent_type?: string
+          consent_version?: string
+          granted?: boolean
+          granted_at?: string | null
+          revoked_at?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      clinical_rules: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          target_condition: string
+          trigger_logic: string
+          notification_template: string
+          suggested_action: Json
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          target_condition: string
+          trigger_logic: string
+          notification_template: string
+          suggested_action: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          target_condition?: string
+          trigger_logic?: string
+          notification_template?: string
+          suggested_action?: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }
@@ -1050,4 +1382,338 @@ export interface TemplateStats {
   };
   most_used: MedicalTemplate[];
   recent: MedicalTemplate[];
+}
+
+// =====================================================
+// SISTEMA DE CITAS MEJORADO - NUEVOS TIPOS
+// =====================================================
+
+export type AppointmentStatus = 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show';
+export type AppointmentType = 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency';
+export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export interface EnhancedAppointment {
+  id: string;
+  doctor_id: string;
+  patient_id: string;
+  clinic_id: string;
+  title: string;
+  description?: string;
+  appointment_date: string;
+  appointment_time: string;
+  duration: number;
+  status: AppointmentStatus;
+  type: AppointmentType;
+  location?: string;
+  notes?: string;
+  reminder_sent: boolean;
+  external_calendar_event_id?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  updated_by?: string;
+  
+  // Relaciones expandidas
+  patient?: {
+    id: string;
+    full_name: string;
+    phone?: string;
+    email?: string;
+    birth_date?: string;
+  };
+  doctor?: {
+    id: string;
+    full_name: string;
+    specialty?: string;
+    phone?: string;
+  };
+  clinic?: {
+    id: string;
+    name: string;
+    address?: string;
+  };
+}
+
+export interface CreateAppointmentPayload {
+  doctor_id: string;
+  patient_id: string;
+  clinic_id: string;
+  title: string;
+  description?: string;
+  appointment_date: string;
+  appointment_time: string;
+  duration?: number;
+  type: AppointmentType;
+  location?: string;
+  notes?: string;
+}
+
+export interface UpdateAppointmentPayload extends Partial<CreateAppointmentPayload> {
+  status?: AppointmentStatus;
+  reminder_sent?: boolean;
+  external_calendar_event_id?: string;
+}
+
+export interface AppointmentFilters {
+  doctor_id?: string;
+  patient_id?: string;
+  clinic_id?: string;
+  date_from?: string;
+  date_to?: string;
+  status?: AppointmentStatus[];
+  type?: AppointmentType[];
+  search?: string;
+}
+
+export interface AppointmentConflictCheck {
+  has_conflict: boolean;
+  conflicting_appointments?: EnhancedAppointment[];
+  available_slots?: {
+    start_time: string;
+    end_time: string;
+  }[];
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  message: string;
+  title?: string;
+  is_read: boolean;
+  related_entity_type?: string;
+  related_entity_id?: string;
+  action_url?: string;
+  priority: NotificationPriority;
+  created_at: string;
+  read_at?: string;
+}
+
+export interface CreateNotificationPayload {
+  user_id: string;
+  message: string;
+  title?: string;
+  related_entity_type?: string;
+  related_entity_id?: string;
+  action_url?: string;
+  priority?: NotificationPriority;
+}
+
+export interface NotificationFilters {
+  is_read?: boolean;
+  priority?: NotificationPriority[];
+  related_entity_type?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface NotificationStats {
+  total: number;
+  unread: number;
+  by_priority: {
+    low: number;
+    normal: number;
+    high: number;
+    urgent: number;
+  };
+  recent: Notification[];
+}
+
+// Tipos para la Edge Function
+export interface ScheduleAppointmentRequest {
+  doctor_id: string;
+  patient_id: string;
+  clinic_id: string;
+  title: string;
+  description?: string;
+  appointment_date: string;
+  appointment_time: string;
+  duration?: number;
+  type: AppointmentType;
+  location?: string;
+  notes?: string;
+}
+
+export interface ScheduleAppointmentResponse {
+  success: boolean;
+  appointment?: EnhancedAppointment;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+}
+
+export interface AppointmentAvailabilityRequest {
+  doctor_id: string;
+  appointment_date: string;
+  appointment_time: string;
+  duration: number;
+  exclude_appointment_id?: string;
+}
+
+export interface AppointmentAvailabilityResponse {
+  available: boolean;
+  conflict_details?: {
+    conflicting_appointment_id: string;
+    conflicting_time_range: {
+      start: string;
+      end: string;
+    };
+  };
+}
+
+// =====================================================
+// PORTAL DE PACIENTES - TIPOS PARA DERECHOS ARCO
+// =====================================================
+
+export type DataCorrectionRequestType = 'access' | 'rectification' | 'cancellation' | 'opposition';
+export type DataCorrectionRequestStatus = 'pending' | 'in_review' | 'approved' | 'rejected' | 'completed';
+
+export interface DataCorrectionRequest {
+  id: string;
+  patient_user_id: string;
+  patient_id: string;
+  request_type: DataCorrectionRequestType;
+  field_to_correct?: string;
+  current_value?: string;
+  requested_value?: string;
+  reason: string;
+  additional_details?: string;
+  status: DataCorrectionRequestStatus;
+  reviewed_by?: string;
+  review_notes?: string;
+  reviewed_at?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDataCorrectionRequest {
+  request_type: DataCorrectionRequestType;
+  field_to_correct?: string;
+  current_value?: string;
+  requested_value?: string;
+  reason: string;
+  additional_details?: string;
+}
+
+export interface PatientAccessLog {
+  id: string;
+  patient_user_id: string;
+  patient_id: string;
+  action: string;
+  resource_accessed?: string;
+  ip_address?: string;
+  user_agent?: string;
+  success: boolean;
+  error_message?: string;
+  created_at: string;
+}
+
+export interface PrivacyConsent {
+  id: string;
+  patient_user_id: string;
+  consent_type: string;
+  consent_version: string;
+  granted: boolean;
+  granted_at?: string;
+  revoked_at?: string;
+  ip_address?: string;
+  user_agent?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PatientCompleteData {
+  personal_info: {
+    full_name: string;
+    birth_date: string;
+    gender: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    city_of_birth?: string;
+    city_of_residence?: string;
+    social_security_number?: string;
+    created_at: string;
+    updated_at?: string;
+  };
+  consultations: Array<{
+    id: string;
+    current_condition: string;
+    vital_signs: Json;
+    physical_examination: Json;
+    diagnosis: string;
+    prognosis: string;
+    treatment: string;
+    created_at: string;
+    updated_at?: string;
+  }>;
+  appointments: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    appointment_date: string;
+    appointment_time: string;
+    duration: number;
+    status: string;
+    type: string;
+    location?: string;
+    notes?: string;
+    created_at: string;
+  }>;
+  medical_tests: Array<{
+    id: string;
+    category: string;
+    test_name: string;
+    status: string;
+    ordered_date?: string;
+    result_date?: string;
+    lab_name?: string;
+    notes?: string;
+    created_at: string;
+  }>;
+}
+
+// =====================================================
+// NOTIFICACIONES CLÍNICAS - TIPOS PARA REGLAS AUTOMÁTICAS
+// =====================================================
+
+export interface ClinicalRule {
+  id: string;
+  name: string;
+  description?: string;
+  target_condition: string;
+  trigger_logic: string;
+  notification_template: string;
+  suggested_action: Json;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateClinicalRule {
+  name: string;
+  description?: string;
+  target_condition: string;
+  trigger_logic: string;
+  notification_template: string;
+  suggested_action: Json;
+  is_active?: boolean;
+}
+
+export interface NotificationWithSuggestedAction extends Notification {
+  suggested_action?: {
+    type: 'schedule_appointment' | 'view_record' | 'call_patient' | 'send_reminder';
+    label: string;
+    data?: {
+      patient_id?: string;
+      patient_name?: string;
+      recommended_date?: string;
+      priority?: 'low' | 'normal' | 'high' | 'urgent';
+      notes?: string;
+    };
+  };
 }

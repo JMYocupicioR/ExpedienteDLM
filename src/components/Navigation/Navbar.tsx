@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import ClinicSwitcher from '../Layout/ClinicSwitcher';
+import NotificationBell from '../NotificationBell';
 
 interface NavItem {
   id: string;
@@ -30,7 +31,6 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [notifications, setNotifications] = useState(0);
 
   // Navigation items based on user role
   const getNavItems = (): NavItem[] => {
@@ -175,13 +175,7 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
     setIsMobileOpen(false);
   }, [location.pathname]);
 
-  // Load notifications count
-  useEffect(() => {
-    if (user && profile?.role === 'doctor') {
-      // Simulate notifications - replace with real data
-      setNotifications(Math.floor(Math.random() * 5));
-    }
-  }, [user, profile]);
+  // Notifications are now handled by NotificationBell component
 
   if (loading) {
     return null; // Or a loading skeleton
@@ -272,18 +266,11 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
         {/* Bottom Actions */}
         <div className="p-4 border-t border-gray-800 space-y-2">
           {/* Notifications */}
-          {(profile?.role === 'doctor' || profile?.role === 'health_staff') && (
-            <button className="w-full flex items-center space-x-3 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
-              <div className="relative">
-                <Bell className="h-5 w-5" />
-                {notifications > 0 && (
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full text-xs flex items-center justify-center text-white">
-                    {notifications}
-                  </span>
-                )}
-              </div>
-              {!isCollapsed && <span>Notificaciones</span>}
-            </button>
+          {(profile?.role === 'doctor' || profile?.role === 'health_staff' || profile?.role === 'admin_staff') && (
+            <div className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} p-2`}>
+              <NotificationBell />
+              {!isCollapsed && <span className="text-gray-400">Notificaciones</span>}
+            </div>
           )}
 
           {/* Settings */}
@@ -329,15 +316,10 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
             </button>
 
             {/* Notifications for mobile */}
-            {(profile?.role === 'doctor' || profile?.role === 'health_staff') && (
-              <button className="touch-target p-2 rounded-lg bg-gray-800/70 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white relative">
-                <Bell className="h-5 w-5" />
-                {notifications > 0 && (
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full text-xs flex items-center justify-center text-white">
-                    {notifications}
-                  </span>
-                )}
-              </button>
+            {(profile?.role === 'doctor' || profile?.role === 'health_staff' || profile?.role === 'admin_staff') && (
+              <div className="touch-target p-2 rounded-lg bg-gray-800/70 hover:bg-gray-700 transition-colors">
+                <NotificationBell />
+              </div>
             )}
 
             {/* Menu toggle */}

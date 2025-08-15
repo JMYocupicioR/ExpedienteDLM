@@ -821,10 +821,14 @@ export default function EnhancedSignupQuestionnaire() {
             clinic_id: clinicId,
             user_id: userId,
             role_in_clinic: roleInClinic,
+            status: 'pending', // Siempre pendiente por defecto
             is_active: true
           });
 
         if (relationError) throw relationError;
+        
+        // Mostrar mensaje informativo sobre la aprobación
+        console.log('📋 Solicitud de unión enviada. Esperando aprobación del administrador de la clínica.');
       }
 
       console.log('✅ Registro completado exitosamente');

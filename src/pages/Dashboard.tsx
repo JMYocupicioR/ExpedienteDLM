@@ -24,6 +24,7 @@ import { es } from 'date-fns/locale';
 import { Button } from '../components/ui/button';
 import NewPatientForm from '../components/NewPatientForm';
 import GenerateInvitationLinkModal from '../components/GenerateInvitationLinkModal';
+import ClinicStatusCard from '../components/ClinicStatusCard';
 import { appointmentService, Appointment } from '../lib/services/appointment-service';
 
 const Dashboard = () => {
@@ -443,6 +444,18 @@ const Dashboard = () => {
           </div>
         </section>
 
+        {/* Clinic Status Section - Solo para doctores y personal de salud */}
+        {userProfile?.role && ['doctor', 'health_staff', 'admin_staff'].includes(userProfile.role) && (
+          <section className="section">
+            <ClinicStatusCard 
+              onStatusUpdate={() => {
+                // Recargar datos del dashboard cuando cambie el estado
+                loadDashboardData();
+              }}
+            />
+          </section>
+        )}
+
         {/* Admin Section - Lista de Pacientes */}
         {isAdmin && (
           <section className="section">
@@ -561,8 +574,15 @@ const Dashboard = () => {
               <h2 className="text-xl lg:text-2xl font-semibold text-white mb-6">Acciones Rápidas</h2>
             <div className="grid grid-cols-2 gap-4">
               <Button 
-                onClick={() => setShowNewPatientForm(true)}
+                onClick={() => setShowQuickStartModal(true)}
                 className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+              >
+                <Activity className="h-4 w-4 mr-2" />
+                Iniciar Consulta
+              </Button>
+              <Button 
+                onClick={() => setShowNewPatientForm(true)}
+                className="bg-gray-700 hover:bg-gray-600 text-white"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Nuevo Paciente
@@ -797,6 +817,14 @@ const Dashboard = () => {
         isOpen={showNewPatientForm}
         onClose={() => setShowNewPatientForm(false)}
         onSave={handleNewPatientCreated}
+      />
+
+      {/* Modal de Inicio Rápido de Consulta */}
+      <QuickStartModal
+        isOpen={showQuickStartModal}
+        onClose={() => setShowQuickStartModal(false)}
+        title="Iniciar Nueva Consulta"
+        mode="consultation"
       />
       <GenerateInvitationLinkModal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />
     </>

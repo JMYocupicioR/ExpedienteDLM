@@ -7,18 +7,21 @@ import { useValidationNotifications } from './ValidationNotification';
 import PatientSelector, { Patient } from './PatientSelector';
 import { useActivityLog } from '../hooks/useActivityLog';
 import { 
-  Appointment, 
-  CreateAppointmentData, 
-  UpdateAppointmentData,
-  appointmentService 
-} from '../lib/services/appointment-service';
+  EnhancedAppointment, 
+  CreateAppointmentPayload, 
+  UpdateAppointmentPayload,
+  AppointmentType,
+  AppointmentStatus,
+  enhancedAppointmentService 
+} from '../lib/services/enhanced-appointment-service';
 
 interface AppointmentFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: CreateAppointmentData | UpdateAppointmentData) => Promise<void>;
-  appointment?: Appointment | null;
+  onSubmit: (data: CreateAppointmentPayload | UpdateAppointmentPayload) => Promise<void>;
+  appointment?: EnhancedAppointment | null;
   doctorId: string;
+  clinicId: string;
   selectedDate?: string;
   selectedTime?: string;
   patients?: Array<{
@@ -42,12 +45,12 @@ interface FormData {
   appointment_date: string;
   appointment_time: string;
   duration: number;
-  type: Appointment['type'];
+  type: AppointmentType;
   location: string;
   notes: string;
 }
 
-const appointmentTypes: Array<{ value: Appointment['type']; label: string; description: string }> = [
+const appointmentTypes: Array<{ value: AppointmentType; label: string; description: string }> = [
   { value: 'consultation', label: 'Consulta', description: 'Consulta médica general' },
   { value: 'follow_up', label: 'Seguimiento', description: 'Cita de seguimiento' },
   { value: 'check_up', label: 'Chequeo', description: 'Examen médico preventivo' },
@@ -70,6 +73,7 @@ export default function AppointmentForm({
   onSubmit,
   appointment,
   doctorId,
+  clinicId,
   selectedDate,
   selectedTime,
   patients = [],
@@ -155,18 +159,24 @@ export default function AppointmentForm({
 
     setCheckingAvailability(true);
     try {
-      const available = await appointmentService.checkAvailability(
+      const result = await enhancedAppointmentService.checkAvailability(
         doctorId,
         formData.appointment_date,
         formData.appointment_time,
-        formData.duration
+        formData.duration,
+        appointment?.id // Excluir la cita actual si estamos editando
       );
-      setIsAvailable(available);
       
-      if (!available) {
+      setIsAvailable(result.available);
+      
+      if (!result.available) {
+        const conflictMsg = result.conflictDetails 
+          ? `Conflicto con cita existente de ${result.conflictDetails.conflicting_time_range.start} a ${result.conflictDetails.conflicting_time_range.end}`
+          : 'Ya existe una cita programada en este horario';
+          
         addWarning(
           'Conflicto de Horario',
-          'Ya existe una cita programada en este horario. Por favor, seleccione otro horario.'
+          `${conflictMsg}. Por favor, seleccione otro horario.`
         );
       }
     } catch (error) {
@@ -257,6 +267,7 @@ export default function AppointmentForm({
       const submitData = {
         doctor_id: doctorId,
         patient_id: formData.patient_id,
+        clinic_id: clinicId,
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
         appointment_date: formData.appointment_date,

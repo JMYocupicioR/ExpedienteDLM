@@ -92,8 +92,8 @@ enabled = true
 # Port to use for the email testing server web interface.
 port = 54324
 # Uncomment to expose additional ports for testing user applications that send emails.
-# smtp_port = 54325
-# pop3_port = 54326
+smtp_port = 54325
+pop3_port = 54326
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
@@ -170,7 +170,7 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -181,19 +181,27 @@ otp_length = 6
 otp_expiry = 3600
 
 # Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+[auth.email.smtp]
+enabled = true
+host = "smtp.ionos.mx"
+port = 587
+user = "soporte@deepluxmed.mx"
+pass = "env(SMTP_PASSWORD)"
+admin_email = "soporte@deepluxmed.mx"
+sender_name = "DeepLuxMed"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Plantillas de email personalizadas
+[auth.email.template.confirmation]
+subject = "Confirma tu email - DeepLux Med"
+content_path = "./supabase/templates/confirm.html"
+
+[auth.email.template.recovery]
+subject = "Recuperar Contraseña - DeepLux Med"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.invite]
+subject = "Invitación a DeepLux Med"
+content_path = "./supabase/templates/confirm.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.

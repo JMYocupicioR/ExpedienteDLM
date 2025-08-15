@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Users, UserPlus, Building, Shield, Settings, Mail, UserCheck } from 'lucide-react';
 import PatientsList from './PatientsList';
+import ClinicStaffManagement from '../components/ClinicStaffManagement';
 
 type StaffMember = {
   id: string;
@@ -95,7 +96,7 @@ export default function ClinicAdminPage() {
           </div>
         )}
         
-        {activeTab === 'staff' && <StaffList clinicId={clinicId} />}
+        {activeTab === 'staff' && <ClinicStaffManagement clinicId={clinicId} />}
         {activeTab === 'invite' && <InviteUserForm clinicId={clinicId} />}
         {activeTab === 'details' && <ClinicDetailsForm clinicId={clinicId} />}
         {activeTab === 'subscription' && <SubscriptionPanel clinicId={clinicId} />}
@@ -104,55 +105,7 @@ export default function ClinicAdminPage() {
   );
 }
 
-function StaffList({ clinicId }: { clinicId: string }) {
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const loadStaff = async () => {
-    setLoading(true);
-    // Unir relaciones con perfiles para mostrar nombre/email
-    const { data, error } = await supabase
-      .from('clinic_user_relationships')
-      .select('user_id, role_in_clinic, is_active, profiles:profiles(full_name, email)')
-      .eq('clinic_id', clinicId)
-      .eq('is_active', true);
-    if (!error && data) {
-      const mapped: StaffMember[] = data.map((r: any) => ({
-        id: r.user_id,
-        full_name: r.profiles?.full_name ?? null,
-        email: r.profiles?.email ?? '',
-        role_in_clinic: r.role_in_clinic,
-        is_active: r.is_active,
-      }));
-      setStaff(mapped);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => { loadStaff(); }, [clinicId]);
-
-  return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-      {loading ? (
-        <div className="text-gray-400">Cargando personal...</div>
-      ) : staff.length === 0 ? (
-        <div className="text-gray-400">No hay personal registrado.</div>
-      ) : (
-        <div className="space-y-2">
-          {staff.map(m => (
-            <div key={m.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-md">
-              <div>
-                <div className="text-white font-medium">{m.full_name || 'Sin nombre'}</div>
-                <div className="text-gray-400 text-sm">{m.email}</div>
-              </div>
-              <div className="text-gray-300 text-sm capitalize">{m.role_in_clinic === 'admin_staff' ? 'Administrador' : 'Doctor'}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function InviteUserForm({ clinicId }: { clinicId: string }) {
   const [email, setEmail] = useState('');

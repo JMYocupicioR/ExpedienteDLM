@@ -13,21 +13,25 @@ export interface Patient {
 }
 
 interface PatientSelectorProps {
-  selectedPatientId: string;
+  selectedPatientId?: string;
   onPatientSelect: (patient: Patient) => void;
   onNewPatient?: (patient: Patient) => void;
   placeholder?: string;
   className?: string;
+  searchQuery?: string;
+  showRecentPatients?: boolean;
 }
 
 export default function PatientSelector({
-  selectedPatientId,
+  selectedPatientId = '',
   onPatientSelect,
   onNewPatient,
   placeholder = "Buscar paciente...",
-  className = ""
+  className = "",
+  searchQuery = '',
+  showRecentPatients = false
 }: PatientSelectorProps) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchQuery);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -41,7 +45,7 @@ export default function PatientSelector({
   // Cargar pacientes iniciales
   useEffect(() => {
     loadPatients();
-  }, []);
+  }, [showRecentPatients]);
 
   // Actualizar paciente seleccionado cuando cambia el ID
   useEffect(() => {
@@ -53,6 +57,11 @@ export default function PatientSelector({
       }
     }
   }, [selectedPatientId, patients]);
+
+  // Sincronizar searchQuery prop con searchTerm state
+  useEffect(() => {
+    setSearchTerm(searchQuery);
+  }, [searchQuery]);
 
   // Filtrar pacientes cuando cambia el término de búsqueda
   useEffect(() => {
@@ -88,12 +97,19 @@ export default function PatientSelector({
   const loadPatients = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const query = supabase
         .from('patients')
         .select('id, full_name, phone, email, birth_date, gender')
-        .eq('is_active', true)
-        .order('full_name', { ascending: true })
-        .limit(100);
+        .eq('is_active', true);
+      
+      // Order by recent activity if showRecentPatients is true
+      if (showRecentPatients) {
+        query.order('updated_at', { ascending: false }).limit(20);
+      } else {
+        query.order('full_name', { ascending: true }).limit(100);
+      }
+      
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error loading patients:', error);
