@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Configuración de Supabase
-const SUPABASE_URL = 'https://qcelbrzjrmjxpjxllyhk.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw';
+const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.YOUR_SUPABASE_ANON_KEY';
 
 console.log('🔐 Probando autenticación con Supabase...\n');
 
@@ -153,7 +153,7 @@ async function main() {
     console.log('4. ✅ Probar registro de usuarios');
     
     console.log('\n📝 Para completar la configuración:');
-    console.log('1. Ve al SQL Editor: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql');
+    console.log('1. Ve al SQL Editor: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql');
     console.log('2. Aplica la migración final');
     console.log('3. Reinicia el servidor de desarrollo');
     console.log('4. Prueba el registro en la aplicación');

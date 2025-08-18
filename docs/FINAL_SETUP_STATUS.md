@@ -26,7 +26,7 @@
 
 ### Opción 1: Aplicar Migración Manual (Recomendado)
 
-1. **Abrir SQL Editor**: Ya abierto en https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
+1. **Abrir SQL Editor**: Ya abierto en https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
 
 2. **Copiar y pegar esta migración**:
 ```sql
@@ -69,7 +69,7 @@ USING (auth.uid() = id);
 
 ### Opción 2: Verificar si la tabla ya existe
 
-1. Ve al **Table Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/editor
+1. Ve al **Table Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/editor
 2. Verifica si la tabla `physical_exams` ya está presente
 3. Si no está, aplica la migración de arriba
 
@@ -104,9 +104,9 @@ Deberías ver:
 
 ### **Enlaces Importantes:**
 - **Aplicación**: http://localhost:5173
-- **Dashboard Supabase**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk
-- **SQL Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
-- **Table Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/editor
+- **Dashboard Supabase**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF
+- **SQL Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
+- **Table Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/editor
 
 ## 📋 **Comandos Útiles:**
 

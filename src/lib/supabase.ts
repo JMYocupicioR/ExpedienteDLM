@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/lib/database.types';
+import { createClient } from '@supabase/supabase-js';
 
 // Obtener variables de entorno
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Variables encontradas:');
   console.error('URL:', supabaseUrl);
   console.error('Key:', supabaseAnonKey ? 'Definida' : 'No definida');
-  
+
   // En lugar de lanzar error inmediatamente, intentar con valores por defecto
   if (!supabaseUrl) {
     console.warn('⚠️ Usando URL por defecto para desarrollo');
@@ -39,13 +39,13 @@ export const supabase = createClient<Database>(finalUrl, finalKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
   },
   realtime: {
     params: {
-      eventsPerSecond: 10
-    }
-  }
+      eventsPerSecond: 10,
+    },
+  },
 });
 
 // Estado de configuración
@@ -75,24 +75,21 @@ export const checkSupabaseConnection = async (): Promise<boolean> => {
 export const clearAuthCache = async () => {
   try {
     console.log('🧹 Limpiando caché de autenticación...');
-    
+
     // 1. Cerrar sesión en Supabase
     await supabase.auth.signOut();
-    
+
     // 2. Limpiar localStorage relacionado con Supabase
-    const keysToRemove = Object.keys(localStorage).filter(key => 
-      key.startsWith('supabase.') || 
-      key.includes('supabase') || 
-      key.includes('auth')
+    const keysToRemove = Object.keys(localStorage).filter(
+      key => key.startsWith('supabase.') || key.includes('supabase') || key.includes('auth')
     );
-    
+
     keysToRemove.forEach(key => {
       localStorage.removeItem(key);
     });
-    
+
     console.log(`📦 ${keysToRemove.length} elementos de caché eliminados`);
     console.log('✅ Caché limpiado exitosamente');
-    
   } catch (error) {
     console.error('❌ Error limpiando caché:', error);
   }
@@ -124,7 +121,10 @@ supabase.auth.onAuthStateChange((event, session) => {
 // Función para obtener información del usuario actual
 export const getCurrentUser = async () => {
   try {
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
     if (error) throw error;
     return user;
   } catch (error) {
@@ -136,12 +136,8 @@ export const getCurrentUser = async () => {
 // Función para obtener perfil del usuario
 export const getUserProfile = async (userId: string) => {
   try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -159,11 +155,11 @@ export const createUserProfile = async (userId: string, profileData: any) => {
         id: userId,
         ...profileData,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -179,12 +175,12 @@ export const updateUserProfile = async (userId: string, updates: any) => {
       .from('profiles')
       .update({
         ...updates,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('id', userId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   } catch (error) {

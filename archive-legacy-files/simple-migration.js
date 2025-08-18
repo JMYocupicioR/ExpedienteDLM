@@ -118,7 +118,7 @@ async function main() {
   
   console.log('\n💡 Para aplicar las migraciones:');
   console.log('1. Ve al dashboard de Supabase:');
-  console.log('   https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql');
+  console.log('   https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql');
   console.log('2. Copia y pega el contenido de cada archivo .sql');
   console.log('3. Ejecuta las consultas en orden');
   
@@ -126,9 +126,9 @@ async function main() {
   await checkTables();
   
   console.log('\n📖 Enlaces útiles:');
-  console.log('   - Dashboard: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk');
-  console.log('   - SQL Editor: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql');
-  console.log('   - Table Editor: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/editor');
+  console.log('   - Dashboard: https://supabase.com/dashboard/project/YOUR_PROJECT_REF');
+  console.log('   - SQL Editor: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql');
+  console.log('   - Table Editor: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/editor');
 }
 
 // Ejecutar

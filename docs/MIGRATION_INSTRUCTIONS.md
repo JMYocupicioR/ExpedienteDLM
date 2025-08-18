@@ -8,7 +8,7 @@
 ## 📋 Pasos para Aplicar Migraciones
 
 ### 1. Acceder al SQL Editor de Supabase
-- **URL**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
+- **URL**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
 - **Navegador**: Ya abierto automáticamente
 
 ### 2. Aplicar Migraciones en Orden
@@ -90,9 +90,9 @@ npm run dev
 
 ## 📞 Enlaces Importantes
 
-- **Dashboard de Supabase**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk
-- **SQL Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
-- **Table Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/editor
+- **Dashboard de Supabase**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF
+- **SQL Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
+- **Table Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/editor
 - **Aplicación**: http://localhost:5173
 
 ## 🚨 Solución de Problemas

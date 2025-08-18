@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Supabase configuration
-const supabaseUrl = 'https://qcelbrzjrmjxpjxllyhk.supabase.co';
+const supabaseUrl = 'https://YOUR_PROJECT_REF.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzM0NDU0NSwiZXhwIjoyMDYyOTIwNTQ1fQ.9t_I3W6O2Gz5o3qKwmYUPaJQwPvV0RCJit0P4rRPP7I';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -138,7 +138,7 @@ async function runSimplifiedMigration() {
     console.log('\n⚠️  IMPORTANTE: La migración debe ser aplicada manualmente.');
     console.log('\n📋 Instrucciones:');
     console.log('1. Abre el dashboard de Supabase: https://app.supabase.com');
-    console.log('2. Ve a tu proyecto: qcelbrzjrmjxpjxllyhk');
+    console.log('2. Ve a tu proyecto: YOUR_PROJECT_REF');
     console.log('3. Navega a "SQL Editor" en el menú lateral');
     console.log('4. Crea una nueva consulta');
     console.log('5. Copia todo el contenido del archivo:');

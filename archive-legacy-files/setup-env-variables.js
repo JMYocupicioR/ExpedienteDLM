@@ -3,8 +3,8 @@ import fs from 'fs';
 import path from 'path';
 
 const envContent = `# Supabase Configuration
-VITE_SUPABASE_URL=https://qcelbrzjrmjxpjxllyhk.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.YOUR_SUPABASE_ANON_KEY
 
 # Environment
 NODE_ENV=development
@@ -36,7 +36,7 @@ try {
   
   console.log('\n🔧 CONFIGURACIÓN COMPLETADA');
   console.log('============================');
-  console.log('📡 URL de Supabase:', 'https://qcelbrzjrmjxpjxllyhk.supabase.co');
+  console.log('📡 URL de Supabase:', 'https://YOUR_PROJECT_REF.supabase.co');
   console.log('🔑 Clave anónima configurada');
   console.log('📁 Archivo .env ubicado en:', envPath);
   

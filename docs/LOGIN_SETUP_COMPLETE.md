@@ -23,7 +23,7 @@ Aplicar la migración final en el SQL Editor de Supabase.
 ## 📋 **Pasos para Completar el Login:**
 
 ### 1. **Abrir SQL Editor**
-- URL: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
+- URL: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
 - Ya abierto en tu navegador
 
 ### 2. **Aplicar Migración Final**
@@ -129,8 +129,8 @@ node test-auth.js
 ## 📞 **Enlaces Importantes:**
 
 - **Aplicación**: http://localhost:5173
-- **SQL Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
-- **Dashboard Supabase**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk
+- **SQL Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
+- **Dashboard Supabase**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF
 
 ## 🎉 **¡Casi Listo!**
 

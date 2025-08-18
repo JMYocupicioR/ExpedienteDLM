@@ -7,7 +7,7 @@
 
 ## 🔧 Configuración
 
-- **URL del Proyecto:** https://qcelbrzjrmjxpjxllyhk.supabase.co
+- **URL del Proyecto:** https://YOUR_PROJECT_REF.supabase.co
 - **Clave Anónima:** Configurada correctamente
 - **Archivo .env:** ✅ Presente y configurado
 - **Variables de Entorno:** ✅ Configuradas
@@ -47,7 +47,7 @@
 ## 📋 Variables de Entorno Configuradas
 
 ```bash
-VITE_SUPABASE_URL=https://qcelbrzjrmjxpjxllyhk.supabase.co
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 NODE_ENV=development
 ```

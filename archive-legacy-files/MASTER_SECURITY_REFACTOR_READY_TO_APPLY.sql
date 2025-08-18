@@ -1,21 +1,21 @@
-﻿-- =====================================================
--- CONSOLIDACIÃ“N MAESTRA DE POLÃTICAS DE SEGURIDAD (RLS)
+-- =====================================================
+-- CONSOLIDACIÓN MAESTRA DE POLÍTICAS DE SEGURIDAD (RLS)
 -- Fecha: 2025-08-17
 -- 
--- Este script unifica TODAS las polÃ­ticas de seguridad del sistema,
--- eliminando la deuda tÃ©cnica acumulada por mÃºltiples parches.
+-- Este script unifica TODAS las políticas de seguridad del sistema,
+-- eliminando la deuda técnica acumulada por múltiples parches.
 -- =====================================================
 
 -- =====================================================
 -- PASO 1: LIMPIEZA COMPLETA
--- Eliminar TODAS las polÃ­ticas existentes para empezar desde cero
+-- Eliminar TODAS las políticas existentes para empezar desde cero
 -- =====================================================
 
 DO $$
 DECLARE
     policy_record RECORD;
 BEGIN
-    -- Eliminar todas las polÃ­ticas de la tabla patients
+    -- Eliminar todas las políticas de la tabla patients
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -24,7 +24,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.patients', policy_record.policyname);
     END LOOP;
 
-    -- Eliminar todas las polÃ­ticas de la tabla clinics
+    -- Eliminar todas las políticas de la tabla clinics
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -33,7 +33,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.clinics', policy_record.policyname);
     END LOOP;
 
-    -- Eliminar todas las polÃ­ticas de la tabla clinic_staff
+    -- Eliminar todas las políticas de la tabla clinic_staff
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -42,7 +42,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.clinic_staff', policy_record.policyname);
     END LOOP;
 
-    -- Eliminar todas las polÃ­ticas de la tabla clinic_user_relationships
+    -- Eliminar todas las políticas de la tabla clinic_user_relationships
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -51,7 +51,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.clinic_user_relationships', policy_record.policyname);
     END LOOP;
 
-    -- Eliminar todas las polÃ­ticas de la tabla consultations
+    -- Eliminar todas las políticas de la tabla consultations
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -60,7 +60,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.consultations', policy_record.policyname);
     END LOOP;
 
-    -- Eliminar todas las polÃ­ticas de la tabla prescriptions
+    -- Eliminar todas las políticas de la tabla prescriptions
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -69,7 +69,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.prescriptions', policy_record.policyname);
     END LOOP;
 
-    -- Eliminar todas las polÃ­ticas de la tabla physical_exams
+    -- Eliminar todas las políticas de la tabla physical_exams
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -78,7 +78,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.physical_exams', policy_record.policyname);
     END LOOP;
 
-    -- Eliminar todas las polÃ­ticas de la tabla activity_logs
+    -- Eliminar todas las políticas de la tabla activity_logs
     FOR policy_record IN 
         SELECT policyname 
         FROM pg_policies 
@@ -90,10 +90,10 @@ END $$;
 
 -- =====================================================
 -- PASO 2: FUNCIONES AUXILIARES
--- Crear o actualizar funciones helper para evitar recursiÃ³n y mejorar legibilidad
+-- Crear o actualizar funciones helper para evitar recursión y mejorar legibilidad
 -- =====================================================
 
--- FunciÃ³n para obtener la clÃ­nica activa del usuario actual
+-- Función para obtener la clínica activa del usuario actual
 CREATE OR REPLACE FUNCTION public.get_user_clinic_id()
 RETURNS UUID
 LANGUAGE sql
@@ -106,7 +106,7 @@ AS $$
     LIMIT 1
 $$;
 
--- FunciÃ³n para verificar si un usuario pertenece a una clÃ­nica especÃ­fica
+-- Función para verificar si un usuario pertenece a una clínica específica
 CREATE OR REPLACE FUNCTION public.is_user_in_clinic(check_clinic_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -129,7 +129,7 @@ AS $$
     )
 $$;
 
--- FunciÃ³n para obtener el rol del usuario en su clÃ­nica
+-- Función para obtener el rol del usuario en su clínica
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT
 LANGUAGE sql
@@ -142,7 +142,7 @@ AS $$
     LIMIT 1
 $$;
 
--- FunciÃ³n para verificar si el usuario es admin de una clÃ­nica especÃ­fica
+-- Función para verificar si el usuario es admin de una clínica específica
 CREATE OR REPLACE FUNCTION public.is_clinic_admin(check_clinic_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -168,28 +168,28 @@ AS $$
 $$;
 
 -- =====================================================
--- PASO 3: POLÃTICAS PARA LA TABLA PATIENTS
+-- PASO 3: POLÍTICAS PARA LA TABLA PATIENTS
 -- Controla el acceso a los registros de pacientes
 -- =====================================================
 
 -- Habilitar RLS en la tabla patients
 ALTER TABLE public.patients ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Los usuarios solo pueden ver pacientes de su clÃ­nica
+-- SELECT: Los usuarios solo pueden ver pacientes de su clínica
 CREATE POLICY "patients_select_own_clinic"
 ON public.patients FOR SELECT
 USING (
     is_user_in_clinic(clinic_id)
 );
 
--- INSERT: Los usuarios solo pueden crear pacientes en su clÃ­nica activa
+-- INSERT: Los usuarios solo pueden crear pacientes en su clínica activa
 CREATE POLICY "patients_insert_own_clinic"
 ON public.patients FOR INSERT
 WITH CHECK (
     clinic_id = get_user_clinic_id()
 );
 
--- UPDATE: Los usuarios solo pueden actualizar pacientes de su clÃ­nica
+-- UPDATE: Los usuarios solo pueden actualizar pacientes de su clínica
 CREATE POLICY "patients_update_own_clinic"
 ON public.patients FOR UPDATE
 USING (
@@ -199,7 +199,7 @@ WITH CHECK (
     is_user_in_clinic(clinic_id)
 );
 
--- DELETE: Solo administradores de la clÃ­nica pueden eliminar pacientes
+-- DELETE: Solo administradores de la clínica pueden eliminar pacientes
 CREATE POLICY "patients_delete_admin_only"
 ON public.patients FOR DELETE
 USING (
@@ -207,8 +207,8 @@ USING (
 );
 
 -- =====================================================
--- PASO 4: POLÃTICAS PARA LA TABLA CLINIC_STAFF
--- Controla quiÃ©n puede gestionar el personal de cada clÃ­nica
+-- PASO 4: POLÍTICAS PARA LA TABLA CLINIC_STAFF
+-- Controla quién puede gestionar el personal de cada clínica
 -- =====================================================
 
 -- Habilitar RLS en la tabla clinic_staff (si existe)
@@ -221,14 +221,14 @@ BEGIN
     ) THEN
         ALTER TABLE public.clinic_staff ENABLE ROW LEVEL SECURITY;
         
-        -- SELECT: Los usuarios pueden ver el personal de su clÃ­nica
+        -- SELECT: Los usuarios pueden ver el personal de su clínica
         CREATE POLICY "clinic_staff_select_own_clinic"
         ON public.clinic_staff FOR SELECT
         USING (
             is_user_in_clinic(clinic_id)
         );
 
-        -- INSERT: Solo administradores pueden aÃ±adir personal
+        -- INSERT: Solo administradores pueden añadir personal
         CREATE POLICY "clinic_staff_insert_admin_only"
         ON public.clinic_staff FOR INSERT
         WITH CHECK (
@@ -255,14 +255,14 @@ BEGIN
 END $$;
 
 -- =====================================================
--- PASO 5: POLÃTICAS PARA LA TABLA CLINIC_USER_RELATIONSHIPS
--- Controla las relaciones entre usuarios y clÃ­nicas
+-- PASO 5: POLÍTICAS PARA LA TABLA CLINIC_USER_RELATIONSHIPS
+-- Controla las relaciones entre usuarios y clínicas
 -- =====================================================
 
 -- Habilitar RLS en la tabla clinic_user_relationships
 ALTER TABLE public.clinic_user_relationships ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Los usuarios pueden ver relaciones de su clÃ­nica o sus propias relaciones
+-- SELECT: Los usuarios pueden ver relaciones de su clínica o sus propias relaciones
 CREATE POLICY "clinic_relationships_select"
 ON public.clinic_user_relationships FOR SELECT
 USING (
@@ -294,14 +294,14 @@ USING (
 );
 
 -- =====================================================
--- PASO 6: POLÃTICAS PARA LA TABLA CONSULTATIONS
--- Controla el acceso a las consultas mÃ©dicas
+-- PASO 6: POLÍTICAS PARA LA TABLA CONSULTATIONS
+-- Controla el acceso a las consultas médicas
 -- =====================================================
 
 -- Habilitar RLS en la tabla consultations
 ALTER TABLE public.consultations ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Los usuarios pueden ver consultas de pacientes de su clÃ­nica
+-- SELECT: Los usuarios pueden ver consultas de pacientes de su clínica
 CREATE POLICY "consultations_select_own_clinic"
 ON public.consultations FOR SELECT
 USING (
@@ -312,7 +312,7 @@ USING (
     )
 );
 
--- INSERT: Los usuarios pueden crear consultas para pacientes de su clÃ­nica
+-- INSERT: Los usuarios pueden crear consultas para pacientes de su clínica
 CREATE POLICY "consultations_insert_own_clinic"
 ON public.consultations FOR INSERT
 WITH CHECK (
@@ -323,7 +323,7 @@ WITH CHECK (
     )
 );
 
--- UPDATE: Los usuarios pueden actualizar consultas de pacientes de su clÃ­nica
+-- UPDATE: Los usuarios pueden actualizar consultas de pacientes de su clínica
 CREATE POLICY "consultations_update_own_clinic"
 ON public.consultations FOR UPDATE
 USING (
@@ -353,14 +353,14 @@ USING (
 );
 
 -- =====================================================
--- PASO 7: POLÃTICAS PARA LA TABLA PRESCRIPTIONS
--- Controla el acceso a las prescripciones mÃ©dicas
+-- PASO 7: POLÍTICAS PARA LA TABLA PRESCRIPTIONS
+-- Controla el acceso a las prescripciones médicas
 -- =====================================================
 
 -- Habilitar RLS en la tabla prescriptions
 ALTER TABLE public.prescriptions ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Los usuarios pueden ver prescripciones de pacientes de su clÃ­nica
+-- SELECT: Los usuarios pueden ver prescripciones de pacientes de su clínica
 CREATE POLICY "prescriptions_select_own_clinic"
 ON public.prescriptions FOR SELECT
 USING (
@@ -371,7 +371,7 @@ USING (
     )
 );
 
--- INSERT: Los usuarios pueden crear prescripciones para pacientes de su clÃ­nica
+-- INSERT: Los usuarios pueden crear prescripciones para pacientes de su clínica
 CREATE POLICY "prescriptions_insert_own_clinic"
 ON public.prescriptions FOR INSERT
 WITH CHECK (
@@ -382,7 +382,7 @@ WITH CHECK (
     )
 );
 
--- UPDATE: Los usuarios pueden actualizar prescripciones de pacientes de su clÃ­nica
+-- UPDATE: Los usuarios pueden actualizar prescripciones de pacientes de su clínica
 CREATE POLICY "prescriptions_update_own_clinic"
 ON public.prescriptions FOR UPDATE
 USING (
@@ -412,14 +412,14 @@ USING (
 );
 
 -- =====================================================
--- PASO 8: POLÃTICAS PARA LA TABLA PHYSICAL_EXAMS
--- Controla el acceso a los exÃ¡menes fÃ­sicos
+-- PASO 8: POLÍTICAS PARA LA TABLA PHYSICAL_EXAMS
+-- Controla el acceso a los exámenes físicos
 -- =====================================================
 
 -- Habilitar RLS en la tabla physical_exams
 ALTER TABLE public.physical_exams ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Los usuarios pueden ver exÃ¡menes de pacientes de su clÃ­nica
+-- SELECT: Los usuarios pueden ver exámenes de pacientes de su clínica
 CREATE POLICY "physical_exams_select_own_clinic"
 ON public.physical_exams FOR SELECT
 USING (
@@ -430,7 +430,7 @@ USING (
     )
 );
 
--- INSERT: Los usuarios pueden crear exÃ¡menes para pacientes de su clÃ­nica
+-- INSERT: Los usuarios pueden crear exámenes para pacientes de su clínica
 CREATE POLICY "physical_exams_insert_own_clinic"
 ON public.physical_exams FOR INSERT
 WITH CHECK (
@@ -441,7 +441,7 @@ WITH CHECK (
     )
 );
 
--- UPDATE: Los usuarios pueden actualizar exÃ¡menes de pacientes de su clÃ­nica
+-- UPDATE: Los usuarios pueden actualizar exámenes de pacientes de su clínica
 CREATE POLICY "physical_exams_update_own_clinic"
 ON public.physical_exams FOR UPDATE
 USING (
@@ -459,7 +459,7 @@ WITH CHECK (
     )
 );
 
--- DELETE: Solo administradores pueden eliminar exÃ¡menes
+-- DELETE: Solo administradores pueden eliminar exámenes
 CREATE POLICY "physical_exams_delete_admin_only"
 ON public.physical_exams FOR DELETE
 USING (
@@ -471,21 +471,21 @@ USING (
 );
 
 -- =====================================================
--- PASO 9: POLÃTICAS PARA LA TABLA ACTIVITY_LOGS
+-- PASO 9: POLÍTICAS PARA LA TABLA ACTIVITY_LOGS
 -- Los logs de actividad deben ser inmutables
 -- =====================================================
 
 -- Habilitar RLS en la tabla activity_logs
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Los usuarios pueden ver logs de su clÃ­nica
+-- SELECT: Los usuarios pueden ver logs de su clínica
 CREATE POLICY "activity_logs_select_own_clinic"
 ON public.activity_logs FOR SELECT
 USING (
     is_user_in_clinic(clinic_id)
 );
 
--- INSERT: Los usuarios pueden crear logs (generalmente automÃ¡tico)
+-- INSERT: Los usuarios pueden crear logs (generalmente automático)
 CREATE POLICY "activity_logs_insert_authenticated"
 ON public.activity_logs FOR INSERT
 WITH CHECK (
@@ -495,28 +495,28 @@ WITH CHECK (
 -- NO se permiten UPDATE ni DELETE en activity_logs (tabla inmutable)
 
 -- =====================================================
--- PASO 10: POLÃTICAS PARA LA TABLA CLINICS
--- Controla quiÃ©n puede ver y gestionar clÃ­nicas
+-- PASO 10: POLÍTICAS PARA LA TABLA CLINICS
+-- Controla quién puede ver y gestionar clínicas
 -- =====================================================
 
 -- Habilitar RLS en la tabla clinics
 ALTER TABLE public.clinics ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Todos los usuarios autenticados pueden ver clÃ­nicas (para el flujo de registro)
+-- SELECT: Todos los usuarios autenticados pueden ver clínicas (para el flujo de registro)
 CREATE POLICY "clinics_select_authenticated"
 ON public.clinics FOR SELECT
 USING (
     auth.uid() IS NOT NULL
 );
 
--- INSERT: Los usuarios autenticados pueden crear clÃ­nicas (durante el registro)
+-- INSERT: Los usuarios autenticados pueden crear clínicas (durante el registro)
 CREATE POLICY "clinics_insert_authenticated"
 ON public.clinics FOR INSERT
 WITH CHECK (
     auth.uid() IS NOT NULL
 );
 
--- UPDATE: Solo administradores de la clÃ­nica o super admins
+-- UPDATE: Solo administradores de la clínica o super admins
 CREATE POLICY "clinics_update_admin_only"
 ON public.clinics FOR UPDATE
 USING (
@@ -526,7 +526,7 @@ WITH CHECK (
     is_clinic_admin(id) OR get_user_role() = 'super_admin'
 );
 
--- DELETE: Solo super admins pueden eliminar clÃ­nicas
+-- DELETE: Solo super admins pueden eliminar clínicas
 CREATE POLICY "clinics_delete_super_admin_only"
 ON public.clinics FOR DELETE
 USING (
@@ -534,7 +534,7 @@ USING (
 );
 
 -- =====================================================
--- PASO 11: VERIFICACIÃ“N FINAL
+-- PASO 11: VERIFICACIÓN FINAL
 -- Asegurar que todas las tablas tienen RLS habilitado
 -- =====================================================
 
@@ -556,7 +556,7 @@ BEGIN
             WHERE table_schema = 'public' 
             AND table_name = table_record.table_name
         ) THEN
-            -- Habilitar RLS si no estÃ¡ habilitado
+            -- Habilitar RLS si no está habilitado
             EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_record.table_name);
             RAISE NOTICE 'RLS habilitado para tabla: %', table_record.table_name;
         END IF;
@@ -564,34 +564,34 @@ BEGIN
 END $$;
 
 -- =====================================================
--- FIN DEL SCRIPT DE CONSOLIDACIÃ“N
+-- FIN DEL SCRIPT DE CONSOLIDACIÓN
 -- =====================================================
 
--- Comentario final: Este script consolida todas las polÃ­ticas de seguridad
--- en un Ãºnico lugar, eliminando la necesidad de mÃºltiples scripts de parche.
--- Cualquier cambio futuro en las polÃ­ticas debe hacerse aquÃ­.
-
-
--- =====================================================
--- SEGUNDA PARTE: AUTOMATIZACIÓN DE PERFILES
--- =====================================================
+-- Comentario final: Este script consolida todas las políticas de seguridad
+-- en un único lugar, eliminando la necesidad de múltiples scripts de parche.
+-- Cualquier cambio futuro en las políticas debe hacerse aquí.
 
 
 -- =====================================================
--- AUTOMATIZACIÃ“N DE CREACIÃ“N DE PERFILES
+-- SEGUNDA PARTE: AUTOMATIZACI�N DE PERFILES
+-- =====================================================
+
+
+-- =====================================================
+-- AUTOMATIZACIÓN DE CREACIÓN DE PERFILES
 -- Fecha: 2025-08-17
 -- 
--- Este script crea un sistema automÃ¡tico de triggers que garantiza
+-- Este script crea un sistema automático de triggers que garantiza
 -- que cada usuario en auth.users tenga su correspondiente perfil
 -- en public.profiles, eliminando la necesidad de scripts manuales.
 -- =====================================================
 
 -- =====================================================
--- PASO 1: PREPARACIÃ“N Y LIMPIEZA
+-- PASO 1: PREPARACIÓN Y LIMPIEZA
 -- Eliminar triggers anteriores si existen para evitar duplicados
 -- =====================================================
 
--- Eliminar triggers existentes relacionados con la creaciÃ³n de perfiles
+-- Eliminar triggers existentes relacionados con la creación de perfiles
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP TRIGGER IF EXISTS create_profile_on_signup ON auth.users;
 DROP TRIGGER IF EXISTS handle_new_user ON auth.users;
@@ -602,8 +602,8 @@ DROP FUNCTION IF EXISTS public.create_profile_on_signup() CASCADE;
 DROP FUNCTION IF EXISTS public.handle_auth_user_created() CASCADE;
 
 -- =====================================================
--- PASO 2: CREAR FUNCIÃ“N PARA MANEJAR NUEVOS USUARIOS
--- Esta funciÃ³n se ejecutarÃ¡ automÃ¡ticamente cuando se cree un usuario
+-- PASO 2: CREAR FUNCIÓN PARA MANEJAR NUEVOS USUARIOS
+-- Esta función se ejecutará automáticamente cuando se cree un usuario
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -617,7 +617,7 @@ DECLARE
     user_clinic_id UUID;
     full_name TEXT;
 BEGIN
-    -- Extraer informaciÃ³n del metadata del usuario si estÃ¡ disponible
+    -- Extraer información del metadata del usuario si está disponible
     user_role := COALESCE(
         NEW.raw_user_meta_data->>'role',
         'patient' -- Rol por defecto si no se especifica
@@ -637,7 +637,7 @@ BEGIN
         split_part(NEW.email, '@', 1) -- Usar parte del email si no hay nombre
     );
 
-    -- Insertar el perfil con toda la informaciÃ³n disponible
+    -- Insertar el perfil con toda la información disponible
     INSERT INTO public.profiles (
         id,
         email,
@@ -662,7 +662,7 @@ BEGIN
         NOW()
     );
 
-    -- Si el usuario es parte de una clÃ­nica y no es paciente, crear relaciÃ³n
+    -- Si el usuario es parte de una clínica y no es paciente, crear relación
     IF user_clinic_id IS NOT NULL AND user_role != 'patient' THEN
         -- Verificar que la tabla clinic_user_relationships existe
         IF EXISTS (
@@ -670,7 +670,7 @@ BEGIN
             WHERE table_schema = 'public' 
             AND table_name = 'clinic_user_relationships'
         ) THEN
-            -- Insertar relaciÃ³n usuario-clÃ­nica
+            -- Insertar relación usuario-clínica
             INSERT INTO public.clinic_user_relationships (
                 user_id,
                 clinic_id,
@@ -686,7 +686,7 @@ BEGIN
                     WHEN user_role = 'doctor' THEN 'doctor'
                     ELSE 'doctor' -- Por defecto para otros roles profesionales
                 END,
-                'pending', -- Requiere aprobaciÃ³n del admin
+                'pending', -- Requiere aprobación del admin
                 true,
                 NOW()
             ) ON CONFLICT (user_id, clinic_id) DO NOTHING;
@@ -734,7 +734,7 @@ EXCEPTION
         WHERE id = NEW.id;
         RETURN NEW;
     WHEN OTHERS THEN
-        -- Registrar el error pero no fallar la creaciÃ³n del usuario
+        -- Registrar el error pero no fallar la creación del usuario
         RAISE WARNING 'Error creating profile for user %: %', NEW.id, SQLERRM;
         RETURN NEW;
 END;
@@ -742,7 +742,7 @@ $$;
 
 -- =====================================================
 -- PASO 3: CREAR TRIGGER PARA NUEVOS USUARIOS
--- Se ejecutarÃ¡ despuÃ©s de cada INSERT en auth.users
+-- Se ejecutará después de cada INSERT en auth.users
 -- =====================================================
 
 CREATE TRIGGER on_auth_user_created
@@ -751,7 +751,7 @@ CREATE TRIGGER on_auth_user_created
     EXECUTE FUNCTION public.handle_new_user();
 
 -- =====================================================
--- PASO 4: FUNCIÃ“N PARA ACTUALIZAR PERFILES
+-- PASO 4: FUNCIÓN PARA ACTUALIZAR PERFILES
 -- Mantiene sincronizados los cambios en auth.users
 -- =====================================================
 
@@ -762,7 +762,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    -- Actualizar email si cambiÃ³
+    -- Actualizar email si cambió
     IF OLD.email IS DISTINCT FROM NEW.email THEN
         UPDATE public.profiles
         SET 
@@ -771,7 +771,7 @@ BEGIN
         WHERE id = NEW.id;
     END IF;
 
-    -- Actualizar metadata si cambiÃ³
+    -- Actualizar metadata si cambió
     IF OLD.raw_user_meta_data IS DISTINCT FROM NEW.raw_user_meta_data THEN
         UPDATE public.profiles
         SET 
@@ -804,7 +804,7 @@ CREATE TRIGGER on_auth_user_updated
     EXECUTE FUNCTION public.handle_user_updated();
 
 -- =====================================================
--- PASO 5: FUNCIÃ“N PARA MANEJAR ELIMINACIÃ“N DE USUARIOS
+-- PASO 5: FUNCIÓN PARA MANEJAR ELIMINACIÓN DE USUARIOS
 -- Limpieza en cascada cuando se elimina un usuario
 -- =====================================================
 
@@ -815,7 +815,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    -- El perfil deberÃ­a eliminarse automÃ¡ticamente por CASCADE
+    -- El perfil debería eliminarse automáticamente por CASCADE
     -- pero registramos la actividad si es posible
     IF EXISTS (
         SELECT FROM information_schema.tables 
@@ -855,7 +855,7 @@ CREATE TRIGGER on_auth_user_deleted
     EXECUTE FUNCTION public.handle_user_deleted();
 
 -- =====================================================
--- PASO 6: MIGRACIÃ“N DE USUARIOS EXISTENTES
+-- PASO 6: MIGRACIÓN DE USUARIOS EXISTENTES
 -- Crear perfiles para usuarios que no los tengan
 -- =====================================================
 
@@ -892,31 +892,31 @@ LEFT JOIN public.profiles p ON p.id = au.id
 WHERE p.id IS NULL;
 
 -- =====================================================
--- PASO 7: VALIDACIÃ“N Y POLÃTICAS RLS
--- Asegurar que la tabla profiles tenga las polÃ­ticas correctas
+-- PASO 7: VALIDACIÓN Y POLÍTICAS RLS
+-- Asegurar que la tabla profiles tenga las políticas correctas
 -- =====================================================
 
--- Habilitar RLS en profiles si no estÃ¡ habilitado
+-- Habilitar RLS en profiles si no está habilitado
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Eliminar polÃ­ticas existentes para recrearlas
+-- Eliminar políticas existentes para recrearlas
 DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_select_own" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
 
--- PolÃ­tica para que los usuarios vean su propio perfil
+-- Política para que los usuarios vean su propio perfil
 CREATE POLICY "profiles_select_own"
 ON public.profiles FOR SELECT
 USING (
     auth.uid() = id
 );
 
--- PolÃ­tica para que los usuarios de la misma clÃ­nica se vean entre sÃ­
+-- Política para que los usuarios de la misma clínica se vean entre sí
 CREATE POLICY "profiles_select_same_clinic"
 ON public.profiles FOR SELECT
 USING (
-    -- Ver perfiles de la misma clÃ­nica
+    -- Ver perfiles de la misma clínica
     clinic_id IS NOT NULL 
     AND clinic_id IN (
         SELECT clinic_id FROM public.profiles WHERE id = auth.uid()
@@ -926,28 +926,28 @@ USING (
     )
 );
 
--- PolÃ­tica para que los usuarios actualicen su propio perfil
+-- Política para que los usuarios actualicen su propio perfil
 CREATE POLICY "profiles_update_own"
 ON public.profiles FOR UPDATE
 USING (auth.uid() = id)
 WITH CHECK (auth.uid() = id);
 
--- Los perfiles no se pueden eliminar directamente (solo a travÃ©s de auth.users)
--- No crear polÃ­tica DELETE
+-- Los perfiles no se pueden eliminar directamente (solo a través de auth.users)
+-- No crear política DELETE
 
 -- =====================================================
--- PASO 8: ÃNDICES PARA OPTIMIZACIÃ“N
+-- PASO 8: ÍNDICES PARA OPTIMIZACIÓN
 -- Mejorar el rendimiento de las consultas
 -- =====================================================
 
--- Crear Ã­ndices si no existen
+-- Crear índices si no existen
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
 CREATE INDEX IF NOT EXISTS idx_profiles_clinic_id ON public.profiles(clinic_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 
 -- =====================================================
--- PASO 9: VERIFICACIÃ“N FINAL
--- Comprobar que todo estÃ¡ configurado correctamente
+-- PASO 9: VERIFICACIÓN FINAL
+-- Comprobar que todo está configurado correctamente
 -- =====================================================
 
 DO $$
@@ -962,7 +962,7 @@ BEGIN
     WHERE p.id IS NULL;
 
     IF missing_profiles > 0 THEN
-        RAISE WARNING 'AÃºn hay % usuarios sin perfil. Revisa los logs de error.', missing_profiles;
+        RAISE WARNING 'Aún hay % usuarios sin perfil. Revisa los logs de error.', missing_profiles;
     ELSE
         RAISE NOTICE 'Todos los usuarios tienen perfil creado correctamente.';
     END IF;
@@ -972,16 +972,16 @@ BEGIN
         SELECT 1 FROM pg_trigger 
         WHERE tgname = 'on_auth_user_created'
     ) THEN
-        RAISE WARNING 'El trigger on_auth_user_created no se creÃ³ correctamente.';
+        RAISE WARNING 'El trigger on_auth_user_created no se creó correctamente.';
     END IF;
 
-    RAISE NOTICE 'Sistema de sincronizaciÃ³n automÃ¡tica de perfiles configurado exitosamente.';
+    RAISE NOTICE 'Sistema de sincronización automática de perfiles configurado exitosamente.';
 END $$;
 
 -- =====================================================
--- FIN DEL SCRIPT DE AUTOMATIZACIÃ“N
+-- FIN DEL SCRIPT DE AUTOMATIZACIÓN
 -- =====================================================
 
--- Comentario final: A partir de ahora, cada usuario nuevo tendrÃ¡
--- su perfil creado automÃ¡ticamente. No se requieren scripts manuales
--- de sincronizaciÃ³n.
+-- Comentario final: A partir de ahora, cada usuario nuevo tendrá
+-- su perfil creado automáticamente. No se requieren scripts manuales
+-- de sincronización.

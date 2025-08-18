@@ -48,7 +48,7 @@ pg_dump postgresql://[usuario]:[contraseña]@[host]:5432/postgres > backup_$(dat
 
 ```bash
 # Asegúrate de estar conectado a tu proyecto
-supabase link --project-ref qcelbrzjrmjxpjxllyhk
+supabase link --project-ref YOUR_PROJECT_REF
 
 # Aplicar las migraciones
 supabase db push

@@ -6,7 +6,7 @@ Estás recibiendo el error: `infinite recursion detected in policy for relation 
 ## Solución Paso a Paso
 
 ### Paso 1: Corregir la Recursión Infinita
-1. Ve a tu dashboard de Supabase: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
+1. Ve a tu dashboard de Supabase: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
 2. Abre el SQL Editor
 3. Ejecuta el siguiente SQL:
 
@@ -138,7 +138,7 @@ Este archivo:
 ## Verificación Manual
 
 Puedes verificar que los buckets existan en:
-1. Dashboard → Storage: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/storage/buckets
+1. Dashboard → Storage: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/storage/buckets
 2. Deberías ver los 3 buckets listados
 
 ## Si Sigues Teniendo Problemas

@@ -36,14 +36,13 @@ try {
   } else {
     console.log('📁 Archivo .env.local ya existe');
   }
-  
+
   // Si .env.local no se puede crear, intentar .env
   if (!fs.existsSync(envLocalPath) && !fs.existsSync(envPath)) {
     fs.writeFileSync(envPath, envContent);
     console.log('✅ Archivo .env creado exitosamente');
     console.log('📍 Ubicación:', envPath);
   }
-  
 } catch (error) {
   console.error('❌ Error creando archivo de variables:', error.message);
   console.log('\n📝 CONFIGURACIÓN MANUAL REQUERIDA');

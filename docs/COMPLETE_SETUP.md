@@ -10,7 +10,7 @@
 
 ### 1. **Abrir SQL Editor**
 - El SQL Editor ya está abierto en tu navegador
-- URL: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
+- URL: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
 
 ### 2. **Aplicar Migración Final**
 Copia y pega este SQL en el editor:
@@ -64,5 +64,5 @@ Una vez completado, tu aplicación estará 100% funcional con:
 
 ## 📞 **Enlaces Útiles**
 - **Aplicación**: http://localhost:5173
-- **Dashboard**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk
-- **SQL Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql 
+- **Dashboard**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF
+- **SQL Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql 

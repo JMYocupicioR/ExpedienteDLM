@@ -149,8 +149,8 @@
 ## 📞 **Enlaces Importantes**
 
 - **Aplicación**: http://localhost:5173
-- **Dashboard Supabase**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk
-- **SQL Editor**: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql
+- **Dashboard Supabase**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF
+- **SQL Editor**: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql
 
 ## 🎉 **¡La Aplicación Está Lista!**
 

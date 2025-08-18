@@ -3,8 +3,8 @@ import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 // Configuración de Supabase
-const SUPABASE_URL = 'https://qcelbrzjrmjxpjxllyhk.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw';
+const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.YOUR_SUPABASE_ANON_KEY';
 
 // Función para leer archivos de migración
 function readMigrations() {
@@ -185,7 +185,7 @@ async function main() {
   if (!rpcAvailable) {
     console.log('\n💡 Método alternativo:');
     console.log('1. Ve al SQL Editor de Supabase:');
-    console.log('   https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql');
+    console.log('   https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql');
     console.log('2. Copia y pega el contenido de cada archivo .sql');
     console.log('3. Ejecuta las consultas en orden');
     
@@ -206,9 +206,9 @@ async function main() {
   }
   
   console.log('\n📖 Enlaces útiles:');
-  console.log('   - Dashboard: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk');
-  console.log('   - SQL Editor: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/sql');
-  console.log('   - Table Editor: https://supabase.com/dashboard/project/qcelbrzjrmjxpjxllyhk/editor');
+  console.log('   - Dashboard: https://supabase.com/dashboard/project/YOUR_PROJECT_REF');
+  console.log('   - SQL Editor: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/sql');
+  console.log('   - Table Editor: https://supabase.com/dashboard/project/YOUR_PROJECT_REF/editor');
   console.log('   - Aplicación: http://localhost:5173');
 }
 
