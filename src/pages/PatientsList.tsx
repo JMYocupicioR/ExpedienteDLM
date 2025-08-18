@@ -20,9 +20,9 @@ import {
   Grid,
   List
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { PatientTable, PatientTableRow } from '../components/MedicalDataTable';
-import NewPatientForm from '../components/NewPatientForm';
+import { supabase } from '@/lib/supabase';
+import { PatientTable, PatientTableRow } from '@/components/shared/MedicalDataTable';
+import NewPatientForm from '@/features/patients/components/NewPatientForm';
 
 interface Patient extends PatientTableRow {
   last_consultation?: string;

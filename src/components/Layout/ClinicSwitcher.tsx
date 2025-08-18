@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useClinic } from '../../context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { ChevronDown, Plus, Building } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 const ClinicSwitcher: React.FC = () => {
   const { 

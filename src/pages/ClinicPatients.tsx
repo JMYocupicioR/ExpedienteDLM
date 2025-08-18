@@ -1,5 +1,5 @@
 import React from 'react';
-import PatientsList from './PatientsList';
+import PatientsList from '@/pages/PatientsList';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 

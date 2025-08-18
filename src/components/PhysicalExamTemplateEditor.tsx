@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ArrowUp, ArrowDown, Save, X } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import type { PhysicalExamTemplateDefinition, ExamQuestion } from '../lib/database.types';
+import { supabase } from '@/lib/supabase';
+import type { PhysicalExamTemplateDefinition, ExamQuestion } from '@/lib/database.types';
 
 interface TemplateSection {
   id: string;

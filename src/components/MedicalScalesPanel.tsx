@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { usePhysicalExam } from '../hooks/usePhysicalExam';
+import { supabase } from '@/lib/supabase';
+import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExam';
 import { Plus, Save, ListChecks } from 'lucide-react';
 
 type ScaleDefinition = {

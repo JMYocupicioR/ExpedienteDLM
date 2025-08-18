@@ -8,10 +8,10 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import QRCode from 'qrcode';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { getOrCreateTemplateForUser, saveTemplateForUser, type PrescriptionTemplateData } from '../lib/prescriptionTemplates';
-import VisualPrescriptionEditor from '../components/VisualPrescriptionEditor';
-import VisualPrescriptionRenderer, { renderTemplateElement, TemplateElement } from '../components/VisualPrescriptionRenderer';
+import { supabase } from '@/lib/supabase';
+import { getOrCreateTemplateForUser, saveTemplateForUser, type PrescriptionTemplateData } from '@/lib/prescriptionTemplates';
+import VisualPrescriptionEditor from '@/components/VisualPrescriptionEditor';
+import VisualPrescriptionRenderer, { renderTemplateElement, TemplateElement } from '@/components/VisualPrescriptionRenderer';
 // ===== NUEVAS IMPORTACIONES PARA SISTEMA CENTRALIZADO =====
 import { 
   validateMedication, 
@@ -19,9 +19,9 @@ import {
   calculatePrescriptionExpiry,
   MEDICATION_CONSTRAINTS,
   SYSTEM_LIMITS
-} from '../lib/medicalConfig';
-import { validateJSONBSchema } from '../lib/validation';
-import { useValidation } from '../hooks/useValidation';
+} from '@/lib/medicalConfig';
+import { validateJSONBSchema } from '@/lib/validation';
+import { useValidation } from '@/features/medical-records/hooks/useValidation';
 
 interface Medication {
   name: string;

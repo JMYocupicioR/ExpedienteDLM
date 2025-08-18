@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import Navbar from '@/components/Navigation/Navbar';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
+import NewPatientForm from '@/features/patients/components/NewPatientForm';
+import type { Database } from '@/lib/database.types';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import Navbar from '../Navigation/Navbar';
-import NewPatientForm from '../NewPatientForm';
-import { useAuth } from '../../hooks/useAuth';
-import type { Database } from '../../lib/database.types';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
-
 
 interface AppLayoutProps {
   children?: React.ReactNode;
@@ -39,8 +38,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400"></div>
+      <div className='min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center'>
+        <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400'></div>
       </div>
     );
   }
@@ -50,15 +49,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="app-container">
+    <div className='app-container'>
       <Navbar onNewPatientClick={handleNewPatientClick} />
-      
+
       {/* Main Content Area */}
-      <div className="main-layout">
+      <div className='main-layout'>
         <div className={`content-wrapper ${isNavCollapsed ? 'sidebar-collapsed' : ''}`}>
-          <div className="page-container">
-            {children || <Outlet />}
-          </div>
+          <div className='page-container'>{children || <Outlet />}</div>
         </div>
       </div>
 

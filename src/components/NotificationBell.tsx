@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Button } from './ui/button';
-import useNotifications from '../hooks/useNotifications';
-import { Notification, NotificationPriority, NotificationWithSuggestedAction } from '../lib/database.types';
+import { Button } from '@/components/ui/button';
+import useNotifications from '@/hooks/shared/useNotifications';
+import { Notification, NotificationPriority, NotificationWithSuggestedAction } from '@/lib/database.types';
 
 const priorityConfig = {
   low: { 

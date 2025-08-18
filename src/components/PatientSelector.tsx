@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, User, Phone, Mail, X, Check } from 'lucide-react';
-import { Button } from './ui/button';
-import { supabase } from '../lib/supabase';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/lib/supabase';
 
 export interface Patient {
   id: string;

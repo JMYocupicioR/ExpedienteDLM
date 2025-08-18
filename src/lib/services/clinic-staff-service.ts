@@ -1,5 +1,5 @@
-import { supabase } from '../supabase';
-import { Database } from '../database.types';
+import { supabase } from '@/lib/supabase';
+import { Database } from '@/lib/database.types';
 
 type ClinicUserRelationship = Database['public']['Tables']['clinic_user_relationships']['Row'];
 type ClinicUserRelationshipInsert = Database['public']['Tables']['clinic_user_relationships']['Insert'];

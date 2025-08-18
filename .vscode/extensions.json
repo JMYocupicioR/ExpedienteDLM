@@ -1,3 +1,59 @@
 {
-  "recommendations": ["denoland.vscode-deno"]
+  "recommendations": [
+    // === ESENCIALES PARA REACT + TYPESCRIPT ===
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+
+    // === REACT DEVELOPMENT ===
+    "xabikos.ReactSnippets",
+    "dsznajder.es7-react-js-snippets",
+    "formulahendry.auto-rename-tag",
+    "bradlc.vscode-tailwindcss",
+
+    // === SUPABASE & DATABASE ===
+    "supabase.supabase",
+    "ms-vscode.vscode-json",
+
+    // === DEBUGGING & TESTING ===
+    "ms-vscode.js-debug",
+    "hbenl.vscode-test-explorer",
+    "ZixuanChen.vitest-explorer",
+
+    // === GIT & VERSION CONTROL ===
+    "eamodio.gitlens",
+    "github.vscode-pull-request-github",
+    "github.copilot",
+    "github.copilot-chat",
+
+    // === PRODUCTIVITY ===
+    "ms-vscode.vscode-thunder-client",
+    "pflannery.vscode-versionlens",
+    "christian-kohler.path-intellisense",
+    "christian-kohler.npm-intellisense",
+    "wix.vscode-import-cost",
+
+    // === DOCUMENTATION ===
+    "yzhang.markdown-all-in-one",
+    "shd101wyy.markdown-preview-enhanced",
+
+    // === THEMING (OPCIONAL) ===
+    "pkief.material-icon-theme",
+    "github.github-vscode-theme",
+
+    // === UTILITIES ===
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+    "wayou.vscode-todo-highlight",
+    "gruntfuggly.todo-tree",
+    "ms-vscode.live-server"
+  ],
+
+  "unwantedRecommendations": [
+    // Evitar conflictos con configuraciones similares
+    "hookyqr.beautify",
+    "ms-vscode.vscode-css-peek",
+    "ritwickdey.LiveServer"
+  ]
 }

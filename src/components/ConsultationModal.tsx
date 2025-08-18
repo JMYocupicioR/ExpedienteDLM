@@ -1,5 +1,5 @@
 import React from 'react';
-import ConsultationForm from './ConsultationForm';
+import ConsultationForm from '@/components/ConsultationForm';
 
 export default function ConsultationModal({
   isOpen,

@@ -7,11 +7,11 @@ import {
   MessageSquare, FileText, User, Calendar, Clock,
   Wand2, BookOpen, Apple, Dumbbell, Pill
 } from 'lucide-react';
-import { MEDICATION_CONSTRAINTS } from '../lib/medicalConfig';
-import { useTemplates } from '../hooks/useTemplates';
-import { useAuth } from '../hooks/useAuth';
-import { MedicalTemplate, PredefinedTemplate } from '../lib/database.types';
-import TemplateEditor from '../components/Templates/TemplateEditor';
+import { MEDICATION_CONSTRAINTS } from '@/lib/medicalConfig';
+import { useTemplates } from '@/features/medical-templates/hooks/useTemplates';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { MedicalTemplate, PredefinedTemplate } from '@/lib/database.types';
+import TemplateEditor from '@/features/medical-templates/components/TemplateEditor';
 
 // Plantillas predefinidas
 const PREDEFINED_INTERROGATORIO: PredefinedTemplate[] = [

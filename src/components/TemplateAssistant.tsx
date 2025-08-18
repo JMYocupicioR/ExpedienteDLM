@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Lightbulb, Search, Star, Clock, Users, BookOpen, X, ChevronRight, Filter } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { MedicalTemplate } from '../lib/database.types';
+import { supabase } from '@/lib/supabase';
+import { MedicalTemplate } from '@/lib/database.types';
 
 interface TemplateAssistantProps {
   currentCondition: string;

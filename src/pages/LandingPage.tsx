@@ -17,8 +17,8 @@ import {
   ClipboardList,
   LineChart
 } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import Logo from '../components/Logo';
+import { Button } from '@/components/ui/button';
+import Logo from '@/components/shared/Logo';
 
 //
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 import {
   User, Shield, FileText, LogOut, Menu, X, 
   Heart, Calendar, TestTube, Eye

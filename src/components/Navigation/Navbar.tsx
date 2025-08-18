@@ -5,10 +5,10 @@ import {
   Settings, LogOut, Bell, Search, Home, Activity, Building,
   ChevronRight, ChevronLeft
 } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
-import { supabase } from '../../lib/supabase';
-import ClinicSwitcher from '../Layout/ClinicSwitcher';
-import NotificationBell from '../NotificationBell';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import ClinicSwitcher from '@/components/Layout/ClinicSwitcher';
+import NotificationBell from '@/components/NotificationBell';
 
 interface NavItem {
   id: string;

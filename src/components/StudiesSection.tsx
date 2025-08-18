@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { Plus, Upload, FileText, Trash2, Image as ImageIcon, Video as VideoIcon, Loader2, FlaskConical, Microscope, X, ExternalLink } from 'lucide-react';
-import UploadDropzone from './UploadDropzone';
-import type { Database } from '../lib/database.types';
+import UploadDropzone from '@/components/UploadDropzone';
+import type { Database } from '@/lib/database.types';
 
 type MedicalTest = Database['public']['Tables']['medical_tests']['Row'];
 type MedicalTestInsert = Database['public']['Tables']['medical_tests']['Insert'];

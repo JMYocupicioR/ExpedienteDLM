@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { Users, UserPlus, Building, Shield, Settings, Mail, UserCheck } from 'lucide-react';
-import PatientsList from './PatientsList';
-import ClinicStaffManagement from '../components/ClinicStaffManagement';
+import PatientsList from '@/pages/PatientsList';
+import ClinicStaffManagement from '@/components/ClinicStaffManagement';
 
 type StaffMember = {
   id: string;

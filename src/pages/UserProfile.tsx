@@ -6,14 +6,14 @@ import {
   Edit3, Save, X, Upload, Download, Eye, ChevronRight, Heart,
   TrendingUp, CheckCircle, AlertCircle
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
-import { useProfilePhotos } from '../hooks/useProfilePhotos';
-import { EnhancedProfile, MedicalSpecialty, Clinic } from '../lib/database.types';
-import PhotoUploader from '../components/PhotoUploader';
-import MedicalStatsCard from '../components/MedicalStatsCard';
-import ActivityFeed from '../components/ActivityFeed';
-import ClinicStatusCard from '../components/ClinicStatusCard';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
+import { EnhancedProfile, MedicalSpecialty, Clinic } from '@/lib/database.types';
+import PhotoUploader from '@/components/shared/PhotoUploader';
+import MedicalStatsCard from '@/components/MedicalStatsCard';
+import ActivityFeed from '@/components/shared/ActivityFeed';
+import ClinicStatusCard from '@/components/ClinicStatusCard';
 
 interface ProfileStats {
   totalPatients: number;

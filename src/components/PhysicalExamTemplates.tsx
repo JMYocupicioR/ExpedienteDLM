@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Loader2, Heart, Brain, Bone, Hand, Stethoscope, Activity, Search, Filter, X, Star, BookOpen } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import type { PhysicalExamTemplateDefinition } from '../lib/database.types';
-import PhysicalExamTemplateEditor from './PhysicalExamTemplateEditor';
+import { supabase } from '@/lib/supabase';
+import type { PhysicalExamTemplateDefinition } from '@/lib/database.types';
+import PhysicalExamTemplateEditor from '@/components/PhysicalExamTemplateEditor';
 
 interface PhysicalExamTemplate {
   id: string;

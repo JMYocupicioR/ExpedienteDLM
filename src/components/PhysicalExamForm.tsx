@@ -6,15 +6,15 @@ import {
   validateVitalSign, 
   SYSTEM_LIMITS,
   VitalSignRange 
-} from '../lib/medicalConfig';
-import { validateJSONBSchema } from '../lib/validation';
-import DynamicPhysicalExamForm from './DynamicPhysicalExamForm';
+} from '@/lib/medicalConfig';
+import { validateJSONBSchema } from '@/lib/validation';
+import DynamicPhysicalExamForm from '@/components/DynamicPhysicalExamForm';
 import type { 
   PhysicalExamFormData, 
   PhysicalExamTemplateDefinition,
   ExamSection,
   ExamQuestion 
-} from '../lib/database.types';
+} from '@/lib/database.types';
 
 interface VitalSigns {
   systolic_pressure: string;

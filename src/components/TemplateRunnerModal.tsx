@@ -3,7 +3,7 @@ import {
   X, ChevronLeft, ChevronRight, Check, AlertCircle, 
   FileText, Clock, Progress, Save, SkipForward 
 } from 'lucide-react';
-import { MedicalTemplate, TemplateField, TemplateSection } from '../lib/database.types';
+import { MedicalTemplate, TemplateField, TemplateSection } from '@/lib/database.types';
 
 interface TemplateRunnerModalProps {
   template: MedicalTemplate;

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import ScaleStepper from '../components/ScaleStepper';
+import { supabase } from '@/lib/supabase';
+import ScaleStepper from '@/components/ScaleStepper';
 
 type TokenRow = {
   id: string;

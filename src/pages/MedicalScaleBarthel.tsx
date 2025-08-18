@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Save, RefreshCw, Info, CheckCircle, AlertCircle } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 type Option = { label: string; value: number };
 type Item = { id: string; text: string; weight: number; options: Option[] };

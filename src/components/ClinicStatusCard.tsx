@@ -11,9 +11,9 @@ import {
   Calendar,
   User
 } from 'lucide-react';
-import { Button } from './ui/button';
-import { ClinicStaffService } from '../lib/services/clinic-staff-service';
-import { useAuth } from '../hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { ClinicStaffService } from '@/lib/services/clinic-staff-service';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 
 interface ClinicStatusCardProps {
   onStatusUpdate?: () => void;

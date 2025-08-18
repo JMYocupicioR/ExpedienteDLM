@@ -9,8 +9,8 @@ import {
   Stethoscope, Heart, Pill, Thermometer, FileCheck, AlertTriangle,
   Shield, Database, HelpCircle, Sparkles, Bookmark, Target
 } from 'lucide-react';
-import { validateAndSanitizeArray } from '../lib/validation';
-import { useValidation } from '../hooks/useValidation';
+import { validateAndSanitizeArray } from '@/lib/validation';
+import { useValidation } from '@/features/medical-records/hooks/useValidation';
 import { 
   validateMedication, 
   checkDrugInteractions, 
@@ -21,7 +21,7 @@ import {
   getTemplatesByCategory,
   getTemplateById,
   type PrescriptionTemplate
-} from '../lib/medicalConfig';
+} from '@/lib/medicalConfig';
 import QRCodeLib from 'qrcode';
 import throttle from 'lodash.throttle';
 

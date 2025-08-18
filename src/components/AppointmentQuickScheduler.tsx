@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Calendar, Clock, Plus, X } from 'lucide-react';
 import { format, addDays, addWeeks } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Button } from './ui/button';
-import AppointmentForm from './AppointmentForm';
-import { CreateAppointmentData } from '../lib/services/appointment-service';
-import { useAuth } from '../hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import AppointmentForm from '@/components/AppointmentForm';
+import { CreateAppointmentData } from '@/lib/services/appointment-service';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 
 interface AppointmentQuickSchedulerProps {
   patientId: string;

@@ -15,7 +15,7 @@ import {
   Trash2,
   Edit
 } from 'lucide-react';
-import ClinicStaffService, { StaffMember, StaffOverview } from '../lib/services/clinic-staff-service';
+import ClinicStaffService, { StaffMember, StaffOverview } from '@/lib/services/clinic-staff-service';
 
 interface ClinicStaffManagementProps {
   clinicId: string;

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { AuditService, AuditHistoryEntry } from '../lib/services/audit-service';
-import { useAuth } from '../hooks/useAuth';
+import { AuditService, AuditHistoryEntry } from '@/lib/services/audit-service';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 
 interface AuditTrailViewerProps {
   patientId: string;

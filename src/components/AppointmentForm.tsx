@@ -1,19 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { X, Clock, Calendar, MapPin, FileText, CheckCircle, AlertCircle } from 'lucide-react';
-import { format, addMinutes, startOfToday } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { Button } from './ui/button';
-import { useValidationNotifications } from './ValidationNotification';
-import PatientSelector, { Patient } from './PatientSelector';
-import { useActivityLog } from '../hooks/useActivityLog';
-import { 
-  EnhancedAppointment, 
-  CreateAppointmentPayload, 
-  UpdateAppointmentPayload,
+import PatientSelector, { Patient } from '@/components/PatientSelector';
+import { useValidationNotifications } from '@/components/ValidationNotification';
+import { Button } from '@/components/ui/button';
+import { useActivityLog } from '@/hooks/shared/useActivityLog';
+import {
   AppointmentType,
-  AppointmentStatus,
-  enhancedAppointmentService 
-} from '../lib/services/enhanced-appointment-service';
+  CreateAppointmentPayload,
+  EnhancedAppointment,
+  UpdateAppointmentPayload,
+  enhancedAppointmentService,
+} from '@/lib/services/enhanced-appointment-service';
+import { addMinutes, format, startOfToday } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { AlertCircle, Calendar, CheckCircle, Clock, FileText, MapPin, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 interface AppointmentFormProps {
   isOpen: boolean;
@@ -77,9 +76,10 @@ export default function AppointmentForm({
   selectedDate,
   selectedTime,
   patients = [],
-  preSelectedPatient
+  preSelectedPatient,
 }: AppointmentFormProps) {
-  const { messages, addError, addSuccess, addWarning, removeMessage } = useValidationNotifications();
+  const { messages, addError, addSuccess, addWarning, removeMessage } =
+    useValidationNotifications();
   const [loading, setLoading] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
@@ -112,7 +112,7 @@ export default function AppointmentForm({
         location: appointment.location || '',
         notes: appointment.notes || '',
       });
-      
+
       // Configurar paciente seleccionado
       if (appointment.patient) {
         setSelectedPatient({
@@ -136,7 +136,7 @@ export default function AppointmentForm({
           patient_id: preSelectedPatient.id,
         }));
       }
-      
+
       if (selectedDate || selectedTime) {
         setFormData(prev => ({
           ...prev,
@@ -166,18 +166,15 @@ export default function AppointmentForm({
         formData.duration,
         appointment?.id // Excluir la cita actual si estamos editando
       );
-      
+
       setIsAvailable(result.available);
-      
+
       if (!result.available) {
-        const conflictMsg = result.conflictDetails 
+        const conflictMsg = result.conflictDetails
           ? `Conflicto con cita existente de ${result.conflictDetails.conflicting_time_range.start} a ${result.conflictDetails.conflicting_time_range.end}`
           : 'Ya existe una cita programada en este horario';
-          
-        addWarning(
-          'Conflicto de Horario',
-          `${conflictMsg}. Por favor, seleccione otro horario.`
-        );
+
+        addWarning('Conflicto de Horario', `${conflictMsg}. Por favor, seleccione otro horario.`);
       }
     } catch (error) {
       console.error('Error checking availability:', error);
@@ -190,7 +187,7 @@ export default function AppointmentForm({
   const handleInputChange = (field: keyof FormData, value: string | number) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
 
     // Auto-generar título si está vacío
@@ -199,7 +196,7 @@ export default function AppointmentForm({
       if (selectedType) {
         setFormData(prev => ({
           ...prev,
-          title: selectedType.label
+          title: selectedType.label,
         }));
       }
     }
@@ -209,7 +206,7 @@ export default function AppointmentForm({
     setSelectedPatient(patient);
     setFormData(prev => ({
       ...prev,
-      patient_id: patient.id
+      patient_id: patient.id,
     }));
   };
 
@@ -237,7 +234,9 @@ export default function AppointmentForm({
     }
 
     // Validar que la fecha no sea en el pasado
-    const appointmentDateTime = new Date(`${formData.appointment_date}T${formData.appointment_time}`);
+    const appointmentDateTime = new Date(
+      `${formData.appointment_date}T${formData.appointment_time}`
+    );
     if (appointmentDateTime < new Date() && !appointment) {
       errors.push('No se pueden programar citas en fechas pasadas');
     }
@@ -259,7 +258,7 @@ export default function AppointmentForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     setLoading(true);
@@ -279,7 +278,7 @@ export default function AppointmentForm({
       };
 
       await onSubmit(submitData);
-      
+
       // Registrar en el log de actividad
       if (selectedPatient) {
         await createAppointmentLog(
@@ -295,7 +294,7 @@ export default function AppointmentForm({
         'Éxito',
         appointment ? 'Cita actualizada correctamente' : 'Cita creada correctamente'
       );
-      
+
       // Reset form if creating new appointment
       if (!appointment) {
         setFormData({
@@ -311,14 +310,11 @@ export default function AppointmentForm({
         });
         setSelectedPatient(null);
       }
-      
+
       onClose();
     } catch (error) {
       console.error('Error submitting appointment:', error);
-      addError(
-        'Error',
-        appointment ? 'No se pudo actualizar la cita' : 'No se pudo crear la cita'
-      );
+      addError('Error', appointment ? 'No se pudo actualizar la cita' : 'No se pudo crear la cita');
     } finally {
       setLoading(false);
     }
@@ -341,81 +337,80 @@ export default function AppointmentForm({
   const endTime = addMinutes(appointmentDateTime, formData.duration);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4'>
+      <div className='bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto'>
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white flex items-center">
-            <Calendar className="h-6 w-6 mr-2 text-cyan-400" />
+        <div className='flex items-center justify-between p-6 border-b border-gray-700'>
+          <h2 className='text-xl font-semibold text-white flex items-center'>
+            <Calendar className='h-6 w-6 mr-2 text-cyan-400' />
             {appointment ? 'Editar Cita' : 'Nueva Cita Médica'}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white p-2"
-          >
-            <X className="h-5 w-5" />
+          <button onClick={onClose} className='text-gray-400 hover:text-white p-2'>
+            <X className='h-5 w-5' />
           </button>
         </div>
 
         {/* Notifications */}
         {messages.length > 0 && (
-          <div className="px-6 py-3 space-y-2">
-            {messages.map((message) => (
+          <div className='px-6 py-3 space-y-2'>
+            {messages.map(message => (
               <div
                 key={message.id}
                 className={`flex items-center space-x-2 p-3 rounded-lg ${
-                  message.type === 'success' ? 'bg-green-900 border border-green-700' :
-                  message.type === 'error' ? 'bg-red-900 border border-red-700' :
-                  'bg-yellow-900 border border-yellow-700'
+                  message.type === 'success'
+                    ? 'bg-green-900 border border-green-700'
+                    : message.type === 'error'
+                      ? 'bg-red-900 border border-red-700'
+                      : 'bg-yellow-900 border border-yellow-700'
                 }`}
               >
-                {message.type === 'success' && <CheckCircle className="h-4 w-4 text-green-400" />}
-                {message.type === 'error' && <AlertCircle className="h-4 w-4 text-red-400" />}
-                {message.type === 'warning' && <AlertCircle className="h-4 w-4 text-yellow-400" />}
-                <span className={`text-sm ${
-                  message.type === 'success' ? 'text-green-300' :
-                  message.type === 'error' ? 'text-red-300' :
-                  'text-yellow-300'
-                }`}>
+                {message.type === 'success' && <CheckCircle className='h-4 w-4 text-green-400' />}
+                {message.type === 'error' && <AlertCircle className='h-4 w-4 text-red-400' />}
+                {message.type === 'warning' && <AlertCircle className='h-4 w-4 text-yellow-400' />}
+                <span
+                  className={`text-sm ${
+                    message.type === 'success'
+                      ? 'text-green-300'
+                      : message.type === 'error'
+                        ? 'text-red-300'
+                        : 'text-yellow-300'
+                  }`}
+                >
                   <strong>{message.title}:</strong> {message.message}
                 </span>
                 <button
                   onClick={() => removeMessage(message.id)}
-                  className="ml-auto text-gray-400 hover:text-white"
+                  className='ml-auto text-gray-400 hover:text-white'
                 >
-                  <X className="h-4 w-4" />
+                  <X className='h-4 w-4' />
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className='p-6 space-y-6'>
           {/* Selector de Paciente */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Paciente *
-            </label>
+            <label className='block text-sm font-medium text-gray-300 mb-2'>Paciente *</label>
             <PatientSelector
               selectedPatientId={formData.patient_id}
               onPatientSelect={handlePatientSelect}
               onNewPatient={handleNewPatient}
-              placeholder="Buscar paciente por nombre, teléfono o email..."
+              placeholder='Buscar paciente por nombre, teléfono o email...'
             />
           </div>
 
           {/* Tipo de Cita */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Tipo de Cita *
-            </label>
+            <label className='block text-sm font-medium text-gray-300 mb-2'>Tipo de Cita *</label>
             <select
               value={formData.type}
-              onChange={(e) => handleInputChange('type', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+              onChange={e => handleInputChange('type', e.target.value)}
+              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
               required
             >
-              {appointmentTypes.map((type) => (
+              {appointmentTypes.map(type => (
                 <option key={type.value} value={type.value}>
                   {type.label} - {type.description}
                 </option>
@@ -425,48 +420,48 @@ export default function AppointmentForm({
 
           {/* Título */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className='block text-sm font-medium text-gray-300 mb-2'>
               Título de la Cita *
             </label>
             <input
-              type="text"
+              type='text'
               value={formData.title}
-              onChange={(e) => handleInputChange('title', e.target.value)}
-              placeholder="Ej. Consulta General, Seguimiento..."
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+              onChange={e => handleInputChange('title', e.target.value)}
+              placeholder='Ej. Consulta General, Seguimiento...'
+              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
               required
             />
           </div>
 
           {/* Fecha y Hora */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                <Calendar className="h-4 w-4 inline mr-1" />
+              <label className='block text-sm font-medium text-gray-300 mb-2'>
+                <Calendar className='h-4 w-4 inline mr-1' />
                 Fecha *
               </label>
               <input
-                type="date"
+                type='date'
                 value={formData.appointment_date}
-                onChange={(e) => handleInputChange('appointment_date', e.target.value)}
+                onChange={e => handleInputChange('appointment_date', e.target.value)}
                 min={format(startOfToday(), 'yyyy-MM-dd')}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                <Clock className="h-4 w-4 inline mr-1" />
+              <label className='block text-sm font-medium text-gray-300 mb-2'>
+                <Clock className='h-4 w-4 inline mr-1' />
                 Hora *
               </label>
               <select
                 value={formData.appointment_time}
-                onChange={(e) => handleInputChange('appointment_time', e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                onChange={e => handleInputChange('appointment_time', e.target.value)}
+                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                 required
               >
-                {generateTimeOptions().map((time) => (
+                {generateTimeOptions().map(time => (
                   <option key={time} value={time}>
                     {time}
                   </option>
@@ -475,15 +470,13 @@ export default function AppointmentForm({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Duración
-              </label>
+              <label className='block text-sm font-medium text-gray-300 mb-2'>Duración</label>
               <select
                 value={formData.duration}
-                onChange={(e) => handleInputChange('duration', Number(e.target.value))}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                onChange={e => handleInputChange('duration', Number(e.target.value))}
+                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
               >
-                {durationOptions.map((option) => (
+                {durationOptions.map(option => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -494,32 +487,32 @@ export default function AppointmentForm({
 
           {/* Información de horario */}
           {formData.appointment_date && formData.appointment_time && (
-            <div className="bg-gray-700 p-4 rounded-lg">
-              <div className="flex items-center justify-between">
+            <div className='bg-gray-700 p-4 rounded-lg'>
+              <div className='flex items-center justify-between'>
                 <div>
-                  <p className="text-white font-medium">
+                  <p className='text-white font-medium'>
                     {format(appointmentDateTime, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
                   </p>
-                  <p className="text-gray-300">
-                    {format(appointmentDateTime, 'HH:mm', { locale: es })} - {format(endTime, 'HH:mm', { locale: es })}
-                    ({formData.duration} min)
+                  <p className='text-gray-300'>
+                    {format(appointmentDateTime, 'HH:mm', { locale: es })} -{' '}
+                    {format(endTime, 'HH:mm', { locale: es })}({formData.duration} min)
                   </p>
                 </div>
                 {!appointment && (
-                  <div className="flex items-center space-x-2">
+                  <div className='flex items-center space-x-2'>
                     {checkingAvailability ? (
-                      <div className="flex items-center text-yellow-400">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-400 mr-2"></div>
+                      <div className='flex items-center text-yellow-400'>
+                        <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-400 mr-2'></div>
                         Verificando...
                       </div>
                     ) : isAvailable === true ? (
-                      <div className="flex items-center text-green-400">
-                        <CheckCircle className="h-4 w-4 mr-1" />
+                      <div className='flex items-center text-green-400'>
+                        <CheckCircle className='h-4 w-4 mr-1' />
                         Disponible
                       </div>
                     ) : isAvailable === false ? (
-                      <div className="flex items-center text-red-400">
-                        <AlertCircle className="h-4 w-4 mr-1" />
+                      <div className='flex items-center text-red-400'>
+                        <AlertCircle className='h-4 w-4 mr-1' />
                         No disponible
                       </div>
                     ) : null}
@@ -531,70 +524,65 @@ export default function AppointmentForm({
 
           {/* Ubicación */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              <MapPin className="h-4 w-4 inline mr-1" />
+            <label className='block text-sm font-medium text-gray-300 mb-2'>
+              <MapPin className='h-4 w-4 inline mr-1' />
               Ubicación
             </label>
             <input
-              type="text"
+              type='text'
               value={formData.location}
-              onChange={(e) => handleInputChange('location', e.target.value)}
-              placeholder="Ej. Consultorio 1, Sala de Procedimientos..."
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+              onChange={e => handleInputChange('location', e.target.value)}
+              placeholder='Ej. Consultorio 1, Sala de Procedimientos...'
+              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
             />
           </div>
 
           {/* Descripción */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Descripción
-            </label>
+            <label className='block text-sm font-medium text-gray-300 mb-2'>Descripción</label>
             <textarea
               value={formData.description}
-              onChange={(e) => handleInputChange('description', e.target.value)}
-              placeholder="Descripción detallada de la cita..."
+              onChange={e => handleInputChange('description', e.target.value)}
+              placeholder='Descripción detallada de la cita...'
               rows={3}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
             />
           </div>
 
           {/* Notas */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              <FileText className="h-4 w-4 inline mr-1" />
+            <label className='block text-sm font-medium text-gray-300 mb-2'>
+              <FileText className='h-4 w-4 inline mr-1' />
               Notas Adicionales
             </label>
             <textarea
               value={formData.notes}
-              onChange={(e) => handleInputChange('notes', e.target.value)}
-              placeholder="Notas internas, recordatorios, instrucciones especiales..."
+              onChange={e => handleInputChange('notes', e.target.value)}
+              placeholder='Notas internas, recordatorios, instrucciones especiales...'
               rows={2}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
             />
           </div>
 
           {/* Botones */}
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={loading}
-            >
+          <div className='flex justify-end space-x-3 pt-4 border-t border-gray-700'>
+            <Button type='button' variant='outline' onClick={onClose} disabled={loading}>
               Cancelar
             </Button>
             <Button
-              type="submit"
+              type='submit'
               disabled={loading || (!appointment && isAvailable === false)}
-              className="min-w-[120px]"
+              className='min-w-[120px]'
             >
               {loading ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <div className='flex items-center'>
+                  <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
                   {appointment ? 'Actualizando...' : 'Creando...'}
                 </div>
+              ) : appointment ? (
+                'Actualizar Cita'
               ) : (
-                appointment ? 'Actualizar Cita' : 'Crear Cita'
+                'Crear Cita'
               )}
             </Button>
           </div>

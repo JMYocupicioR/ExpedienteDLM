@@ -6,18 +6,18 @@ import {
   Search, Filter, RefreshCw, FileDown, Printer, FileText as FileTextIcon,
   Phone, Mail, MapPin, CheckCircle
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { format, isToday, isTomorrow, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { validateAndSanitizeArray } from '../lib/validation';
-import ConsultationForm from '../components/ConsultationForm';
-import ConsultationDetails from '../components/ConsultationDetails';
-import ConsultationModal from '../components/ConsultationModal';
-import AppointmentQuickScheduler from '../components/AppointmentQuickScheduler';
-import StudiesSection from '../components/StudiesSection';
-import AuditTrailViewer from '../components/AuditTrailViewer';
-import { appointmentService, Appointment } from '../lib/services/appointment-service';
-import type { Database } from '../lib/database.types';
+import { validateAndSanitizeArray } from '@/lib/validation';
+import ConsultationForm from '@/components/ConsultationForm';
+import ConsultationDetails from '@/components/ConsultationDetails';
+import ConsultationModal from '@/components/ConsultationModal';
+import AppointmentQuickScheduler from '@/components/AppointmentQuickScheduler';
+import StudiesSection from '@/components/StudiesSection';
+import AuditTrailViewer from '@/components/AuditTrailViewer';
+import { appointmentService, Appointment } from '@/lib/services/appointment-service';
+import type { Database } from '@/lib/database.types';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
 type Consultation = Database['public']['Tables']['consultations']['Row'];

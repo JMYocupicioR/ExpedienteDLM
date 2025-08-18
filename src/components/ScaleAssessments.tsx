@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, ListChecks } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 interface ScaleAssessmentRow {
   id: string;

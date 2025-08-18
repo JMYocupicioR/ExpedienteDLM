@@ -1,5 +1,5 @@
-import { supabase } from '../supabase';
-import { Database } from '../database.types';
+import { supabase } from '@/lib/supabase';
+import { Database } from '@/lib/database.types';
 
 // Tipos específicos para el sistema de citas
 export interface Appointment {

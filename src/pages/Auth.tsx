@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Stethoscope, User, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import OAuthButtons from '../components/OAuthButtons';
+import { supabase } from '@/lib/supabase';
+import OAuthButtons from '@/features/authentication/components/OAuthButtons';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);

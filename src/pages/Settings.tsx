@@ -6,10 +6,10 @@ import {
   Camera, Mail, Calendar, Clock, Smartphone, Key,
   Stethoscope, FileText, Activity, AlertCircle, Info
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../lib/supabase';
-import { useTheme } from '../hooks/useTheme';
-import { useProfilePhotos } from '../hooks/useProfilePhotos';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { useTheme } from '@/hooks/useTheme';
+import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
 
 interface SettingSection {
   id: string;

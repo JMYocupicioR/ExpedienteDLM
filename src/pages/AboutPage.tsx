@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Users, Clock, Activity, FileText, Heart, ArrowLeft, CheckCircle, Star } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import Logo from '../components/Logo';
+import { Button } from '@/components/ui/button';
+import Logo from '@/components/shared/Logo';
 
 const AboutPage = () => {
   return (

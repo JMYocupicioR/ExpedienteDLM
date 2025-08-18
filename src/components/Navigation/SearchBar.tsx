@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, User, Users, FileText, Calendar, X, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 
 interface SearchResult {
   id: string;

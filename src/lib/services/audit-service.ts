@@ -1,5 +1,5 @@
-import { supabase } from '../supabase';
-import { Json } from '../database.types';
+import { supabase } from '@/lib/supabase';
+import { Json } from '@/lib/database.types';
 
 /**
  * Interfaz para registros de auditoría

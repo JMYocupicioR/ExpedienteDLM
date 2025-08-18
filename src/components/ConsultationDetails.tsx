@@ -5,8 +5,8 @@ import {
   Calendar, Clock, Stethoscope, FileText, Heart, 
   Activity, Thermometer, Weight, Ruler, Brain 
 } from 'lucide-react';
-import type { Database } from '../lib/database.types';
-import ScaleAssessments from './ScaleAssessments';
+import type { Database } from '@/lib/database.types';
+import ScaleAssessments from '@/components/ScaleAssessments';
 
 type Consultation = Database['public']['Tables']['consultations']['Row'];
 

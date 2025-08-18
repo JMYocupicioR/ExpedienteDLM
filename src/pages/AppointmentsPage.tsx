@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import AppointmentsCalendar from '../components/AppointmentsCalendar';
-import { Appointment } from '../lib/services/appointment-service';
+import AppointmentsCalendar from '@/features/appointments/components/AppointmentsCalendar';
+import { Appointment } from '@/lib/services/appointment-service';
 
 export default function AppointmentsPage() {
   const navigate = useNavigate();

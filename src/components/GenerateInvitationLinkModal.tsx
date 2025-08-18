@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Link as LinkIcon, Copy, ListChecks } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 
 type ScaleRow = {
   id: string;

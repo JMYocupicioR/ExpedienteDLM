@@ -1,26 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Mic, Upload, FlaskConical, Microscope, Pill, Plus, Trash2, Lightbulb, FileEdit, Calendar } from 'lucide-react';
-import UploadDropzone from './UploadDropzone';
+import UploadDropzone from '@/components/UploadDropzone';
 import { useForm } from 'react-hook-form';
 // ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
-import { useValidation } from '../hooks/useValidation';
-import { usePhysicalExam } from '../hooks/usePhysicalExam';
-import { supabase } from '../lib/supabase';
-import DynamicPhysicalExamForm from './DynamicPhysicalExamForm';
-import PhysicalExamTemplates from './PhysicalExamTemplates';
-import MedicalTranscription from './MedicalTranscription'; // ✅ NUEVO: Importar el componente de transcripción
-import ScalePicker from './ScalePicker';
-import ScaleStepper from './ScaleStepper';
-import AppointmentQuickScheduler from './AppointmentQuickScheduler';
-import MedicalScalesPanel from './MedicalScalesPanel';
+import { useValidation } from '@/features/medical-records/hooks/useValidation';
+import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExam';
+import { supabase } from '@/lib/supabase';
+import DynamicPhysicalExamForm from '@/components/DynamicPhysicalExamForm';
+import PhysicalExamTemplates from '@/components/PhysicalExamTemplates';
+import MedicalTranscription from '@/components/MedicalTranscription'; // ✅ NUEVO: Importar el componente de transcripción
+import ScalePicker from '@/components/ScalePicker';
+import ScaleStepper from '@/components/ScaleStepper';
+import AppointmentQuickScheduler from '@/components/AppointmentQuickScheduler';
+import MedicalScalesPanel from '@/components/MedicalScalesPanel';
 // ===== NUEVAS IMPORTACIONES PARA PLANTILLAS INTELIGENTES =====
-import TemplateAssistant from './TemplateAssistant';
-import TemplateRunnerModal, { TemplateResponses } from './TemplateRunnerModal';
+import TemplateAssistant from '@/components/TemplateAssistant';
+import TemplateRunnerModal, { TemplateResponses } from '@/components/TemplateRunnerModal';
 import type { 
   Database,
   MedicalTemplate
-} from '../lib/database.types';
-import { calculatePrescriptionExpiry } from '../lib/medicalConfig';
+} from '@/lib/database.types';
+import { calculatePrescriptionExpiry } from '@/lib/medicalConfig';
 
 type PhysicalExamTemplate = Database['public']['Tables']['physical_exam_templates']['Row'];
 
