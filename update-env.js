@@ -1,10 +1,11 @@
 import { writeFileSync, readFileSync } from 'fs';
 
-// Credenciales correctas de Supabase
-const SUPABASE_URL = 'https://qcelbrzjrmjxpjxllyhk.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw';
+// Credenciales de Supabase (usar variables de entorno, no hardcodear)
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
 
-console.log('🔧 Actualizando archivo .env con credenciales correctas...\n');
+console.log('🔧 Actualizando archivo .env con credenciales...
+');
 
 try {
   // Leer el archivo .env actual
@@ -20,7 +21,7 @@ try {
   
   console.log('✅ Archivo .env actualizado correctamente');
   console.log(`📡 URL: ${SUPABASE_URL}`);
-  console.log(`🔑 Key: ${SUPABASE_ANON_KEY.substring(0, 20)}...`);
+  console.log('🔑 Key: <masked>');
   
   console.log('\n🔄 Reiniciando servidor de desarrollo...');
   console.log('💡 Presiona Ctrl+C en la terminal donde está ejecutándose el servidor');
@@ -32,7 +33,7 @@ try {
   console.log('1. Abre el archivo .env en tu editor');
   console.log('2. Reemplaza las líneas:');
   console.log(`   VITE_SUPABASE_URL=${SUPABASE_URL}`);
-  console.log(`   VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}`);
+  console.log('   VITE_SUPABASE_ANON_KEY=<your_anon_key>');
   console.log('3. Guarda el archivo');
   console.log('4. Reinicia el servidor de desarrollo');
 } 

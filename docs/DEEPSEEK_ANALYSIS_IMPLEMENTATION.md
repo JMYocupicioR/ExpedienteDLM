@@ -127,7 +127,7 @@ console.error('❌ Error de conexión con DeepSeek:', err);
 #### **Variables de Entorno**
 ```env
 # DeepSeek API Configuration
-REACT_APP_DEEPSEEK_API_KEY=sk-86b8d2f019654ced9078e775d656dfcb
+REACT_APP_DEEPSEEK_API_KEY=YOUR_DEEPSEEK_API_KEY
 REACT_APP_AI_MODEL=deepseek-chat
 REACT_APP_AI_TEMPERATURE=0.3
 REACT_APP_AI_MAX_TOKENS=1000

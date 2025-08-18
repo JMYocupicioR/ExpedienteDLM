@@ -1,11 +1,13 @@
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 
 // Configuración de DeepSeek
-const DEEPSEEK_API_KEY = 'sk-86b8d2f019654ced9078e775d656dfcb';
+// NOTE: Do not hardcode real API keys in the repository.
+// Use environment variables instead and reference them at runtime.
+const DEEPSEEK_API_KEY = process.env.VITE_DEEPSEEK_API_KEY || 'YOUR_DEEPSEEK_API_KEY';
 
-// Configuración de Supabase (existente)
-const SUPABASE_URL = 'https://qcelbrzjrmjxpjxllyhk.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw';
+// Configuración de Supabase (usar variables de entorno o placeholders)
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
 
 console.log('🚀 Configurando archivo .env con DeepSeek R1...\n');
 
@@ -39,7 +41,11 @@ VITE_AI_MAX_TOKENS=1000
   
   console.log('✅ Archivo .env configurado correctamente');
   console.log('🤖 DeepSeek R1 configurado');
-  console.log(`🔑 API Key: ${DEEPSEEK_API_KEY.substring(0, 20)}...`);
+  if (DEEPSEEK_API_KEY && DEEPSEEK_API_KEY !== 'YOUR_DEEPSEEK_API_KEY') {
+    console.log(`🔑 API Key detected (masked)`);
+  } else {
+    console.log('🔑 API Key no configurada (usa VITE_DEEPSEEK_API_KEY en .env)');
+  }
   console.log(`📡 Supabase URL: ${SUPABASE_URL}`);
   
   console.log('\n🔄 Pasos siguientes:');
@@ -54,8 +60,8 @@ VITE_AI_MAX_TOKENS=1000
   console.log('');
   console.log('# Supabase Configuration');
   console.log(`VITE_SUPABASE_URL=${SUPABASE_URL}`);
-  console.log(`VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}`);
+  console.log('VITE_SUPABASE_ANON_KEY=<your_anon_key>');
   console.log('');
   console.log('# DeepSeek API Configuration');
-  console.log(`REACT_APP_DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}`);
+  console.log('REACT_APP_DEEPSEEK_API_KEY=<CONFIGURE_IN_ENV>');
 }

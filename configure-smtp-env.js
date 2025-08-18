@@ -15,12 +15,13 @@ const envPath = path.join(process.cwd(), '.env');
 
 const envContent = `# Variables de entorno para DeepLux Med
 # Supabase Configuration
-VITE_SUPABASE_URL=https://qcelbrzjrmjxpjxllyhk.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
 # SMTP Configuration para Ionos
-# IMPORTANTE: Reemplaza 'tu_contraseña_smtp_aqui' con la contraseña real de soporte@deepluxmed.mx
-SMTP_PASSWORD=tu_contraseña_smtp_aqui
+# IMPORTANTE: No incluyas contraseñas reales en repositorio
+# Define SMTP_PASSWORD en variables de entorno de Netlify/producción
+SMTP_PASSWORD=
 
 # Environment
 NODE_ENV=development
@@ -61,7 +62,7 @@ console.log('🏷️ Nombre: DeepLuxMed');
 console.log('\n⚠️ ACCIÓN REQUERIDA:');
 console.log('='.repeat(30));
 console.log('1. Edita el archivo .env/.env.local');
-console.log('2. Reemplaza "tu_contraseña_smtp_aqui" con la contraseña real');
+console.log('2. Configura SMTP_PASSWORD en entorno seguro');
 console.log('3. Guarda el archivo');
 console.log('4. Reinicia tu servidor de desarrollo');
 
@@ -71,7 +72,7 @@ console.log('• El archivo está en .gitignore (no se subirá a git)');
 console.log('• Usa variables de entorno en producción');
 
 console.log('\n✅ PASOS SIGUIENTES:');
-console.log('1. Configurar contraseña en .env');
+console.log('1. Configurar variables en .env');
 console.log('2. Ejecutar: npm run dev');
 console.log('3. Probar registro de usuario');
 console.log('4. Verificar que lleguen los emails');

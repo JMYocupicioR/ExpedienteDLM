@@ -31,8 +31,8 @@ if (supabaseUrl && (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes
 }
 
 // Usar valores por defecto si no están configurados (solo para desarrollo)
-const finalUrl = supabaseUrl || 'https://qcelbrzjrmjxpjxllyhk.supabase.co';
-const finalKey = supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZWxicnpqcm1qeHBqeGxseWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNDQ1NDUsImV4cCI6MjA2MjkyMDU0NX0.FPREjK1R3FEsVbcAMQVcOrRcs16MYFL8cQHK2W3STKw';
+const finalUrl = supabaseUrl || 'https://YOUR_PROJECT_REF.supabase.co';
+const finalKey = supabaseAnonKey || 'YOUR_SUPABASE_ANON_KEY';
 
 // Crear cliente de Supabase
 export const supabase = createClient<Database>(finalUrl, finalKey, {

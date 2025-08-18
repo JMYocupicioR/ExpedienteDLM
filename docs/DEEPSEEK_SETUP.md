@@ -13,7 +13,7 @@ Crea un archivo `.env` en la raíz del proyecto con:
 
 ```env
 # DeepSeek API Configuration
-REACT_APP_DEEPSEEK_API_KEY=sk-86b8d2f019654ced9078e775d656dfcb
+REACT_APP_DEEPSEEK_API_KEY=YOUR_DEEPSEEK_API_KEY
 ```
 
 ### 3. Reiniciar el Servidor de Desarrollo
