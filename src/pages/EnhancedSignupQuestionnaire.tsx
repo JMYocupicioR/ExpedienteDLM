@@ -1163,11 +1163,24 @@ export default function EnhancedSignupQuestionnaire() {
 
         console.log('✅ Email disponible en verificación final, procediendo con la creación...');
 
+        // Recuperar token de hCaptcha guardado en el primer paso del registro
+        const pending = sessionStorage.getItem('pendingRegistration');
+        let captchaToken: string | undefined = undefined;
+        if (pending) {
+          try {
+            const parsed = JSON.parse(pending);
+            if (typeof parsed?.hcaptchaToken === 'string') {
+              captchaToken = parsed.hcaptchaToken;
+            }
+          } catch {}
+        }
+
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: email,
           password: password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
+            captchaToken,
             data: {
               full_name: formData.personalInfo.fullName,
               role: formData.accountInfo.role,

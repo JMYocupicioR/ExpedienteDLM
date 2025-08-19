@@ -64,11 +64,23 @@ const Dashboard = () => {
   const [showQuickStartModal, setShowQuickStartModal] = useState(false);
 
   useEffect(() => {
-    const getUser = async () => {
+    let cancelled = false;
+    const bootstrap = async () => {
       try {
+        // Guard: no continuar si no existe sesión
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) {
+          if (!cancelled) navigate('/auth');
+          return;
+        }
+
         const {
           data: { user },
         } = await supabase.auth.getUser();
+        if (cancelled) return;
+
         setUser(user);
         if (user) {
           // Cargar perfil para verificar si es admin
@@ -78,6 +90,7 @@ const Dashboard = () => {
             .eq('id', user.id)
             .single();
 
+          if (cancelled) return;
           setUserProfile(profile);
 
           // Verificar si es admin (usando clinic_members)
@@ -92,6 +105,7 @@ const Dashboard = () => {
               .eq('clinic_id', profile.clinic_id)
               .maybeSingle();
 
+            if (cancelled) return;
             setIsAdmin(rel?.role === 'admin' || profile?.role === 'super_admin');
           }
 
@@ -101,12 +115,15 @@ const Dashboard = () => {
       } catch (error) {
         console.error('Error getting user:', error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    getUser();
-  }, []);
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   useEffect(() => {
     if (searchTerm.length > 2) {

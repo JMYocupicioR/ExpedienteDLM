@@ -104,9 +104,15 @@ export default function Auth() {
     try {
       if (isLogin) {
         console.log('🔐 Logging in...');
+        // Requiere captcha cuando está habilitado en Supabase
+        if (!hcaptchaToken) {
+          setError('Por favor, verifica el captcha.');
+          return;
+        }
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
+          options: { captchaToken: hcaptchaToken || undefined },
         });
 
         if (error) throw error;
@@ -226,6 +232,7 @@ export default function Auth() {
               email: email.toLowerCase().trim(),
               password: password,
               confirmPassword: confirmPassword,
+              hcaptchaToken,
               timestamp: Date.now(),
             })
           );
@@ -340,6 +347,13 @@ export default function Auth() {
                 <a href='#' className='text-sm text-cyan-400 hover:text-cyan-300 transition-colors'>
                   ¿Olvidaste tu contraseña?
                 </a>
+              </div>
+              {/* hCaptcha Widget (login) */}
+              <div className='mt-2'>
+                <div
+                  className='h-captcha'
+                  data-sitekey='5e0e8956-46b8-4a76-a756-b5d0cdc02d24'
+                ></div>
               </div>
 
               <button
