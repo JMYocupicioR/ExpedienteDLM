@@ -1,13 +1,26 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { 
-  User, Phone, Award, Building, Stethoscope, ArrowLeft, ArrowRight, 
-  CheckCircle, AlertCircle, Shield, Heart, UserCheck, MapPin,
-  Calendar, Mail, Plus, Search
-} from 'lucide-react';
+import { Clinic, EnhancedRegistrationData, MedicalSpecialty } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
-import { EnhancedRegistrationData, MedicalSpecialty, Clinic } from '@/lib/database.types';
-import { ClinicRegistrationForm } from '@/components/ClinicRegistrationForm';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Award,
+  Building,
+  Calendar,
+  CheckCircle,
+  Heart,
+  Mail,
+  MapPin,
+  Phone,
+  Plus,
+  Search,
+  Shield,
+  Stethoscope,
+  User,
+  UserCheck,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export default function EnhancedSignupQuestionnaire() {
   const navigate = useNavigate();
@@ -16,13 +29,23 @@ export default function EnhancedSignupQuestionnaire() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRetryCleanup, setShowRetryCleanup] = useState(false);
-  
+
   // Constantes para fecha de nacimiento
   const months = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
-  
+
   // Data states
   const [specialties, setSpecialties] = useState<MedicalSpecialty[]>([]);
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -40,15 +63,15 @@ export default function EnhancedSignupQuestionnaire() {
   const fromRegistration = location.state?.fromRegistration || false;
   const fromOAuth = location.state?.fromOAuth || false;
   const oauthData = location.state?.oauthData || null;
-  
+
   // Recuperar datos pendientes de sessionStorage
   const pendingRegistration = sessionStorage.getItem('pendingRegistration');
   const pendingData = pendingRegistration ? JSON.parse(pendingRegistration) : null;
-  
+
   // Recuperar datos de OAuth si existen
   const oauthRegistration = sessionStorage.getItem('oauthRegistration');
   const oauthSessionData = oauthRegistration ? JSON.parse(oauthRegistration) : null;
-  
+
   const [formData, setFormData] = useState<EnhancedRegistrationData>({
     personalInfo: {
       fullName: oauthData?.fullName || oauthSessionData?.fullName || '',
@@ -56,19 +79,19 @@ export default function EnhancedSignupQuestionnaire() {
       phone: '',
       birthDate: '',
       gender: '',
-      address: ''
+      address: '',
     },
     accountInfo: {
       role: 'doctor',
       password: pendingData?.password || '',
-      confirmPassword: pendingData?.password || ''
+      confirmPassword: pendingData?.password || '',
     },
     professionalInfo: {
       licenseNumber: '',
       specialtyId: '',
       experience: '',
       institution: '',
-      employeeId: ''
+      employeeId: '',
     },
     clinicInfo: {
       clinicId: '',
@@ -78,19 +101,19 @@ export default function EnhancedSignupQuestionnaire() {
         type: 'clinic',
         address: '',
         phone: '',
-        email: ''
-      }
+        email: '',
+      },
     },
     patientInfo: {
       primaryDoctorId: '',
       insuranceInfo: {},
-      emergencyContact: {}
+      emergencyContact: {},
     },
     additionalInfo: {
       workSchedule: '',
       preferences: {},
-      notes: ''
-    }
+      notes: '',
+    },
   });
 
   // Funciones auxiliares para fecha de nacimiento
@@ -106,26 +129,26 @@ export default function EnhancedSignupQuestionnaire() {
   const generateDayOptions = () => {
     const selectedMonth = getBirthDatePart('month');
     const selectedYear = getBirthDatePart('year');
-    
+
     if (!selectedMonth || !selectedYear) {
       return Array.from({ length: 31 }, (_, i) => i + 1);
     }
-    
+
     const month = parseInt(selectedMonth) - 1;
     const year = parseInt(selectedYear);
-    
+
     // Obtener el último día del mes
     const lastDay = new Date(year, month + 1, 0).getDate();
-    
+
     return Array.from({ length: lastDay }, (_, i) => i + 1);
   };
 
   const getBirthDatePart = (part: 'day' | 'month' | 'year') => {
     if (!formData.personalInfo.birthDate) return '';
-    
+
     const date = new Date(formData.personalInfo.birthDate);
     if (isNaN(date.getTime())) return '';
-    
+
     switch (part) {
       case 'day':
         return date.getDate().toString().padStart(2, '0');
@@ -139,20 +162,26 @@ export default function EnhancedSignupQuestionnaire() {
   };
 
   const updateBirthDate = (part: 'day' | 'month' | 'year', value: string) => {
-    const currentDate = formData.personalInfo.birthDate ? new Date(formData.personalInfo.birthDate) : new Date();
-    
+    const currentDate = formData.personalInfo.birthDate
+      ? new Date(formData.personalInfo.birthDate)
+      : new Date();
+
     if (isNaN(currentDate.getTime())) {
       currentDate.setFullYear(new Date().getFullYear() - 25); // Año por defecto
     }
-    
+
     switch (part) {
       case 'day':
         currentDate.setDate(parseInt(value) || 1);
         break;
       case 'month':
-        currentDate.setMonth((parseInt(value) - 1) || 0);
+        currentDate.setMonth(parseInt(value) - 1 || 0);
         // Al cambiar mes, ajustar día si es necesario
-        const maxDays = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+        const maxDays = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth() + 1,
+          0
+        ).getDate();
         if (currentDate.getDate() > maxDays) {
           currentDate.setDate(maxDays);
         }
@@ -160,7 +189,8 @@ export default function EnhancedSignupQuestionnaire() {
       case 'year':
         currentDate.setFullYear(parseInt(value) || new Date().getFullYear() - 25);
         // Al cambiar año, verificar si es año bisiesto para febrero
-        if (currentDate.getMonth() === 1) { // Febrero
+        if (currentDate.getMonth() === 1) {
+          // Febrero
           const maxDays = new Date(currentDate.getFullYear(), 2, 0).getDate();
           if (currentDate.getDate() > maxDays) {
             currentDate.setDate(maxDays);
@@ -168,50 +198,50 @@ export default function EnhancedSignupQuestionnaire() {
         }
         break;
     }
-    
+
     const newDateString = currentDate.toISOString().split('T')[0];
     updateFormData('personalInfo', 'birthDate', newDateString);
   };
 
   const formatBirthDateForDisplay = (dateString: string) => {
     if (!dateString) return '';
-    
+
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return '';
-    
+
     const day = date.getDate();
     const month = months[date.getMonth()];
     const year = date.getFullYear();
-    
+
     return `${day} de ${month} de ${year}`;
   };
 
   const isValidAge = (dateString: string) => {
     if (!dateString) return false;
-    
+
     const birthDate = new Date(dateString);
     if (isNaN(birthDate.getTime())) return false;
-    
+
     const today = new Date();
     const age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
-    
+
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       return age - 1 >= 18;
     }
-    
+
     return age >= 18;
   };
 
   const getStep1Progress = () => {
     let completed = 0;
     const total = 4;
-    
+
     if (formData.personalInfo.fullName.trim()) completed++;
     if (formData.personalInfo.email.trim()) completed++;
     if (formData.personalInfo.phone.trim()) completed++;
     if (formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate)) completed++;
-    
+
     return Math.round((completed / total) * 100);
   };
 
@@ -220,73 +250,513 @@ export default function EnhancedSignupQuestionnaire() {
     // USANDO UUIDs VÁLIDOS PARA EVITAR ERRORES DE BASE DE DATOS
     const backupSpecialties: MedicalSpecialty[] = [
       // MÉDICAS
-      { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Medicina General', category: 'medical', description: 'Atención médica integral y preventiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'b2c3d4e5-f6g7-8901-bcde-f12345678901', name: 'Cardiología', category: 'medical', description: 'Enfermedades cardiovasculares y del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'c3d4e5f6-g7h8-9012-cdef-123456789012', name: 'Pediatría', category: 'medical', description: 'Medicina pediátrica integral (0-18 años)', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'd4e5f6g7-h8i9-0123-def1-234567890123', name: 'Neurología', category: 'medical', description: 'Enfermedades del sistema nervioso central y periférico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'e5f6g7h8-i9j0-1234-ef12-345678901234', name: 'Dermatología', category: 'medical', description: 'Enfermedades de la piel, pelo y uñas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'f6g7h8i9-j0k1-2345-f123-456789012345', name: 'Medicina Interna', category: 'medical', description: 'Medicina interna de adultos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'g7h8i9j0-k1l2-3456-1234-567890123456', name: 'Endocrinología', category: 'medical', description: 'Enfermedades endocrinas y metabólicas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'h8i9j0k1-l2m3-4567-2345-678901234567', name: 'Gastroenterología', category: 'medical', description: 'Enfermedades digestivas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'i9j0k1l2-m3n4-5678-3456-789012345678', name: 'Neumología', category: 'medical', description: 'Enfermedades respiratorias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'j0k1l2m3-n4o5-6789-4567-890123456789', name: 'Reumatología', category: 'medical', description: 'Enfermedades reumáticas y autoinmunes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'k1l2m3n4-o5p6-7890-5678-901234567890', name: 'Oncología', category: 'medical', description: 'Tratamiento del cáncer', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'l2m3n4o5-p6q7-8901-6789-012345678901', name: 'Psiquiatría', category: 'medical', description: 'Salud mental y trastornos psiquiátricos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'm3n4o5p6-q7r8-9012-7890-123456789012', name: 'Anestesiología', category: 'medical', description: 'Medicina perioperatoria y anestesia', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'n4o5p6q7-r8s9-0123-8901-234567890123', name: 'Medicina de Urgencias', category: 'medical', description: 'Medicina de emergencias y urgencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'o5p6q7r8-s9t0-1234-9012-345678901234', name: 'Alergología e Inmunología', category: 'medical', description: 'Alergias e inmunodeficiencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'p6q7r8s9-t0u1-2345-0123-456789012345', name: 'Hematología', category: 'medical', description: 'Enfermedades de la sangre', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'q7r8s9t0-u1v2-3456-1234-567890123456', name: 'Infectología', category: 'medical', description: 'Enfermedades infecciosas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'r8s9t0u1-v2w3-4567-2345-678901234567', name: 'Medicina del Deporte', category: 'medical', description: 'Medicina deportiva y ejercicio', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 's9t0u1v2-w3x4-5678-3456-789012345678', name: 'Medicina Familiar', category: 'medical', description: 'Atención integral familiar', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 't0u1v2w3-x4y5-6789-4567-890123456789', name: 'Genética Médica', category: 'medical', description: 'Enfermedades genéticas', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      
+      {
+        id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        name: 'Medicina General',
+        category: 'medical',
+        description: 'Atención médica integral y preventiva',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'b2c3d4e5-f6g7-8901-bcde-f12345678901',
+        name: 'Cardiología',
+        category: 'medical',
+        description: 'Enfermedades cardiovasculares y del corazón',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'c3d4e5f6-g7h8-9012-cdef-123456789012',
+        name: 'Pediatría',
+        category: 'medical',
+        description: 'Medicina pediátrica integral (0-18 años)',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'd4e5f6g7-h8i9-0123-def1-234567890123',
+        name: 'Neurología',
+        category: 'medical',
+        description: 'Enfermedades del sistema nervioso central y periférico',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'e5f6g7h8-i9j0-1234-ef12-345678901234',
+        name: 'Dermatología',
+        category: 'medical',
+        description: 'Enfermedades de la piel, pelo y uñas',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'f6g7h8i9-j0k1-2345-f123-456789012345',
+        name: 'Medicina Interna',
+        category: 'medical',
+        description: 'Medicina interna de adultos',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'g7h8i9j0-k1l2-3456-1234-567890123456',
+        name: 'Endocrinología',
+        category: 'medical',
+        description: 'Enfermedades endocrinas y metabólicas',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'h8i9j0k1-l2m3-4567-2345-678901234567',
+        name: 'Gastroenterología',
+        category: 'medical',
+        description: 'Enfermedades digestivas',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'i9j0k1l2-m3n4-5678-3456-789012345678',
+        name: 'Neumología',
+        category: 'medical',
+        description: 'Enfermedades respiratorias',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'j0k1l2m3-n4o5-6789-4567-890123456789',
+        name: 'Reumatología',
+        category: 'medical',
+        description: 'Enfermedades reumáticas y autoinmunes',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'k1l2m3n4-o5p6-7890-5678-901234567890',
+        name: 'Oncología',
+        category: 'medical',
+        description: 'Tratamiento del cáncer',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'l2m3n4o5-p6q7-8901-6789-012345678901',
+        name: 'Psiquiatría',
+        category: 'medical',
+        description: 'Salud mental y trastornos psiquiátricos',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'm3n4o5p6-q7r8-9012-7890-123456789012',
+        name: 'Anestesiología',
+        category: 'medical',
+        description: 'Medicina perioperatoria y anestesia',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'n4o5p6q7-r8s9-0123-8901-234567890123',
+        name: 'Medicina de Urgencias',
+        category: 'medical',
+        description: 'Medicina de emergencias y urgencias',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'o5p6q7r8-s9t0-1234-9012-345678901234',
+        name: 'Alergología e Inmunología',
+        category: 'medical',
+        description: 'Alergias e inmunodeficiencias',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'p6q7r8s9-t0u1-2345-0123-456789012345',
+        name: 'Hematología',
+        category: 'medical',
+        description: 'Enfermedades de la sangre',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'q7r8s9t0-u1v2-3456-1234-567890123456',
+        name: 'Infectología',
+        category: 'medical',
+        description: 'Enfermedades infecciosas',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'r8s9t0u1-v2w3-4567-2345-678901234567',
+        name: 'Medicina del Deporte',
+        category: 'medical',
+        description: 'Medicina deportiva y ejercicio',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 's9t0u1v2-w3x4-5678-3456-789012345678',
+        name: 'Medicina Familiar',
+        category: 'medical',
+        description: 'Atención integral familiar',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 't0u1v2w3-x4y5-6789-4567-890123456789',
+        name: 'Genética Médica',
+        category: 'medical',
+        description: 'Enfermedades genéticas',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+
       // QUIRÚRGICAS
-      { id: 'u1v2w3x4-y5z6-7890-5678-901234567890', name: 'Cirugía General', category: 'surgical', description: 'Cirugía general y abdominal', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'v2w3x4y5-z6a7-8901-6789-012345678901', name: 'Ginecología y Obstetricia', category: 'surgical', description: 'Salud femenina y reproductiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'w3x4y5z6-a7b8-9012-7890-123456789012', name: 'Ortopedia y Traumatología', category: 'surgical', description: 'Cirugía de huesos y articulaciones', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'x4y5z6a7-b8c9-0123-8901-234567890123', name: 'Oftalmología', category: 'surgical', description: 'Cirugía ocular y oftalmológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'y5z6a7b8-c9d0-1234-9012-345678901234', name: 'Urología', category: 'surgical', description: 'Cirugía urológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'z6a7b8c9-d0e1-2345-0123-456789012345', name: 'Neurocirugía', category: 'surgical', description: 'Cirugía del sistema nervioso', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'a7b8c9d0-e1f2-3456-1234-567890123456', name: 'Cirugía Cardiovascular', category: 'surgical', description: 'Cirugía del corazón', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'b8c9d0e1-f2g3-4567-2345-678901234567', name: 'Cirugía Torácica', category: 'surgical', description: 'Cirugía del tórax', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'c9d0e1f2-g3h4-5678-3456-789012345678', name: 'Cirugía Plástica', category: 'surgical', description: 'Cirugía estética y reconstructiva', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'd0e1f2g3-h4i5-6789-4567-890123456789', name: 'Otorrinolaringología', category: 'surgical', description: 'Cirugía de oído, nariz y garganta', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      
+      {
+        id: 'u1v2w3x4-y5z6-7890-5678-901234567890',
+        name: 'Cirugía General',
+        category: 'surgical',
+        description: 'Cirugía general y abdominal',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'v2w3x4y5-z6a7-8901-6789-012345678901',
+        name: 'Ginecología y Obstetricia',
+        category: 'surgical',
+        description: 'Salud femenina y reproductiva',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'w3x4y5z6-a7b8-9012-7890-123456789012',
+        name: 'Ortopedia y Traumatología',
+        category: 'surgical',
+        description: 'Cirugía de huesos y articulaciones',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'x4y5z6a7-b8c9-0123-8901-234567890123',
+        name: 'Oftalmología',
+        category: 'surgical',
+        description: 'Cirugía ocular y oftalmológica',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'y5z6a7b8-c9d0-1234-9012-345678901234',
+        name: 'Urología',
+        category: 'surgical',
+        description: 'Cirugía urológica',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'z6a7b8c9-d0e1-2345-0123-456789012345',
+        name: 'Neurocirugía',
+        category: 'surgical',
+        description: 'Cirugía del sistema nervioso',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'a7b8c9d0-e1f2-3456-1234-567890123456',
+        name: 'Cirugía Cardiovascular',
+        category: 'surgical',
+        description: 'Cirugía del corazón',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'b8c9d0e1-f2g3-4567-2345-678901234567',
+        name: 'Cirugía Torácica',
+        category: 'surgical',
+        description: 'Cirugía del tórax',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'c9d0e1f2-g3h4-5678-3456-789012345678',
+        name: 'Cirugía Plástica',
+        category: 'surgical',
+        description: 'Cirugía estética y reconstructiva',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'd0e1f2g3-h4i5-6789-4567-890123456789',
+        name: 'Otorrinolaringología',
+        category: 'surgical',
+        description: 'Cirugía de oído, nariz y garganta',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+
       // DIAGNÓSTICAS
-      { id: 'e1f2g3h4-i5j6-7890-5678-901234567890', name: 'Radiología', category: 'diagnostic', description: 'Diagnóstico por imágenes', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'f2g3h4i5-j6k7-8901-6789-012345678901', name: 'Patología', category: 'diagnostic', description: 'Diagnóstico anatomopatológico', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'g3h4i5j6-k7l8-9012-7890-123456789012', name: 'Medicina Nuclear', category: 'diagnostic', description: 'Diagnóstico y tratamiento nuclear', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'h4i5j6k7-l8m9-0123-8901-234567890123', name: 'Laboratorio Clínico', category: 'diagnostic', description: 'Análisis clínicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'i5j6k7l8-m9n0-1234-9012-345678901234', name: 'Radiología Intervencionista', category: 'diagnostic', description: 'Procedimientos radiológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      
+      {
+        id: 'e1f2g3h4-i5j6-7890-5678-901234567890',
+        name: 'Radiología',
+        category: 'diagnostic',
+        description: 'Diagnóstico por imágenes',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'f2g3h4i5-j6k7-8901-6789-012345678901',
+        name: 'Patología',
+        category: 'diagnostic',
+        description: 'Diagnóstico anatomopatológico',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'g3h4i5j6-k7l8-9012-7890-123456789012',
+        name: 'Medicina Nuclear',
+        category: 'diagnostic',
+        description: 'Diagnóstico y tratamiento nuclear',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'h4i5j6k7-l8m9-0123-8901-234567890123',
+        name: 'Laboratorio Clínico',
+        category: 'diagnostic',
+        description: 'Análisis clínicos',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'i5j6k7l8-m9n0-1234-9012-345678901234',
+        name: 'Radiología Intervencionista',
+        category: 'diagnostic',
+        description: 'Procedimientos radiológicos',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+
       // TERAPIAS
-      { id: 'j6k7l8m9-n0o1-2345-0123-456789012345', name: 'Fisioterapia', category: 'therapy', description: 'Terapia física y rehabilitación', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'k7l8m9n0-o1p2-3456-1234-567890123456', name: 'Terapia Respiratoria', category: 'therapy', description: 'Terapia respiratoria', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'l8m9n0o1-p2q3-4567-2345-678901234567', name: 'Psicología Clínica', category: 'therapy', description: 'Terapia psicológica', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'm9n0o1p2-q3r4-5678-3456-789012345678', name: 'Nutrición Clínica', category: 'therapy', description: 'Terapia nutricional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'n0o1p2q3-r4s5-6789-4567-890123456789', name: 'Terapia Ocupacional', category: 'therapy', description: 'Terapia ocupacional', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      
+      {
+        id: 'j6k7l8m9-n0o1-2345-0123-456789012345',
+        name: 'Fisioterapia',
+        category: 'therapy',
+        description: 'Terapia física y rehabilitación',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'k7l8m9n0-o1p2-3456-1234-567890123456',
+        name: 'Terapia Respiratoria',
+        category: 'therapy',
+        description: 'Terapia respiratoria',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'l8m9n0o1-p2q3-4567-2345-678901234567',
+        name: 'Psicología Clínica',
+        category: 'therapy',
+        description: 'Terapia psicológica',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'm9n0o1p2-q3r4-5678-3456-789012345678',
+        name: 'Nutrición Clínica',
+        category: 'therapy',
+        description: 'Terapia nutricional',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'n0o1p2q3-r4s5-6789-4567-890123456789',
+        name: 'Terapia Ocupacional',
+        category: 'therapy',
+        description: 'Terapia ocupacional',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+
       // ENFERMERÍA
-      { id: 'o1p2q3r4-s5t6-7890-5678-901234567890', name: 'Enfermería General', category: 'nursing', description: 'Cuidados de enfermería general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'p2q3r4s5-t6u7-8901-6789-012345678901', name: 'Enfermería Especializada', category: 'nursing', description: 'Cuidados especializados', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'q3r4s5t6-u7v8-9012-7890-123456789012', name: 'Enfermería de Urgencias', category: 'nursing', description: 'Cuidados en emergencias', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'r4s5t6u7-v8w9-0123-8901-234567890123', name: 'Enfermería Quirúrgica', category: 'nursing', description: 'Cuidados perioperatorios', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 's5t6u7v8-w9x0-1234-9012-345678901234', name: 'Enfermería Oncológica', category: 'nursing', description: 'Cuidados oncológicos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      
+      {
+        id: 'o1p2q3r4-s5t6-7890-5678-901234567890',
+        name: 'Enfermería General',
+        category: 'nursing',
+        description: 'Cuidados de enfermería general',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'p2q3r4s5-t6u7-8901-6789-012345678901',
+        name: 'Enfermería Especializada',
+        category: 'nursing',
+        description: 'Cuidados especializados',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'q3r4s5t6-u7v8-9012-7890-123456789012',
+        name: 'Enfermería de Urgencias',
+        category: 'nursing',
+        description: 'Cuidados en emergencias',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'r4s5t6u7-v8w9-0123-8901-234567890123',
+        name: 'Enfermería Quirúrgica',
+        category: 'nursing',
+        description: 'Cuidados perioperatorios',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 's5t6u7v8-w9x0-1234-9012-345678901234',
+        name: 'Enfermería Oncológica',
+        category: 'nursing',
+        description: 'Cuidados oncológicos',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+
       // ODONTOLOGÍA
-      { id: 't6u7v8w9-x0y1-2345-0123-456789012345', name: 'Odontología General', category: 'medical', description: 'Atención dental general', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'u7v8w9x0-y1z2-3456-1234-567890123456', name: 'Ortodoncia', category: 'medical', description: 'Corrección dental', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'v8w9x0y1-z2a3-4567-2345-678901234567', name: 'Endodoncia', category: 'medical', description: 'Tratamiento de conductos', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'w9x0y1z2-a3b4-5678-3456-789012345678', name: 'Periodoncia', category: 'medical', description: 'Tratamiento de encías', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      { id: 'x0y1z2a3-b4c5-6789-4567-890123456789', name: 'Cirugía Oral', category: 'surgical', description: 'Cirugía oral y maxilofacial', requires_license: true, is_active: true, created_at: new Date().toISOString() },
-      
+      {
+        id: 't6u7v8w9-x0y1-2345-0123-456789012345',
+        name: 'Odontología General',
+        category: 'medical',
+        description: 'Atención dental general',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'u7v8w9x0-y1z2-3456-1234-567890123456',
+        name: 'Ortodoncia',
+        category: 'medical',
+        description: 'Corrección dental',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'v8w9x0y1-z2a3-4567-2345-678901234567',
+        name: 'Endodoncia',
+        category: 'medical',
+        description: 'Tratamiento de conductos',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'w9x0y1z2-a3b4-5678-3456-789012345678',
+        name: 'Periodoncia',
+        category: 'medical',
+        description: 'Tratamiento de encías',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'x0y1z2a3-b4c5-6789-4567-890123456789',
+        name: 'Cirugía Oral',
+        category: 'surgical',
+        description: 'Cirugía oral y maxilofacial',
+        requires_license: true,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+
       // ADMINISTRACIÓN
-      { id: 'y1z2a3b4-c5d6-7890-5678-901234567890', name: 'Administración Hospitalaria', category: 'administration', description: 'Gestión hospitalaria', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: 'z2a3b4c5-d6e7-8901-6789-012345678901', name: 'Gestión de Calidad', category: 'administration', description: 'Control de calidad médica', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: 'a3b4c5d6-e7f8-9012-7890-123456789012', name: 'Facturación Médica', category: 'administration', description: 'Facturación y seguros', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: 'b4c5d6e7-f8g9-0123-8901-234567890123', name: 'Gestión de Riesgos Sanitarios', category: 'administration', description: 'Gestión de riesgos en salud', requires_license: false, is_active: true, created_at: new Date().toISOString() },
-      { id: 'c5d6e7f8-g9h0-1234-9012-345678901234', name: 'Gestión de Tecnología Sanitaria', category: 'administration', description: 'Tecnología médica', requires_license: false, is_active: true, created_at: new Date().toISOString() }
+      {
+        id: 'y1z2a3b4-c5d6-7890-5678-901234567890',
+        name: 'Administración Hospitalaria',
+        category: 'administration',
+        description: 'Gestión hospitalaria',
+        requires_license: false,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'z2a3b4c5-d6e7-8901-6789-012345678901',
+        name: 'Gestión de Calidad',
+        category: 'administration',
+        description: 'Control de calidad médica',
+        requires_license: false,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'a3b4c5d6-e7f8-9012-7890-123456789012',
+        name: 'Facturación Médica',
+        category: 'administration',
+        description: 'Facturación y seguros',
+        requires_license: false,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'b4c5d6e7-f8g9-0123-8901-234567890123',
+        name: 'Gestión de Riesgos Sanitarios',
+        category: 'administration',
+        description: 'Gestión de riesgos en salud',
+        requires_license: false,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'c5d6e7f8-g9h0-1234-9012-345678901234',
+        name: 'Gestión de Tecnología Sanitaria',
+        category: 'administration',
+        description: 'Tecnología médica',
+        requires_license: false,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
     ];
 
     setSpecialtiesLoading(true);
@@ -310,24 +780,27 @@ export default function EnhancedSignupQuestionnaire() {
         setUseBackupSpecialties(true);
       } else {
         console.log('✅ Especialidades cargadas desde BD:', specialtiesData.length);
-        console.log('📋 Lista de especialidades:', specialtiesData.map(s => s.name));
-        
+        console.log(
+          '📋 Lista de especialidades:',
+          specialtiesData.map(s => s.name)
+        );
+
         // Combinar especialidades de BD con las de respaldo para mayor cobertura
         const combinedSpecialties = [...specialtiesData];
-        
+
         // Agregar especialidades de respaldo que no estén en BD
         backupSpecialties.forEach(backupSpec => {
-          const exists = combinedSpecialties.some(dbSpec => 
-            dbSpec.name.toLowerCase() === backupSpec.name.toLowerCase()
+          const exists = combinedSpecialties.some(
+            dbSpec => dbSpec.name.toLowerCase() === backupSpec.name.toLowerCase()
           );
           if (!exists) {
             combinedSpecialties.push(backupSpec);
           }
         });
-        
+
         // Ordenar por nombre
         combinedSpecialties.sort((a, b) => a.name.localeCompare(b.name));
-        
+
         console.log('🔗 Total de especialidades disponibles:', combinedSpecialties.length);
         setSpecialties(combinedSpecialties);
         setUseBackupSpecialties(false);
@@ -366,17 +839,28 @@ export default function EnhancedSignupQuestionnaire() {
 
   // Filter specialties when search changes
   useEffect(() => {
-    console.log('🔍 Filtrando especialidades. Búsqueda:', specialtySearch, 'Total disponibles:', specialties.length);
+    console.log(
+      '🔍 Filtrando especialidades. Búsqueda:',
+      specialtySearch,
+      'Total disponibles:',
+      specialties.length
+    );
     if (specialtySearch.trim() === '') {
       setFilteredSpecialties(specialties);
       console.log('📋 Mostrando todas las especialidades:', specialties.length);
     } else {
-      const filtered = specialties.filter(specialty =>
-        specialty.name.toLowerCase().includes(specialtySearch.toLowerCase()) ||
-        specialty.category.toLowerCase().includes(specialtySearch.toLowerCase())
+      const filtered = specialties.filter(
+        specialty =>
+          specialty.name.toLowerCase().includes(specialtySearch.toLowerCase()) ||
+          specialty.category.toLowerCase().includes(specialtySearch.toLowerCase())
       );
       setFilteredSpecialties(filtered);
-      console.log('🔎 Especialidades filtradas:', filtered.length, 'para búsqueda:', specialtySearch);
+      console.log(
+        '🔎 Especialidades filtradas:',
+        filtered.length,
+        'para búsqueda:',
+        specialtySearch
+      );
     }
   }, [specialtySearch, specialties]);
 
@@ -386,9 +870,10 @@ export default function EnhancedSignupQuestionnaire() {
       setFilteredClinics(clinics);
     } else {
       setFilteredClinics(
-        clinics.filter(clinic =>
-          clinic.name.toLowerCase().includes(clinicSearch.toLowerCase()) ||
-          clinic.type.toLowerCase().includes(clinicSearch.toLowerCase())
+        clinics.filter(
+          clinic =>
+            clinic.name.toLowerCase().includes(clinicSearch.toLowerCase()) ||
+            clinic.type.toLowerCase().includes(clinicSearch.toLowerCase())
         )
       );
     }
@@ -413,8 +898,8 @@ export default function EnhancedSignupQuestionnaire() {
       ...prev,
       [section]: {
         ...prev[section],
-        [field]: value
-      }
+        [field]: value,
+      },
     }));
     setError(null);
     setShowRetryCleanup(false);
@@ -425,7 +910,7 @@ export default function EnhancedSignupQuestionnaire() {
       setLoading(true);
       setError(null);
       console.log('🧹 Intentando limpieza manual...');
-      
+
       const email = formData.personalInfo.email;
       if (!email) {
         setError('No se encontró el email para limpiar');
@@ -448,7 +933,6 @@ export default function EnhancedSignupQuestionnaire() {
       console.log('✅ Limpieza manual completada');
       setError('Limpieza completada. Puedes intentar completar el registro nuevamente.');
       setShowRetryCleanup(false);
-      
     } catch (err) {
       console.error('Error en handleRetryCleanup:', err);
       setError('Error inesperado durante la limpieza');
@@ -558,14 +1042,14 @@ export default function EnhancedSignupQuestionnaire() {
       console.log('🚀 Completando registro para:', formData.personalInfo.email);
 
       // NUEVO FLUJO: Manejar tanto usuarios OAuth como registro tradicional
-      
+
       let userId: string;
-      
+
       // Verificar si es un usuario OAuth
       if (oauthSessionData) {
         console.log('🔐 Completando perfil de usuario OAuth...');
         userId = oauthSessionData.userId;
-        
+
         // Actualizar el perfil existente con información completa
         const { error: updateError } = await supabase
           .from('profiles')
@@ -574,124 +1058,141 @@ export default function EnhancedSignupQuestionnaire() {
             phone: formData.personalInfo.phone,
             role: formData.accountInfo.role,
             profile_completed: true,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           })
           .eq('id', userId);
-          
+
         if (updateError) {
           console.error('Error actualizando perfil OAuth:', updateError);
           throw new Error('Error al actualizar el perfil');
         }
-        
+
         // Limpiar datos OAuth temporales
         sessionStorage.removeItem('oauthRegistration');
-        
       } else {
         // Flujo tradicional: crear usuario con email/contraseña
         const pendingRegistrationStr = sessionStorage.getItem('pendingRegistration');
         if (!pendingRegistrationStr && !formData.accountInfo.password) {
-          throw new Error('No se encontraron los datos de registro. Por favor, inicia el proceso nuevamente desde Auth.');
+          throw new Error(
+            'No se encontraron los datos de registro. Por favor, inicia el proceso nuevamente desde Auth.'
+          );
         }
-        
+
         let registrationData: { email?: string; password?: string; timestamp?: number } = {};
         if (pendingRegistrationStr) {
           registrationData = JSON.parse(pendingRegistrationStr);
-          
+
           // Verificar que los datos no sean muy antiguos (máx 30 minutos)
           const maxAge = 30 * 60 * 1000; // 30 minutos en milisegundos
           if (Date.now() - registrationData.timestamp > maxAge) {
             sessionStorage.removeItem('pendingRegistration');
-            throw new Error('La sesión de registro ha expirado (máx 30 min). Por favor, inicia el proceso nuevamente desde Auth.');
+            throw new Error(
+              'La sesión de registro ha expirado (máx 30 min). Por favor, inicia el proceso nuevamente desde Auth.'
+            );
           }
-          
-          console.log('✅ Datos de registro válidos, edad:', Math.round((Date.now() - registrationData.timestamp) / 60000), 'minutos');
+
+          console.log(
+            '✅ Datos de registro válidos, edad:',
+            Math.round((Date.now() - registrationData.timestamp) / 60000),
+            'minutos'
+          );
         }
-        
+
         const email = formData.personalInfo.email || registrationData.email;
         const password = registrationData.password;
-        
+
         if (!password) {
-          throw new Error('No se encontró la contraseña. Por favor, inicia el proceso nuevamente desde Auth.');
+          throw new Error(
+            'No se encontró la contraseña. Por favor, inicia el proceso nuevamente desde Auth.'
+          );
         }
-        
+
         console.log('🔐 Creando usuario con email/contraseña...');
-        
+
         // VERIFICACIÓN FINAL INTELIGENTE: Verificar y limpiar si es necesario
         console.log('🔍 Verificación final inteligente del email antes de crear usuario...');
-        
+
         // Primero verificar en profiles
         const { data: existingProfile, error: profileCheckError } = await supabase
           .from('profiles')
           .select('id, profile_completed, full_name, created_at')
           .eq('email', email.toLowerCase().trim())
           .maybeSingle();
-        
+
         if (profileCheckError && profileCheckError.code !== 'PGRST116') {
           console.error('Error verificando email en profiles:', profileCheckError);
           throw new Error('Error al verificar la disponibilidad del email');
         }
-        
+
         if (existingProfile) {
           console.log('📧 Email encontrado en profiles:', existingProfile);
-          
+
           // Si el perfil está incompleto, intentar limpiarlo
           if (!existingProfile.profile_completed || !existingProfile.full_name) {
             console.log('🧹 Perfil incompleto detectado, intentando limpiar...');
-            
+
             try {
               // Eliminar el perfil incompleto (esto debería eliminar el usuario en auth.users también por CASCADE)
               const { error: deleteError } = await supabase
                 .from('profiles')
                 .delete()
                 .eq('id', existingProfile.id);
-              
+
               if (deleteError) {
                 console.error('Error eliminando perfil incompleto:', deleteError);
-                throw new Error('Email ya registrado con registro incompleto. Por favor, contacta a soporte.');
+                throw new Error(
+                  'Email ya registrado con registro incompleto. Por favor, contacta a soporte.'
+                );
               }
-              
+
               console.log('✅ Perfil incompleto eliminado, continuando con la creación...');
             } catch (cleanupError) {
               console.error('Error en limpieza:', cleanupError);
-              throw new Error('Este correo tiene un registro previo incompleto. Por favor, contacta a soporte para resolverlo.');
+              throw new Error(
+                'Este correo tiene un registro previo incompleto. Por favor, contacta a soporte para resolverlo.'
+              );
             }
           } else {
             // Perfil completo, definitivamente ya registrado
             console.error('❌ Email ya registrado con perfil completo');
-            throw new Error('Este correo electrónico ya está registrado con un perfil completo. Por favor, inicia sesión en lugar de registrarte.');
+            throw new Error(
+              'Este correo electrónico ya está registrado con un perfil completo. Por favor, inicia sesión en lugar de registrarte.'
+            );
           }
         }
-        
+
         console.log('✅ Email disponible en verificación final, procediendo con la creación...');
-        
+
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: email,
           password: password,
           options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
             data: {
               full_name: formData.personalInfo.fullName,
               role: formData.accountInfo.role,
               phone: formData.personalInfo.phone,
-              profile_completed: true
-            }
-          }
+              profile_completed: true,
+            },
+          },
         });
 
         if (authError) {
           console.error('Error de registro:', authError);
           console.error('Código de error:', authError.status);
           console.error('Mensaje original:', authError.message);
-          
+
           // Manejo específico de errores de email ya registrado
-          if (authError.message?.includes('already registered') || 
-              authError.message?.includes('User already registered') ||
-              authError.message?.includes('email address is already in use') ||
-              authError.message?.includes('User with this email already exists') ||
-              authError.status === 422) {
-            
+          if (
+            authError.message?.includes('already registered') ||
+            authError.message?.includes('User already registered') ||
+            authError.message?.includes('email address is already in use') ||
+            authError.message?.includes('User with this email already exists') ||
+            authError.status === 422
+          ) {
             // Si es error de email ya registrado, intentar una limpieza más profunda
             console.log('🧹 Error de email duplicado, intentando limpieza profunda...');
-            
+
             try {
               // Intentar eliminar cualquier registro huérfano
               const { error: cleanupError } = await supabase
@@ -699,28 +1200,32 @@ export default function EnhancedSignupQuestionnaire() {
                 .delete()
                 .eq('email', email.toLowerCase().trim())
                 .is('profile_completed', null);
-              
+
               if (!cleanupError) {
                 console.log('✅ Registros huérfanos eliminados, sugiriendo reintento...');
-                throw new Error('Se encontró un registro previo incompleto que fue eliminado. Por favor, intenta registrarte nuevamente.');
+                throw new Error(
+                  'Se encontró un registro previo incompleto que fue eliminado. Por favor, intenta registrarte nuevamente.'
+                );
               }
             } catch {
               // Si falla la limpieza, continuar con el error original
             }
-            
-            throw new Error('Este correo electrónico ya está registrado. Si acabas de intentar registrarte, espera un momento e intenta nuevamente. Si el problema persiste, inicia sesión en lugar de registrarte.');
+
+            throw new Error(
+              'Este correo electrónico ya está registrado. Si acabas de intentar registrarte, espera un momento e intenta nuevamente. Si el problema persiste, inicia sesión en lugar de registrarte.'
+            );
           }
-          
+
           throw new Error(authError.message || 'Error al crear la cuenta');
         }
-        
+
         if (!authData?.user) {
           throw new Error('No se pudo crear el usuario');
         }
-        
+
         userId = authData.user.id;
         console.log('✅ Usuario creado exitosamente:', userId);
-        
+
         // Limpiar datos temporales
         sessionStorage.removeItem('pendingRegistration');
       }
@@ -739,7 +1244,7 @@ export default function EnhancedSignupQuestionnaire() {
               phone: formData.clinicInfo.clinicData!.phone,
               email: formData.clinicInfo.clinicData!.email,
               director_name: formData.personalInfo.fullName,
-              director_license: formData.professionalInfo?.licenseNumber
+              director_license: formData.professionalInfo?.licenseNumber,
             })
             .select()
             .single();
@@ -770,18 +1275,16 @@ export default function EnhancedSignupQuestionnaire() {
           address: formData.personalInfo.address,
           experience: formData.professionalInfo?.experience,
           work_schedule: formData.additionalInfo?.workSchedule,
-          notes: formData.additionalInfo?.notes
-        }
+          notes: formData.additionalInfo?.notes,
+        },
       };
 
       // Crear o actualizar perfil de usuario usando upsert
       console.log('📝 Actualizando perfil de usuario...');
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert(profileData, { 
-          onConflict: 'id',
-          ignoreDuplicates: false 
-        });
+      const { error: profileError } = await supabase.from('profiles').upsert(profileData, {
+        onConflict: 'id',
+        ignoreDuplicates: false,
+      });
 
       if (profileError) {
         console.error('❌ Error al actualizar perfil:', profileError);
@@ -802,12 +1305,10 @@ export default function EnhancedSignupQuestionnaire() {
           patient_user_id: userId,
           insurance_info: formData.patientInfo?.insuranceInfo || {},
           emergency_contact: formData.patientInfo?.emergencyContact || {},
-          is_active: true
+          is_active: true,
         };
 
-        const { error: patientError } = await supabase
-          .from('patients')
-          .insert(patientData);
+        const { error: patientError } = await supabase.from('patients').insert(patientData);
 
         if (patientError) throw patientError;
       }
@@ -815,47 +1316,50 @@ export default function EnhancedSignupQuestionnaire() {
       // 5. Crear relación clínica-usuario si corresponde
       if (clinicId && formData.accountInfo.role !== 'patient') {
         const roleInClinic = formData.accountInfo.role === 'admin_staff' ? 'admin_staff' : 'doctor';
-        const { error: relationError } = await supabase
-          .from('clinic_user_relationships')
-          .insert({
-            clinic_id: clinicId,
-            user_id: userId,
-            role_in_clinic: roleInClinic,
-            status: 'pending', // Siempre pendiente por defecto
-            is_active: true
-          });
+        const { error: relationError } = await supabase.from('clinic_user_relationships').insert({
+          clinic_id: clinicId,
+          user_id: userId,
+          role_in_clinic: roleInClinic,
+          status: 'pending', // Siempre pendiente por defecto
+          is_active: true,
+        });
 
         if (relationError) throw relationError;
-        
+
         // Mostrar mensaje informativo sobre la aprobación
-        console.log('📋 Solicitud de unión enviada. Esperando aprobación del administrador de la clínica.');
+        console.log(
+          '📋 Solicitud de unión enviada. Esperando aprobación del administrador de la clínica.'
+        );
       }
 
       console.log('✅ Registro completado exitosamente');
-      
+
       // Mostrar mensaje de éxito
       setError(null);
-      
+
       // Registro completado exitosamente
       console.log('🎉 Registro completado exitosamente');
-      
+
       // Redirigir al dashboard
       setTimeout(() => {
         navigate('/dashboard');
       }, 1000);
-
     } catch (err: unknown) {
       console.error('Error durante el registro:', err);
-      
+
       // Mejorar mensajes de error específicos
       if (err instanceof Error) {
         const errorMsg = err.message.toLowerCase();
-        
-        if (errorMsg.includes('already registered') || 
-            errorMsg.includes('ya está registrado') ||
-            errorMsg.includes('email address is already in use') ||
-            errorMsg.includes('email ya está registrado')) {
-          setError('Este correo electrónico ya está registrado. Si acabas de intentar registrarte, puede haber un registro previo incompleto.');
+
+        if (
+          errorMsg.includes('already registered') ||
+          errorMsg.includes('ya está registrado') ||
+          errorMsg.includes('email address is already in use') ||
+          errorMsg.includes('email ya está registrado')
+        ) {
+          setError(
+            'Este correo electrónico ya está registrado. Si acabas de intentar registrarte, puede haber un registro previo incompleto.'
+          );
           setShowRetryCleanup(true);
         } else if (errorMsg.includes('invalid') && errorMsg.includes('password')) {
           setError('La contraseña debe tener al menos 6 caracteres');
@@ -864,7 +1368,9 @@ export default function EnhancedSignupQuestionnaire() {
         } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
           setError('Error de conexión. Por favor, verifica tu internet e intenta nuevamente');
         } else if (errorMsg.includes('rate limit')) {
-          setError('Demasiados intentos. Por favor, espera unos minutos antes de intentar nuevamente');
+          setError(
+            'Demasiados intentos. Por favor, espera unos minutos antes de intentar nuevamente'
+          );
         } else if (errorMsg.includes('password') && errorMsg.includes('should be')) {
           setError('La contraseña debe tener al menos 6 caracteres');
         } else if (errorMsg.includes('session') && errorMsg.includes('expir')) {
@@ -882,62 +1388,80 @@ export default function EnhancedSignupQuestionnaire() {
 
   const getStepTitle = (step: number): string => {
     switch (step) {
-      case 1: return 'Información Personal';
-      case 2: return 'Tipo de Cuenta';
-      case 3: return 'Información Profesional';
-      case 4: return 'Clínica/Institución';
-      case 5: return 'Información Adicional';
-      case 6: return 'Confirmación y Finalizar';
-      default: return 'Registro';
+      case 1:
+        return 'Información Personal';
+      case 2:
+        return 'Tipo de Cuenta';
+      case 3:
+        return 'Información Profesional';
+      case 4:
+        return 'Clínica/Institución';
+      case 5:
+        return 'Información Adicional';
+      case 6:
+        return 'Confirmación y Finalizar';
+      default:
+        return 'Registro';
     }
   };
 
   const getStepDescription = (step: number): string => {
     switch (step) {
-      case 1: return 'Datos personales y de contacto';
-      case 2: return 'Seleccionar tipo de cuenta profesional';
-      case 3: return 'Licencias y especialidades médicas';
-      case 4: return 'Afiliación institucional';
-      case 5: return 'Horarios y preferencias';
-      case 6: return 'Revisar y completar registro';
-      default: return '';
+      case 1:
+        return 'Datos personales y de contacto';
+      case 2:
+        return 'Seleccionar tipo de cuenta profesional';
+      case 3:
+        return 'Licencias y especialidades médicas';
+      case 4:
+        return 'Afiliación institucional';
+      case 5:
+        return 'Horarios y preferencias';
+      case 6:
+        return 'Revisar y completar registro';
+      default:
+        return '';
     }
   };
 
-  const roleOptions = useMemo(() => [
-    {
-      value: 'doctor',
-      label: 'Doctor/Médico',
-      icon: Stethoscope,
-      description: 'Médico certificado con acceso completo a pacientes',
-      color: 'from-blue-500 to-cyan-600',
-      enabled: true
-    },
-    {
-      value: 'health_staff',
-      label: 'Personal de Salud',
-      icon: UserCheck,
-      description: 'Enfermería, fisioterapia, dentistas, etc. (Próximamente disponible)',
-      color: 'from-green-500 to-emerald-600',
-      enabled: false
-    },
-    {
-      value: 'admin_staff',
-      label: 'Personal Administrativo',
-      icon: Building,
-      description: 'Administradores de clínica y personal de gestión',
-      color: 'from-purple-500 to-indigo-600',
-      enabled: true
-    },
-    {
-      value: 'patient',
-      label: 'Paciente',
-      icon: Heart,
-      description: 'Usuario paciente con acceso a su información médica (Próximamente disponible)',
-      color: 'from-pink-500 to-rose-600',
-      enabled: false
-    }
-  ], []);
+  const roleOptions = useMemo(
+    () => [
+      {
+        value: 'doctor',
+        label: 'Doctor/Médico',
+        icon: Stethoscope,
+        description: 'Médico certificado con acceso completo a pacientes',
+        color: 'from-blue-500 to-cyan-600',
+        enabled: true,
+      },
+      {
+        value: 'health_staff',
+        label: 'Personal de Salud',
+        icon: UserCheck,
+        description: 'Enfermería, fisioterapia, dentistas, etc. (Próximamente disponible)',
+        color: 'from-green-500 to-emerald-600',
+        enabled: false,
+      },
+      {
+        value: 'admin_staff',
+        label: 'Personal Administrativo',
+        icon: Building,
+        description: 'Administradores de clínica y personal de gestión',
+        color: 'from-purple-500 to-indigo-600',
+        enabled: true,
+      },
+      {
+        value: 'patient',
+        label: 'Paciente',
+        icon: Heart,
+        description:
+          'Usuario paciente con acceso a su información médica (Próximamente disponible)',
+        color: 'from-pink-500 to-rose-600',
+        enabled: false,
+      },
+    ],
+    []
+  );
 
   // Verificar y resetear rol si está deshabilitado
   useEffect(() => {
@@ -949,8 +1473,8 @@ export default function EnhancedSignupQuestionnaire() {
           ...prev,
           accountInfo: {
             ...prev.accountInfo,
-            role: 'doctor' // Valor por defecto a doctor
-          }
+            role: 'doctor', // Valor por defecto a doctor
+          },
         }));
       }
     }
@@ -963,7 +1487,7 @@ export default function EnhancedSignupQuestionnaire() {
     { value: '5-10', label: '5-10 años' },
     { value: '10-15', label: '10-15 años' },
     { value: '15-20', label: '15-20 años' },
-    { value: '20+', label: 'Más de 20 años' }
+    { value: '20+', label: 'Más de 20 años' },
   ];
 
   const workScheduleOptions = [
@@ -972,69 +1496,62 @@ export default function EnhancedSignupQuestionnaire() {
     { value: 'night', label: 'Turno nocturno (22:00 - 6:00)' },
     { value: 'mixed', label: 'Turnos rotativos' },
     { value: 'flexible', label: 'Horario flexible' },
-    { value: 'on-call', label: 'Disponibilidad 24/7' }
+    { value: 'on-call', label: 'Disponibilidad 24/7' },
   ];
 
   const totalSteps = formData.accountInfo.role === 'patient' ? 5 : 6; // Pacientes tienen un paso menos
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
-        
+    <div className='min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4'>
+      <div className='w-full max-w-4xl bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700 overflow-hidden'>
         {/* Header */}
-        <div className="bg-gradient-to-r from-cyan-600 to-blue-700 px-8 py-6">
-          <div className="flex items-center justify-between">
+        <div className='bg-gradient-to-r from-cyan-600 to-blue-700 px-8 py-6'>
+          <div className='flex items-center justify-between'>
             <div>
-              <div className="flex items-center mb-2">
-                <Stethoscope className="h-8 w-8 text-white mr-3" />
-                <h1 className="text-2xl font-bold text-white">Registro Completo</h1>
+              <div className='flex items-center mb-2'>
+                <Stethoscope className='h-8 w-8 text-white mr-3' />
+                <h1 className='text-2xl font-bold text-white'>Registro Completo</h1>
               </div>
-              <p className="text-cyan-100">
+              <p className='text-cyan-100'>
                 Paso {currentStep} de {totalSteps}: {getStepTitle(currentStep)}
               </p>
-              <p className="text-cyan-200 text-sm mt-1">
-                {getStepDescription(currentStep)}
-              </p>
+              <p className='text-cyan-200 text-sm mt-1'>{getStepDescription(currentStep)}</p>
               {/* Mostrar email del usuario */}
               {formData.personalInfo.email && (
-                <div className="flex items-center mt-3 px-3 py-1 bg-white/10 rounded-full">
-                  <Mail className="h-4 w-4 text-cyan-200 mr-2" />
-                  <span className="text-cyan-100 text-sm font-medium">
+                <div className='flex items-center mt-3 px-3 py-1 bg-white/10 rounded-full'>
+                  <Mail className='h-4 w-4 text-cyan-200 mr-2' />
+                  <span className='text-cyan-100 text-sm font-medium'>
                     {formData.personalInfo.email}
                   </span>
                 </div>
               )}
             </div>
-            <div className="text-right">
-              <div className="text-white/80 text-sm">Sistema:</div>
-              <div className="text-white font-medium">ExpedienteDLM</div>
+            <div className='text-right'>
+              <div className='text-white/80 text-sm'>Sistema:</div>
+              <div className='text-white font-medium'>ExpedienteDLM</div>
               {location.state?.fromRegistration && (
-                <div className="text-cyan-200 text-xs mt-1">
-                  ✨ Registro iniciado
-                </div>
+                <div className='text-cyan-200 text-xs mt-1'>✨ Registro iniciado</div>
               )}
             </div>
           </div>
 
           {/* Progress Bar */}
-          <div className="mt-6">
-            <div className="flex justify-between mb-2">
+          <div className='mt-6'>
+            <div className='flex justify-between mb-2'>
               {Array.from({ length: totalSteps }, (_, i) => (
                 <div
                   key={i + 1}
                   className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                    i + 1 <= currentStep
-                      ? 'bg-white text-cyan-600'
-                      : 'bg-cyan-700 text-cyan-200'
+                    i + 1 <= currentStep ? 'bg-white text-cyan-600' : 'bg-cyan-700 text-cyan-200'
                   }`}
                 >
-                  {i + 1 < currentStep ? <CheckCircle className="h-4 w-4" /> : i + 1}
+                  {i + 1 < currentStep ? <CheckCircle className='h-4 w-4' /> : i + 1}
                 </div>
               ))}
             </div>
-            <div className="h-2 bg-cyan-700 rounded-full">
+            <div className='h-2 bg-cyan-700 rounded-full'>
               <div
-                className="h-2 bg-white rounded-full transition-all duration-300"
+                className='h-2 bg-white rounded-full transition-all duration-300'
                 style={{ width: `${(currentStep / totalSteps) * 100}%` }}
               />
             </div>
@@ -1042,34 +1559,32 @@ export default function EnhancedSignupQuestionnaire() {
         </div>
 
         {/* Content */}
-        <div className="p-8">
+        <div className='p-8'>
           {error && (
-            <div className="mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 mr-3 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
+            <div className='mb-6 bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg'>
+              <div className='flex items-start'>
+                <AlertCircle className='h-5 w-5 mr-3 flex-shrink-0 mt-0.5' />
+                <div className='flex-1'>
                   <p>{error}</p>
                   {showRetryCleanup && (
-                    <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                    <div className='mt-3 flex flex-col sm:flex-row gap-2'>
                       <button
                         onClick={handleRetryCleanup}
                         disabled={loading}
-                        className="flex items-center px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className='flex items-center px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
                       >
                         {loading ? (
                           <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
                             Limpiando...
                           </>
                         ) : (
-                          <>
-                            🧹 Limpiar registros previos
-                          </>
+                          <>🧹 Limpiar registros previos</>
                         )}
                       </button>
                       <button
                         onClick={() => navigate('/auth')}
-                        className="flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors"
+                        className='flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors'
                       >
                         ↩️ Volver a iniciar
                       </button>
@@ -1082,137 +1597,142 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
-            <div className="space-y-6">
+            <div className='space-y-6'>
               {/* Indicador de progreso del paso 1 */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-medium text-white">Información Personal</h3>
-                  <span className="text-sm text-gray-400">
-                    {getStep1Progress()}% completado
-                  </span>
+              <div className='bg-gray-800 rounded-lg p-4'>
+                <div className='flex items-center justify-between mb-3'>
+                  <h3 className='text-lg font-medium text-white'>Información Personal</h3>
+                  <span className='text-sm text-gray-400'>{getStep1Progress()}% completado</span>
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-cyan-400 to-blue-500 h-2 rounded-full transition-all duration-300"
+                <div className='w-full bg-gray-700 rounded-full h-2'>
+                  <div
+                    className='bg-gradient-to-r from-cyan-400 to-blue-500 h-2 rounded-full transition-all duration-300'
                     style={{ width: `${getStep1Progress()}%` }}
                   ></div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                  <div className={`flex items-center ${formData.personalInfo.fullName.trim() ? 'text-green-400' : 'text-gray-500'}`}>
-                    <CheckCircle className="h-3 w-3 mr-1" />
+                <div className='mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs'>
+                  <div
+                    className={`flex items-center ${formData.personalInfo.fullName.trim() ? 'text-green-400' : 'text-gray-500'}`}
+                  >
+                    <CheckCircle className='h-3 w-3 mr-1' />
                     Nombre
                   </div>
-                  <div className={`flex items-center ${formData.personalInfo.email.trim() ? 'text-green-400' : 'text-gray-500'}`}>
-                    <CheckCircle className="h-3 w-3 mr-1" />
+                  <div
+                    className={`flex items-center ${formData.personalInfo.email.trim() ? 'text-green-400' : 'text-gray-500'}`}
+                  >
+                    <CheckCircle className='h-3 w-3 mr-1' />
                     Email
                   </div>
-                  <div className={`flex items-center ${formData.personalInfo.phone.trim() ? 'text-green-400' : 'text-gray-500'}`}>
-                    <CheckCircle className="h-3 w-3 mr-1" />
+                  <div
+                    className={`flex items-center ${formData.personalInfo.phone.trim() ? 'text-green-400' : 'text-gray-500'}`}
+                  >
+                    <CheckCircle className='h-3 w-3 mr-1' />
                     Teléfono
                   </div>
-                  <div className={`flex items-center ${formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate) ? 'text-green-400' : 'text-gray-500'}`}>
-                    <CheckCircle className="h-3 w-3 mr-1" />
+                  <div
+                    className={`flex items-center ${formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate) ? 'text-green-400' : 'text-gray-500'}`}
+                  >
+                    <CheckCircle className='h-3 w-3 mr-1' />
                     Fecha
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>
                     Nombre completo *
                   </label>
-                  <div className="relative">
+                  <div className='relative'>
                     <input
-                      type="text"
+                      type='text'
                       value={formData.personalInfo.fullName}
-                      onChange={(e) => updateFormData('personalInfo', 'fullName', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                      placeholder="Dr. Juan Pérez García"
+                      onChange={e => updateFormData('personalInfo', 'fullName', e.target.value)}
+                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                      placeholder='Dr. Juan Pérez García'
                       required
                     />
-                    <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <User className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>
                     Correo electrónico *
                   </label>
-                  <div className="relative">
+                  <div className='relative'>
                     <input
-                      type="email"
+                      type='email'
                       value={formData.personalInfo.email}
-                      onChange={(e) => updateFormData('personalInfo', 'email', e.target.value)}
+                      onChange={e => updateFormData('personalInfo', 'email', e.target.value)}
                       className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 transition-colors ${
-                        initialEmail 
-                          ? 'bg-gray-600/50 border-gray-500 cursor-not-allowed focus:ring-gray-500 focus:border-gray-500' 
+                        initialEmail
+                          ? 'bg-gray-600/50 border-gray-500 cursor-not-allowed focus:ring-gray-500 focus:border-gray-500'
                           : 'bg-gray-700 border-gray-600 focus:ring-cyan-400 focus:border-cyan-400'
                       }`}
-                      placeholder="correo@ejemplo.com"
+                      placeholder='correo@ejemplo.com'
                       required
                       readOnly={!!initialEmail}
                       disabled={!!initialEmail}
                     />
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <Mail className="h-5 w-5 text-gray-400" />
+                    <div className='absolute right-3 top-1/2 transform -translate-y-1/2'>
+                      <Mail className='h-5 w-5 text-gray-400' />
                     </div>
                   </div>
-                  
+
                   {/* Mensaje para email pre-verificado */}
                   {initialEmail && (
-                    <p className="text-xs text-cyan-400 mt-1">
+                    <p className='text-xs text-cyan-400 mt-1'>
                       ✅ Email verificado desde el registro
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Teléfono *
-                  </label>
-                  <div className="relative">
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>Teléfono *</label>
+                  <div className='relative'>
                     <input
-                      type="tel"
+                      type='tel'
                       value={formData.personalInfo.phone}
-                      onChange={(e) => updateFormData('personalInfo', 'phone', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                      placeholder="+52 555 123 4567"
+                      onChange={e => updateFormData('personalInfo', 'phone', e.target.value)}
+                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                      placeholder='+52 555 123 4567'
                       required
                     />
-                    <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Phone className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-300 mb-2 flex items-center justify-between">
-                    <div className="flex items-center">
+                  <label className='text-sm font-medium text-gray-300 mb-2 flex items-center justify-between'>
+                    <div className='flex items-center'>
                       <span>Fecha de nacimiento *</span>
-                      <div className="ml-2 relative group">
-                        <div className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center cursor-help">
-                          <span className="text-xs text-gray-300">?</span>
+                      <div className='ml-2 relative group'>
+                        <div className='w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center cursor-help'>
+                          <span className='text-xs text-gray-300'>?</span>
                         </div>
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                        <div className='absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10'>
                           Selecciona tu fecha de nacimiento. Debes ser mayor de 18 años.
-                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                          <div className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800'></div>
                         </div>
                       </div>
                     </div>
-                    {formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate) && (
-                      <span className="text-xs bg-green-600 text-white px-2 py-1 rounded-full">
-                        ✓ Completado
-                      </span>
-                    )}
+                    {formData.personalInfo.birthDate &&
+                      isValidAge(formData.personalInfo.birthDate) && (
+                        <span className='text-xs bg-green-600 text-white px-2 py-1 rounded-full'>
+                          ✓ Completado
+                        </span>
+                      )}
                   </label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className='grid grid-cols-3 gap-3'>
                     {/* Día */}
-                    <div className="relative">
-                      <label className="block text-xs text-gray-400 mb-1">Día</label>
+                    <div className='relative'>
+                      <label className='block text-xs text-gray-400 mb-1'>Día</label>
                       <select
                         value={getBirthDatePart('day')}
-                        onChange={(e) => updateBirthDate('day', e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center"
+                        onChange={e => updateBirthDate('day', e.target.value)}
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center'
                       >
-                        <option value="">--</option>
+                        <option value=''>--</option>
                         {generateDayOptions().map(day => (
                           <option key={day} value={day.toString().padStart(2, '0')}>
                             {day.toString().padStart(2, '0')}
@@ -1220,16 +1740,16 @@ export default function EnhancedSignupQuestionnaire() {
                         ))}
                       </select>
                     </div>
-                    
+
                     {/* Mes */}
-                    <div className="relative">
-                      <label className="block text-xs text-gray-400 mb-1">Mes</label>
+                    <div className='relative'>
+                      <label className='block text-xs text-gray-400 mb-1'>Mes</label>
                       <select
                         value={getBirthDatePart('month')}
-                        onChange={(e) => updateBirthDate('month', e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center"
+                        onChange={e => updateBirthDate('month', e.target.value)}
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center'
                       >
-                        <option value="">--</option>
+                        <option value=''>--</option>
                         {months.map((month, index) => (
                           <option key={index} value={(index + 1).toString().padStart(2, '0')}>
                             {month}
@@ -1237,16 +1757,16 @@ export default function EnhancedSignupQuestionnaire() {
                         ))}
                       </select>
                     </div>
-                    
+
                     {/* Año */}
-                    <div className="relative">
-                      <label className="block text-xs text-gray-400 mb-1">Año</label>
+                    <div className='relative'>
+                      <label className='block text-xs text-gray-400 mb-1'>Año</label>
                       <select
                         value={getBirthDatePart('year')}
-                        onChange={(e) => updateBirthDate('year', e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center"
+                        onChange={e => updateBirthDate('year', e.target.value)}
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-center'
                       >
-                        <option value="">----</option>
+                        <option value=''>----</option>
                         {generateYearOptions().map(year => (
                           <option key={year} value={year}>
                             {year}
@@ -1255,62 +1775,61 @@ export default function EnhancedSignupQuestionnaire() {
                       </select>
                     </div>
                   </div>
-                  
+
                   {/* Mostrar fecha formateada */}
                   {formData.personalInfo.birthDate && (
-                    <div className="mt-2 text-sm text-gray-400 flex items-center">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Fecha seleccionada: {formatBirthDateForDisplay(formData.personalInfo.birthDate)}
+                    <div className='mt-2 text-sm text-gray-400 flex items-center'>
+                      <Calendar className='h-4 w-4 mr-2' />
+                      Fecha seleccionada:{' '}
+                      {formatBirthDateForDisplay(formData.personalInfo.birthDate)}
                     </div>
                   )}
-                  
+
                   {/* Validación de edad */}
-                  {formData.personalInfo.birthDate && !isValidAge(formData.personalInfo.birthDate) && (
-                    <div className="mt-2 text-sm text-red-400 flex items-center">
-                      <AlertCircle className="h-4 w-4 mr-2" />
-                      Debes ser mayor de 18 años para registrarte
-                    </div>
-                  )}
-                  
+                  {formData.personalInfo.birthDate &&
+                    !isValidAge(formData.personalInfo.birthDate) && (
+                      <div className='mt-2 text-sm text-red-400 flex items-center'>
+                        <AlertCircle className='h-4 w-4 mr-2' />
+                        Debes ser mayor de 18 años para registrarte
+                      </div>
+                    )}
+
                   {/* Indicador de completado */}
-                  {formData.personalInfo.birthDate && isValidAge(formData.personalInfo.birthDate) && (
-                    <div className="mt-2 text-sm text-green-400 flex items-center">
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Fecha válida ✓
-                    </div>
-                  )}
+                  {formData.personalInfo.birthDate &&
+                    isValidAge(formData.personalInfo.birthDate) && (
+                      <div className='mt-2 text-sm text-green-400 flex items-center'>
+                        <CheckCircle className='h-4 w-4 mr-2' />
+                        Fecha válida ✓
+                      </div>
+                    )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Género
-                  </label>
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>Género</label>
                   <select
                     value={formData.personalInfo.gender}
-                    onChange={(e) => updateFormData('personalInfo', 'gender', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    onChange={e => updateFormData('personalInfo', 'gender', e.target.value)}
+                    className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                   >
-                    <option value="">Seleccionar género</option>
-                    <option value="masculino">Masculino</option>
-                    <option value="femenino">Femenino</option>
-                    <option value="otro">Otro</option>
-                    <option value="no_especificado">Prefiero no especificar</option>
+                    <option value=''>Seleccionar género</option>
+                    <option value='masculino'>Masculino</option>
+                    <option value='femenino'>Femenino</option>
+                    <option value='otro'>Otro</option>
+                    <option value='no_especificado'>Prefiero no especificar</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Dirección
-                  </label>
-                  <div className="relative">
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>Dirección</label>
+                  <div className='relative'>
                     <input
-                      type="text"
+                      type='text'
                       value={formData.personalInfo.address}
-                      onChange={(e) => updateFormData('personalInfo', 'address', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                      placeholder="Calle, Número, Colonia, Ciudad"
+                      onChange={e => updateFormData('personalInfo', 'address', e.target.value)}
+                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                      placeholder='Calle, Número, Colonia, Ciudad'
                     />
-                    <MapPin className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <MapPin className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
               </div>
@@ -1319,53 +1838,54 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 2: Role Selection */}
           {currentStep === 2 && (
-            <div className="space-y-6">
+            <div className='space-y-6'>
               {initialEmail && (
-                <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
-                  <div className="flex items-center">
-                    <CheckCircle className="h-5 w-5 text-green-400 mr-3 flex-shrink-0" />
+                <div className='bg-green-900/30 border border-green-700 rounded-lg p-4'>
+                  <div className='flex items-center'>
+                    <CheckCircle className='h-5 w-5 text-green-400 mr-3 flex-shrink-0' />
                     <div>
-                      <p className="text-green-300 font-medium">Credenciales verificadas</p>
-                      <p className="text-green-200 text-sm mt-1">
-                        Tu email <span className="font-mono">{initialEmail}</span> y contraseña están listos. 
-                        Ahora selecciona tu tipo de cuenta profesional.
+                      <p className='text-green-300 font-medium'>Credenciales verificadas</p>
+                      <p className='text-green-200 text-sm mt-1'>
+                        Tu email <span className='font-mono'>{initialEmail}</span> y contraseña
+                        están listos. Ahora selecciona tu tipo de cuenta profesional.
                       </p>
                     </div>
                   </div>
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-4">
+                <label className='block text-sm font-medium text-gray-300 mb-4'>
                   Tipo de cuenta *
                 </label>
-                <div className="mb-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0">
-                      <div className="w-5 h-5 bg-blue-400 rounded-full flex items-center justify-center">
-                        <span className="text-blue-900 text-xs font-bold">ℹ</span>
+                <div className='mb-4 p-4 bg-blue-900/30 border border-blue-700 rounded-lg'>
+                  <div className='flex items-start'>
+                    <div className='flex-shrink-0'>
+                      <div className='w-5 h-5 bg-blue-400 rounded-full flex items-center justify-center'>
+                        <span className='text-blue-900 text-xs font-bold'>ℹ</span>
                       </div>
                     </div>
-                    <div className="ml-3">
-                      <p className="text-blue-300 text-sm font-medium mb-1">
+                    <div className='ml-3'>
+                      <p className='text-blue-300 text-sm font-medium mb-1'>
                         Tipos de cuenta disponibles
                       </p>
-                      <p className="text-blue-200 text-xs">
-                        Actualmente solo pueden registrarse <strong>Doctores/Médicos</strong> y <strong>Personal Administrativo</strong>. 
-                        Los otros tipos de cuenta estarán disponibles próximamente.
+                      <p className='text-blue-200 text-xs'>
+                        Actualmente solo pueden registrarse <strong>Doctores/Médicos</strong> y{' '}
+                        <strong>Personal Administrativo</strong>. Los otros tipos de cuenta estarán
+                        disponibles próximamente.
                       </p>
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {roleOptions.map((role) => {
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                  {roleOptions.map(role => {
                     const Icon = role.icon;
                     const isSelected = formData.accountInfo.role === role.value;
                     const isDisabled = !role.enabled;
-                    
+
                     return (
                       <button
                         key={role.value}
-                        type="button"
+                        type='button'
                         onClick={() => {
                           if (role.enabled) {
                             updateFormData('accountInfo', 'role', role.value);
@@ -1376,30 +1896,34 @@ export default function EnhancedSignupQuestionnaire() {
                           isDisabled
                             ? 'border-gray-700 bg-gray-800/30 cursor-not-allowed opacity-50'
                             : isSelected
-                            ? 'border-cyan-400 bg-cyan-900/30'
-                            : 'border-gray-600 bg-gray-700/50 hover:border-gray-500 cursor-pointer'
+                              ? 'border-cyan-400 bg-cyan-900/30'
+                              : 'border-gray-600 bg-gray-700/50 hover:border-gray-500 cursor-pointer'
                         }`}
                       >
                         {isDisabled && (
-                          <div className="absolute top-2 right-2">
-                            <div className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+                          <div className='absolute top-2 right-2'>
+                            <div className='bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full'>
                               Próximamente
                             </div>
                           </div>
                         )}
-                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-r ${role.color} flex items-center justify-center mb-3 ${
-                          isDisabled ? 'opacity-50' : ''
-                        }`}>
-                          <Icon className="h-6 w-6 text-white" />
+                        <div
+                          className={`w-12 h-12 rounded-lg bg-gradient-to-r ${role.color} flex items-center justify-center mb-3 ${
+                            isDisabled ? 'opacity-50' : ''
+                          }`}
+                        >
+                          <Icon className='h-6 w-6 text-white' />
                         </div>
-                        <div className={`font-medium mb-1 ${
-                          isDisabled ? 'text-gray-500' : 'text-white'
-                        }`}>
+                        <div
+                          className={`font-medium mb-1 ${
+                            isDisabled ? 'text-gray-500' : 'text-white'
+                          }`}
+                        >
                           {role.label}
                         </div>
-                        <div className={`text-sm ${
-                          isDisabled ? 'text-gray-600' : 'text-gray-400'
-                        }`}>
+                        <div
+                          className={`text-sm ${isDisabled ? 'text-gray-600' : 'text-gray-400'}`}
+                        >
                           {role.description}
                         </div>
                       </button>
@@ -1408,14 +1932,12 @@ export default function EnhancedSignupQuestionnaire() {
                 </div>
               </div>
 
-              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
-                <div className="flex items-center">
-                  <Shield className="h-5 w-5 text-blue-400 mr-3" />
+              <div className='bg-blue-900/30 border border-blue-700 rounded-lg p-4'>
+                <div className='flex items-center'>
+                  <Shield className='h-5 w-5 text-blue-400 mr-3' />
                   <div>
-                    <p className="text-blue-300 font-medium">
-                      Perfil profesional seguro
-                    </p>
-                    <p className="text-blue-200 text-sm mt-1">
+                    <p className='text-blue-300 font-medium'>Perfil profesional seguro</p>
+                    <p className='text-blue-200 text-sm mt-1'>
                       Tu información estará protegida según estándares de seguridad médica y HIPAA.
                     </p>
                   </div>
@@ -1426,83 +1948,94 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 3: Professional Information (Skip for patients) */}
           {currentStep === 3 && formData.accountInfo.role !== 'patient' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className='space-y-6'>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>
                     Cédula/Licencia profesional *
                   </label>
-                  <div className="relative">
+                  <div className='relative'>
                     <input
-                      type="text"
+                      type='text'
                       value={formData.professionalInfo?.licenseNumber || ''}
-                      onChange={(e) => updateFormData('professionalInfo', 'licenseNumber', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                      placeholder="Ej: 12345678"
+                      onChange={e =>
+                        updateFormData('professionalInfo', 'licenseNumber', e.target.value)
+                      }
+                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                      placeholder='Ej: 12345678'
                       required
                     />
-                    <Award className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Award className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
 
                 {formData.accountInfo.role === 'doctor' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className='block text-sm font-medium text-gray-300 mb-2'>
                       Especialidad médica *
                       {useBackupSpecialties && (
-                        <span className="ml-2 text-xs text-yellow-400">(datos locales)</span>
+                        <span className='ml-2 text-xs text-yellow-400'>(datos locales)</span>
                       )}
                     </label>
-                    
+
                     {/* Información de especialidades disponibles */}
                     {specialties.length > 0 && (
-                      <div className="mb-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-blue-300">
+                      <div className='mb-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg'>
+                        <div className='flex items-center justify-between text-sm'>
+                          <span className='text-blue-300'>
                             📋 <strong>{specialties.length}</strong> especialidades disponibles
                           </span>
-                          <span className="text-blue-200 text-xs">
+                          <span className='text-blue-200 text-xs'>
                             {Object.entries(
-                              specialties.reduce((acc, spec) => {
-                                acc[spec.category] = (acc[spec.category] || 0) + 1;
-                                return acc;
-                              }, {} as Record<string, number>)
-                            ).map(([cat, count]) => `${cat}: ${count}`).join(' | ')}
+                              specialties.reduce(
+                                (acc, spec) => {
+                                  acc[spec.category] = (acc[spec.category] || 0) + 1;
+                                  return acc;
+                                },
+                                {} as Record<string, number>
+                              )
+                            )
+                              .map(([cat, count]) => `${cat}: ${count}`)
+                              .join(' | ')}
                           </span>
                         </div>
                       </div>
                     )}
-                    
+
                     {specialtiesLoading && (
-                      <div className="flex items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-400"></div>
-                        <span className="ml-2 text-gray-400">Cargando especialidades...</span>
+                      <div className='flex items-center justify-center py-8'>
+                        <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-400'></div>
+                        <span className='ml-2 text-gray-400'>Cargando especialidades...</span>
                       </div>
                     )}
-                    
+
                     {!specialtiesLoading && formData.professionalInfo?.specialtyId && (
-                      <div className="mb-2 px-3 py-2 bg-green-900/30 border border-green-700 rounded-lg text-green-300 text-sm">
-                        ✅ Especialidad seleccionada: {specialties.find(s => s.id === formData.professionalInfo?.specialtyId)?.name}
+                      <div className='mb-2 px-3 py-2 bg-green-900/30 border border-green-700 rounded-lg text-green-300 text-sm'>
+                        ✅ Especialidad seleccionada:{' '}
+                        {
+                          specialties.find(s => s.id === formData.professionalInfo?.specialtyId)
+                            ?.name
+                        }
                         <button
-                          type="button"
+                          type='button'
                           onClick={() => {
                             updateFormData('professionalInfo', 'specialtyId', '');
                             setSpecialtySearch('');
                             setIsSpecialtyDropdownOpen(true);
                           }}
-                          className="ml-2 text-green-400 hover:text-green-300"
+                          className='ml-2 text-green-400 hover:text-green-300'
                         >
                           (cambiar)
                         </button>
                       </div>
                     )}
-                    
+
                     {!specialtiesLoading && !formData.professionalInfo?.specialtyId && (
-                      <div className="relative">
+                      <div className='relative'>
                         <input
-                          type="text"
+                          type='text'
                           value={specialtySearch}
-                          onChange={(e) => {
+                          onChange={e => {
                             setSpecialtySearch(e.target.value);
                             setIsSpecialtyDropdownOpen(true);
                           }}
@@ -1512,87 +2045,93 @@ export default function EnhancedSignupQuestionnaire() {
                               setFilteredSpecialties(specialties);
                             }
                           }}
-                          className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                          placeholder={specialties.length > 0 ? `Buscar entre ${specialties.length} especialidades... (ej: cardiología, medicina, cirugía)` : "No hay especialidades disponibles"}
+                          className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                          placeholder={
+                            specialties.length > 0
+                              ? `Buscar entre ${specialties.length} especialidades... (ej: cardiología, medicina, cirugía)`
+                              : 'No hay especialidades disponibles'
+                          }
                           disabled={specialties.length === 0}
                         />
-                        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                        
+                        <Search className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
+
                         {/* Indicador de búsqueda */}
                         {specialtySearch && (
-                          <div className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-gray-500">
+                          <div className='absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-gray-500'>
                             {filteredSpecialties.length} resultados
                           </div>
                         )}
-                        
+
                         {/* Botón para ver todas */}
                         {!specialtySearch && (
                           <button
-                            type="button"
+                            type='button'
                             onClick={() => {
                               setFilteredSpecialties(specialties);
                               setIsSpecialtyDropdownOpen(true);
                             }}
-                            className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-900/30 px-2 py-1 rounded"
+                            className='absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-900/30 px-2 py-1 rounded'
                           >
                             Ver todas
                           </button>
                         )}
                       </div>
                     )}
-                    
+
                     {isSpecialtyDropdownOpen && filteredSpecialties.length > 0 && (
-                      <div className="relative">
-                        <div className="absolute top-2 left-0 right-0 max-h-64 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-50">
+                      <div className='relative'>
+                        <div className='absolute top-2 left-0 right-0 max-h-64 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-50'>
                           {/* Header del dropdown */}
-                          <div className="sticky top-0 bg-gray-800 px-4 py-2 border-b border-gray-600">
-                            <div className="text-xs text-gray-400 font-medium">
+                          <div className='sticky top-0 bg-gray-800 px-4 py-2 border-b border-gray-600'>
+                            <div className='text-xs text-gray-400 font-medium'>
                               {filteredSpecialties.length} especialidades encontradas
                             </div>
                           </div>
-                          
+
                           {/* Lista de especialidades */}
-                          {filteredSpecialties.map((specialty) => (
+                          {filteredSpecialties.map(specialty => (
                             <button
                               key={specialty.id}
-                              type="button"
-                              onMouseDown={(e) => {
+                              type='button'
+                              onMouseDown={e => {
                                 e.preventDefault();
                                 updateFormData('professionalInfo', 'specialtyId', specialty.id);
                                 setSpecialtySearch('');
                                 setIsSpecialtyDropdownOpen(false);
                               }}
-                              className="w-full text-left px-4 py-3 hover:bg-gray-600 text-white border-b border-gray-600 last:border-b-0 transition-colors"
+                              className='w-full text-left px-4 py-3 hover:bg-gray-600 text-white border-b border-gray-600 last:border-b-0 transition-colors'
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <div className="font-medium text-white">{specialty.name}</div>
-                                  <div className="text-sm text-gray-400 capitalize">
+                              <div className='flex items-center justify-between'>
+                                <div className='flex-1'>
+                                  <div className='font-medium text-white'>{specialty.name}</div>
+                                  <div className='text-sm text-gray-400 capitalize'>
                                     {specialty.category} • {specialty.description}
                                   </div>
                                 </div>
-                                <div className="ml-2 text-xs text-gray-500 bg-gray-600 px-2 py-1 rounded">
+                                <div className='ml-2 text-xs text-gray-500 bg-gray-600 px-2 py-1 rounded'>
                                   {specialty.requires_license ? 'Licencia' : 'Sin licencia'}
                                 </div>
                               </div>
                             </button>
                           ))}
                         </div>
-                        <div 
-                          className="fixed inset-0 z-40" 
+                        <div
+                          className='fixed inset-0 z-40'
                           onClick={() => setIsSpecialtyDropdownOpen(false)}
                         ></div>
                       </div>
                     )}
-                    
-                    {isSpecialtyDropdownOpen && filteredSpecialties.length === 0 && specialtySearch && (
-                      <div className="mt-2 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-400 text-sm">
-                        No se encontraron especialidades que coincidan con "{specialtySearch}"
-                      </div>
-                    )}
-                    
+
+                    {isSpecialtyDropdownOpen &&
+                      filteredSpecialties.length === 0 &&
+                      specialtySearch && (
+                        <div className='mt-2 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-400 text-sm'>
+                          No se encontraron especialidades que coincidan con "{specialtySearch}"
+                        </div>
+                      )}
+
                     {specialties.length === 0 && !specialtiesLoading && (
-                      <div className="mt-2 px-4 py-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+                      <div className='mt-2 px-4 py-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm'>
                         ⚠️ No se pudieron cargar las especialidades. Por favor, contacta a soporte.
                       </div>
                     )}
@@ -1600,31 +2139,33 @@ export default function EnhancedSignupQuestionnaire() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>
                     Años de experiencia
                   </label>
                   <select
                     value={formData.professionalInfo?.experience || ''}
-                    onChange={(e) => updateFormData('professionalInfo', 'experience', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    onChange={e => updateFormData('professionalInfo', 'experience', e.target.value)}
+                    className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                   >
-                    <option value="">Seleccionar experiencia</option>
+                    <option value=''>Seleccionar experiencia</option>
                     {experienceOptions.map(option => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className='block text-sm font-medium text-gray-300 mb-2'>
                     Número de empleado
                   </label>
                   <input
-                    type="text"
+                    type='text'
                     value={formData.professionalInfo?.employeeId || ''}
-                    onChange={(e) => updateFormData('professionalInfo', 'employeeId', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                    placeholder="Número interno de empleado"
+                    onChange={e => updateFormData('professionalInfo', 'employeeId', e.target.value)}
+                    className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                    placeholder='Número interno de empleado'
                   />
                 </div>
               </div>
@@ -1633,20 +2174,20 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 3 for Patients: Additional Information */}
           {currentStep === 3 && formData.accountInfo.role === 'patient' && (
-            <div className="space-y-6">
-              <div className="bg-pink-900/30 border border-pink-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-pink-300 mb-4">
+            <div className='space-y-6'>
+              <div className='bg-pink-900/30 border border-pink-700 rounded-lg p-6'>
+                <h3 className='text-lg font-semibold text-pink-300 mb-4'>
                   Información del Paciente
                 </h3>
-                
-                <div className="space-y-4">
+
+                <div className='space-y-4'>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className='block text-sm font-medium text-gray-300 mb-2'>
                       Información de seguro médico
                     </label>
                     <textarea
                       value={JSON.stringify(formData.patientInfo?.insuranceInfo || {})}
-                      onChange={(e) => {
+                      onChange={e => {
                         try {
                           const parsed = JSON.parse(e.target.value || '{}');
                           updateFormData('patientInfo', 'insuranceInfo', parsed);
@@ -1654,19 +2195,19 @@ export default function EnhancedSignupQuestionnaire() {
                           // Ignorar errores de parsing mientras se escribe
                         }
                       }}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                       placeholder='{"proveedor": "IMSS", "numero": "12345", "vigencia": "2024-12-31"}'
                       rows={3}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className='block text-sm font-medium text-gray-300 mb-2'>
                       Contacto de emergencia
                     </label>
                     <textarea
                       value={JSON.stringify(formData.patientInfo?.emergencyContact || {})}
-                      onChange={(e) => {
+                      onChange={e => {
                         try {
                           const parsed = JSON.parse(e.target.value || '{}');
                           updateFormData('patientInfo', 'emergencyContact', parsed);
@@ -1674,7 +2215,7 @@ export default function EnhancedSignupQuestionnaire() {
                           // Ignorar errores de parsing mientras se escribe
                         }
                       }}
-                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                       placeholder='{"nombre": "María Pérez", "telefono": "+52 555 987 6543", "relacion": "Madre"}'
                       rows={3}
                     />
@@ -1686,15 +2227,15 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 4: Clinic Information (Skip for patients) */}
           {currentStep === 4 && formData.accountInfo.role !== 'patient' && (
-            <div className="space-y-6">
+            <div className='space-y-6'>
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-4">
+                <label className='block text-sm font-medium text-gray-300 mb-4'>
                   Clínica/Institución *
                 </label>
-                
-                <div className="flex gap-4 mb-6">
+
+                <div className='flex gap-4 mb-6'>
                   <button
-                    type="button"
+                    type='button'
                     onClick={() => updateFormData('clinicInfo', 'isNewClinic', false)}
                     className={`flex-1 p-4 rounded-lg border text-center transition-all ${
                       !formData.clinicInfo?.isNewClinic
@@ -1702,13 +2243,13 @@ export default function EnhancedSignupQuestionnaire() {
                         : 'border-gray-600 bg-gray-700/50 text-gray-300 hover:border-gray-500'
                     }`}
                   >
-                    <Building className="h-6 w-6 mx-auto mb-2" />
-                    <div className="font-medium">Clínica Existente</div>
-                    <div className="text-xs opacity-80">Unirse a una clínica registrada</div>
+                    <Building className='h-6 w-6 mx-auto mb-2' />
+                    <div className='font-medium'>Clínica Existente</div>
+                    <div className='text-xs opacity-80'>Unirse a una clínica registrada</div>
                   </button>
-                  
+
                   <button
-                    type="button"
+                    type='button'
                     onClick={() => updateFormData('clinicInfo', 'isNewClinic', true)}
                     className={`flex-1 p-4 rounded-lg border text-center transition-all ${
                       formData.clinicInfo?.isNewClinic
@@ -1716,127 +2257,141 @@ export default function EnhancedSignupQuestionnaire() {
                         : 'border-gray-600 bg-gray-700/50 text-gray-300 hover:border-gray-500'
                     }`}
                   >
-                    <Plus className="h-6 w-6 mx-auto mb-2" />
-                    <div className="font-medium">Nueva Clínica</div>
-                    <div className="text-xs opacity-80">Registrar una nueva institución</div>
+                    <Plus className='h-6 w-6 mx-auto mb-2' />
+                    <div className='font-medium'>Nueva Clínica</div>
+                    <div className='text-xs opacity-80'>Registrar una nueva institución</div>
                   </button>
                 </div>
 
                 {!formData.clinicInfo?.isNewClinic ? (
                   <div>
-                    <div className="relative mb-4">
+                    <div className='relative mb-4'>
                       <input
-                        type="text"
+                        type='text'
                         value={clinicSearch}
-                        onChange={(e) => setClinicSearch(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                        placeholder="Buscar clínica..."
+                        onChange={e => setClinicSearch(e.target.value)}
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                        placeholder='Buscar clínica...'
                       />
-                      <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                      <Search className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                     </div>
-                    
-                    <div className="max-h-64 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg">
-                      {filteredClinics.map((clinic) => (
+
+                    <div className='max-h-64 overflow-y-auto bg-gray-700 border border-gray-600 rounded-lg'>
+                      {filteredClinics.map(clinic => (
                         <button
                           key={clinic.id}
-                          type="button"
+                          type='button'
                           onClick={() => updateFormData('clinicInfo', 'clinicId', clinic.id)}
                           className={`w-full text-left px-4 py-3 hover:bg-gray-600 border-b border-gray-600 last:border-b-0 ${
                             formData.clinicInfo?.clinicId === clinic.id ? 'bg-cyan-900/30' : ''
                           }`}
                         >
-                          <div className="font-medium text-white">{clinic.name}</div>
-                          <div className="text-sm text-gray-400 capitalize">{clinic.type}</div>
+                          <div className='font-medium text-white'>{clinic.name}</div>
+                          <div className='text-sm text-gray-400 capitalize'>{clinic.type}</div>
                           {clinic.address && (
-                            <div className="text-xs text-gray-500">{clinic.address}</div>
+                            <div className='text-xs text-gray-500'>{clinic.address}</div>
                           )}
                         </button>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className='block text-sm font-medium text-gray-300 mb-2'>
                         Nombre de la clínica *
                       </label>
                       <input
-                        type="text"
+                        type='text'
                         value={formData.clinicInfo?.clinicData?.name || ''}
-                        onChange={(e) => updateFormData('clinicInfo', 'clinicData', {
-                          ...formData.clinicInfo?.clinicData,
-                          name: e.target.value
-                        })}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                        placeholder="Hospital General de México"
+                        onChange={e =>
+                          updateFormData('clinicInfo', 'clinicData', {
+                            ...formData.clinicInfo?.clinicData,
+                            name: e.target.value,
+                          })
+                        }
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                        placeholder='Hospital General de México'
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className='block text-sm font-medium text-gray-300 mb-2'>
                         Tipo de institución *
                       </label>
                       <select
                         value={formData.clinicInfo?.clinicData?.type || 'clinic'}
-                        onChange={(e) => updateFormData('clinicInfo', 'clinicData', {
-                          ...formData.clinicInfo?.clinicData,
-                          type: e.target.value as 'hospital' | 'clinic' | 'private_practice' | 'other'
-                        })}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                        onChange={e =>
+                          updateFormData('clinicInfo', 'clinicData', {
+                            ...formData.clinicInfo?.clinicData,
+                            type: e.target.value as
+                              | 'hospital'
+                              | 'clinic'
+                              | 'private_practice'
+                              | 'other',
+                          })
+                        }
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                       >
-                        <option value="clinic">Clínica</option>
-                        <option value="hospital">Hospital</option>
-                        <option value="private_practice">Consultorio Privado</option>
-                        <option value="other">Otro</option>
+                        <option value='clinic'>Clínica</option>
+                        <option value='hospital'>Hospital</option>
+                        <option value='private_practice'>Consultorio Privado</option>
+                        <option value='other'>Otro</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className='block text-sm font-medium text-gray-300 mb-2'>
                         Dirección
                       </label>
                       <input
-                        type="text"
+                        type='text'
                         value={formData.clinicInfo?.clinicData?.address || ''}
-                        onChange={(e) => updateFormData('clinicInfo', 'clinicData', {
-                          ...formData.clinicInfo?.clinicData,
-                          address: e.target.value
-                        })}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                        placeholder="Dirección completa"
+                        onChange={e =>
+                          updateFormData('clinicInfo', 'clinicData', {
+                            ...formData.clinicInfo?.clinicData,
+                            address: e.target.value,
+                          })
+                        }
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                        placeholder='Dirección completa'
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className='block text-sm font-medium text-gray-300 mb-2'>
                         Teléfono de la clínica
                       </label>
                       <input
-                        type="tel"
+                        type='tel'
                         value={formData.clinicInfo?.clinicData?.phone || ''}
-                        onChange={(e) => updateFormData('clinicInfo', 'clinicData', {
-                          ...formData.clinicInfo?.clinicData,
-                          phone: e.target.value
-                        })}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                        placeholder="+52 555 000 0000"
+                        onChange={e =>
+                          updateFormData('clinicInfo', 'clinicData', {
+                            ...formData.clinicInfo?.clinicData,
+                            phone: e.target.value,
+                          })
+                        }
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                        placeholder='+52 555 000 0000'
                       />
                     </div>
 
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <div className='md:col-span-2'>
+                      <label className='block text-sm font-medium text-gray-300 mb-2'>
                         Email de la clínica
                       </label>
                       <input
-                        type="email"
+                        type='email'
                         value={formData.clinicInfo?.clinicData?.email || ''}
-                        onChange={(e) => updateFormData('clinicInfo', 'clinicData', {
-                          ...formData.clinicInfo?.clinicData,
-                          email: e.target.value
-                        })}
-                        className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                        placeholder="contacto@clinica.com"
+                        onChange={e =>
+                          updateFormData('clinicInfo', 'clinicData', {
+                            ...formData.clinicInfo?.clinicData,
+                            email: e.target.value,
+                          })
+                        }
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                        placeholder='contacto@clinica.com'
                       />
                     </div>
                   </div>
@@ -1846,99 +2401,108 @@ export default function EnhancedSignupQuestionnaire() {
           )}
 
           {/* Step 5: Additional Information */}
-          {((currentStep === 5 && formData.accountInfo.role !== 'patient') || 
+          {((currentStep === 5 && formData.accountInfo.role !== 'patient') ||
             (currentStep === 4 && formData.accountInfo.role === 'patient')) && (
-            <div className="space-y-6">
+            <div className='space-y-6'>
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className='block text-sm font-medium text-gray-300 mb-2'>
                   Horario de trabajo preferido
                 </label>
-                <div className="space-y-2">
-                  {workScheduleOptions.map((option) => (
-                    <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
+                <div className='space-y-2'>
+                  {workScheduleOptions.map(option => (
+                    <label
+                      key={option.value}
+                      className='flex items-center space-x-3 cursor-pointer'
+                    >
                       <input
-                        type="radio"
-                        name="workSchedule"
+                        type='radio'
+                        name='workSchedule'
                         value={option.value}
                         checked={formData.additionalInfo?.workSchedule === option.value}
-                        onChange={(e) => updateFormData('additionalInfo', 'workSchedule', e.target.value)}
-                        className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 focus:ring-cyan-500"
+                        onChange={e =>
+                          updateFormData('additionalInfo', 'workSchedule', e.target.value)
+                        }
+                        className='w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 focus:ring-cyan-500'
                       />
-                      <span className="text-gray-300">{option.label}</span>
+                      <span className='text-gray-300'>{option.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className='block text-sm font-medium text-gray-300 mb-2'>
                   Notas adicionales
                 </label>
                 <textarea
                   value={formData.additionalInfo?.notes || ''}
-                  onChange={(e) => updateFormData('additionalInfo', 'notes', e.target.value)}
+                  onChange={e => updateFormData('additionalInfo', 'notes', e.target.value)}
                   rows={4}
-                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                  placeholder="Cualquier información adicional que consideres relevante (subespecialidades, certificaciones, preferencias, etc.)"
+                  className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                  placeholder='Cualquier información adicional que consideres relevante (subespecialidades, certificaciones, preferencias, etc.)'
                 />
               </div>
             </div>
           )}
 
           {/* Step 6: Confirmation (Step 5 for patients) */}
-          {((currentStep === 6 && formData.accountInfo.role !== 'patient') || 
+          {((currentStep === 6 && formData.accountInfo.role !== 'patient') ||
             (currentStep === 5 && formData.accountInfo.role === 'patient')) && (
-            <div className="space-y-6">
-              <div className="bg-gray-700/50 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">
+            <div className='space-y-6'>
+              <div className='bg-gray-700/50 rounded-lg p-6'>
+                <h3 className='text-lg font-semibold text-white mb-4'>
                   Confirmar información de registro
                 </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-4 text-sm'>
                   <div>
-                    <span className="text-gray-400">Nombre:</span>
-                    <span className="text-white ml-2">{formData.personalInfo.fullName}</span>
+                    <span className='text-gray-400'>Nombre:</span>
+                    <span className='text-white ml-2'>{formData.personalInfo.fullName}</span>
                   </div>
                   <div>
-                    <span className="text-gray-400">Email:</span>
-                    <span className="text-white ml-2">{formData.personalInfo.email}</span>
+                    <span className='text-gray-400'>Email:</span>
+                    <span className='text-white ml-2'>{formData.personalInfo.email}</span>
                   </div>
                   <div>
-                    <span className="text-gray-400">Tipo de cuenta:</span>
-                    <span className="text-white ml-2 capitalize">
+                    <span className='text-gray-400'>Tipo de cuenta:</span>
+                    <span className='text-white ml-2 capitalize'>
                       {roleOptions.find(r => r.value === formData.accountInfo.role)?.label}
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-400">Teléfono:</span>
-                    <span className="text-white ml-2">{formData.personalInfo.phone}</span>
+                    <span className='text-gray-400'>Teléfono:</span>
+                    <span className='text-white ml-2'>{formData.personalInfo.phone}</span>
                   </div>
                   {formData.professionalInfo?.licenseNumber && (
                     <div>
-                      <span className="text-gray-400">Licencia:</span>
-                      <span className="text-white ml-2">{formData.professionalInfo.licenseNumber}</span>
+                      <span className='text-gray-400'>Licencia:</span>
+                      <span className='text-white ml-2'>
+                        {formData.professionalInfo.licenseNumber}
+                      </span>
                     </div>
                   )}
                   {formData.professionalInfo?.specialtyId && (
                     <div>
-                      <span className="text-gray-400">Especialidad:</span>
-                      <span className="text-white ml-2">
-                        {specialties.find(s => s.id === formData.professionalInfo?.specialtyId)?.name}
+                      <span className='text-gray-400'>Especialidad:</span>
+                      <span className='text-white ml-2'>
+                        {
+                          specialties.find(s => s.id === formData.professionalInfo?.specialtyId)
+                            ?.name
+                        }
                       </span>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
-                <div className="flex items-center">
-                  <CheckCircle className="h-5 w-5 text-green-400 mr-3 flex-shrink-0" />
+              <div className='bg-green-900/30 border border-green-700 rounded-lg p-4'>
+                <div className='flex items-center'>
+                  <CheckCircle className='h-5 w-5 text-green-400 mr-3 flex-shrink-0' />
                   <div>
-                    <p className="text-green-300 font-medium">
-                      Listo para completar registro
-                    </p>
-                    <p className="text-green-200 text-sm mt-1">
-                      Al registrarte, aceptas nuestros términos y condiciones de uso del sistema médico.
+                    <p className='text-green-300 font-medium'>Listo para completar registro</p>
+                    <p className='text-green-200 text-sm mt-1'>
+                      Al registrarte, aceptas nuestros términos y condiciones de uso del sistema
+                      médico.
                     </p>
                   </div>
                 </div>
@@ -1947,15 +2511,15 @@ export default function EnhancedSignupQuestionnaire() {
           )}
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-700">
+          <div className='flex justify-between mt-8 pt-6 border-t border-gray-700'>
             <div>
               {currentStep > 1 && (
                 <button
-                  type="button"
+                  type='button'
                   onClick={handlePreviousStep}
-                  className="flex items-center px-6 py-3 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-all duration-300"
+                  className='flex items-center px-6 py-3 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-all duration-300'
                 >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  <ArrowLeft className='h-4 w-4 mr-2' />
                   Anterior
                 </button>
               )}
@@ -1964,7 +2528,7 @@ export default function EnhancedSignupQuestionnaire() {
             <div>
               {currentStep < totalSteps ? (
                 <button
-                  type="button"
+                  type='button'
                   onClick={handleNextStep}
                   disabled={loading}
                   className={`flex items-center px-6 py-3 rounded-lg transition-all duration-300 ${
@@ -1974,23 +2538,23 @@ export default function EnhancedSignupQuestionnaire() {
                   }`}
                 >
                   Siguiente
-                  <ArrowRight className="h-4 w-4 ml-2" />
+                  <ArrowRight className='h-4 w-4 ml-2' />
                 </button>
               ) : (
                 <button
-                  type="button"
+                  type='button'
                   onClick={handleCompleteRegistration}
                   disabled={loading}
-                  className="flex items-center px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+                  className='flex items-center px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300'
                 >
                   {loading ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
                       Completando registro...
                     </>
                   ) : (
                     <>
-                      <CheckCircle className="h-4 w-4 mr-2" />
+                      <CheckCircle className='h-4 w-4 mr-2' />
                       Completar Registro
                     </>
                   )}
@@ -2000,16 +2564,16 @@ export default function EnhancedSignupQuestionnaire() {
           </div>
 
           {/* Helper Text */}
-          <div className="mt-6 text-center space-y-2">
-            <p className="text-gray-400 text-sm">
-              ¿Necesitas ayuda? Contacta a soporte en 
-              <span className="text-cyan-400 ml-1">soporte@deepluxmed.com</span>
+          <div className='mt-6 text-center space-y-2'>
+            <p className='text-gray-400 text-sm'>
+              ¿Necesitas ayuda? Contacta a soporte en
+              <span className='text-cyan-400 ml-1'>soporte@deepluxmed.com</span>
             </p>
             {initialEmail && (
               <button
-                type="button"
+                type='button'
                 onClick={() => navigate('/auth')}
-                className="text-xs text-gray-500 hover:text-cyan-400 transition-colors"
+                className='text-xs text-gray-500 hover:text-cyan-400 transition-colors'
               >
                 ¿Quieres usar un email diferente? Volver al inicio
               </button>

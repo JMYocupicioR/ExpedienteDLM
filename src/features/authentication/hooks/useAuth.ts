@@ -1,7 +1,8 @@
 import type { Database } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
-import { User } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
@@ -9,6 +10,8 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Get initial session
@@ -19,6 +22,7 @@ export function useAuth() {
         } = await supabase.auth.getSession();
 
         if (session?.user) {
+          setSession(session);
           setUser(session.user);
           await loadProfile(session.user.id);
         }
@@ -34,19 +38,28 @@ export function useAuth() {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        await loadProfile(session.user.id);
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      setSession(newSession);
+      if (newSession?.user) {
+        setUser(newSession.user);
+        await loadProfile(newSession.user.id);
       } else {
         setUser(null);
         setProfile(null);
       }
       setLoading(false);
+
+      // Navegación basada en eventos de autenticación
+      if (event === 'SIGNED_IN') {
+        navigate('/dashboard');
+      }
+      if (event === 'SIGNED_OUT') {
+        navigate('/auth');
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const loadProfile = async (userId: string) => {
     try {
@@ -101,6 +114,7 @@ export function useAuth() {
     user,
     profile,
     loading,
+    session,
     signOut,
     updateProfile,
     isAuthenticated: !!user,

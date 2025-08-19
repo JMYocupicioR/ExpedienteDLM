@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, Stethoscope, User, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import OAuthButtons from '@/features/authentication/components/OAuthButtons';
+import { supabase } from '@/lib/supabase';
+import { AlertCircle, Eye, EyeOff, Lock, Mail, Stethoscope, User } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -20,13 +20,15 @@ export default function Auth() {
   // Validación en tiempo real de contraseñas
   useEffect(() => {
     const passwordInput = document.getElementById('password-register') as HTMLInputElement;
-    const confirmPasswordInput = document.getElementById('confirm-password-register') as HTMLInputElement;
+    const confirmPasswordInput = document.getElementById(
+      'confirm-password-register'
+    ) as HTMLInputElement;
     const strengthDiv = document.getElementById('password-strength');
     const matchDiv = document.getElementById('password-match');
 
     const validatePassword = () => {
       if (!passwordInput || !strengthDiv) return;
-      
+
       const password = passwordInput.value;
       let strength = '';
       let strengthClass = '';
@@ -50,7 +52,7 @@ export default function Auth() {
 
     const validatePasswordMatch = () => {
       if (!passwordInput || !confirmPasswordInput || !matchDiv) return;
-      
+
       const password = passwordInput.value;
       const confirmPassword = confirmPasswordInput.value;
 
@@ -70,7 +72,7 @@ export default function Auth() {
       passwordInput.addEventListener('input', validatePassword);
       passwordInput.addEventListener('input', validatePasswordMatch);
     }
-    
+
     if (confirmPasswordInput) {
       confirmPasswordInput.addEventListener('input', validatePasswordMatch);
     }
@@ -95,6 +97,7 @@ export default function Auth() {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     const confirmPassword = formData.get('confirmPassword') as string;
+    const hcaptchaToken = formData.get('h-captcha-response') as string | null;
 
     console.log(`🔑 Attempting ${isLogin ? 'login' : 'signup'} for:`, email);
 
@@ -105,50 +108,72 @@ export default function Auth() {
           email,
           password,
         });
-        
+
         if (error) throw error;
-        
+
         console.log('✅ Login successful:', data.user?.email);
         // NO navegar inmediatamente - dejar que useAuth maneje la navegación
         // navigate('/dashboard') se manejará automáticamente en App.tsx
-        
       } else {
         console.log('📝 Starting registration process...');
         setCheckingEmail(true);
-        
+
         try {
+          // Verificar hCaptcha (requerido para signup)
+          if (!hcaptchaToken) {
+            setError('Por favor, verifica el captcha.');
+            return;
+          }
+
+          // Llamar a función Edge para validar el token del lado del servidor
+          const { data: verifyJson, error: verifyError } = await supabase.functions.invoke(
+            'verify-hcaptcha',
+            {
+              body: {
+                token: hcaptchaToken,
+                sitekey: '5e0e8956-46b8-4a76-a756-b5d0cdc02d24',
+              },
+            }
+          );
+          if (verifyError || !verifyJson?.success) {
+            setError('Verificación de captcha falló. Intenta nuevamente.');
+            return;
+          }
+
           // NUEVO FLUJO: Solo validar el email sin crear usuario
           console.log('🔍 Validando formato de email:', email);
-          
+
           // Validación básica del email
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(email)) {
             setError('Por favor, ingresa un correo electrónico válido');
             return;
           }
-          
+
           // Validación básica de la contraseña
           if (password.length < 6) {
             setError('La contraseña debe tener al menos 6 caracteres');
             return;
           }
-          
+
           // Validación de confirmación de contraseña
           if (password !== confirmPassword) {
             setError('Las contraseñas no coinciden');
             return;
           }
-          
+
           // Verificar si el email existe usando múltiples métodos
           console.log('🔍 Verificando disponibilidad del email...');
-          
+
           // Método 1: Usar la función RPC segura (si está disponible)
           let emailExists = false;
-          
+
           try {
-            const { data: availabilityCheck, error: rpcError } = await supabase
-              .rpc('check_email_availability', { check_email: email.toLowerCase().trim() });
-            
+            const { data: availabilityCheck, error: rpcError } = await supabase.rpc(
+              'check_email_availability',
+              { check_email: email.toLowerCase().trim() }
+            );
+
             if (!rpcError && availabilityCheck) {
               emailExists = !availabilityCheck.available;
               if (emailExists) {
@@ -157,20 +182,22 @@ export default function Auth() {
             } else {
               // Si la función RPC no existe, usar método alternativo
               console.warn('RPC no disponible, usando método alternativo');
-              
+
               // Método 2: Verificar con un query a profiles
               const { data: existingProfile, error: profileError } = await supabase
                 .from('profiles')
                 .select('id')
                 .eq('email', email.toLowerCase().trim())
                 .maybeSingle();
-              
+
               if (profileError && profileError.code !== 'PGRST116') {
                 console.error('Error verificando email en profiles:', profileError);
-                
+
                 // Si profiles falla, no podemos verificar en auth.users desde el cliente
                 // Por seguridad, procederemos y dejaremos que Supabase maneje el error
-                console.warn('No se puede verificar en profiles, se verificará al intentar crear el usuario');
+                console.warn(
+                  'No se puede verificar en profiles, se verificará al intentar crear el usuario'
+                );
               } else if (existingProfile) {
                 emailExists = true;
                 console.log('❌ Email ya registrado (profiles)');
@@ -181,29 +208,34 @@ export default function Auth() {
             setError('Error al verificar el email. Por favor, intenta nuevamente.');
             return;
           }
-          
+
           if (emailExists) {
-            setError('Este correo electrónico ya está registrado. Por favor, inicia sesión en lugar de registrarte.');
+            setError(
+              'Este correo electrónico ya está registrado. Por favor, inicia sesión en lugar de registrarte.'
+            );
             setIsLogin(true);
             return;
           }
-          
+
           console.log('✅ Email disponible, redirigiendo al cuestionario...');
-          
+
           // Guardar datos temporalmente en sessionStorage (más seguro que crear usuario)
-          sessionStorage.setItem('pendingRegistration', JSON.stringify({
-            email: email.toLowerCase().trim(),
-            password: password,
-            confirmPassword: confirmPassword,
-            timestamp: Date.now()
-          }));
-          
-          // Redirigir al cuestionario SIN crear usuario
-          navigate('/signup-questionnaire', { 
-            state: { 
+          sessionStorage.setItem(
+            'pendingRegistration',
+            JSON.stringify({
               email: email.toLowerCase().trim(),
-              fromRegistration: true 
-            } 
+              password: password,
+              confirmPassword: confirmPassword,
+              timestamp: Date.now(),
+            })
+          );
+
+          // Redirigir al cuestionario SIN crear usuario
+          navigate('/signup-questionnaire', {
+            state: {
+              email: email.toLowerCase().trim(),
+              fromRegistration: true,
+            },
           });
           return;
         } finally {
@@ -212,12 +244,14 @@ export default function Auth() {
       }
     } catch (err: any) {
       console.error(`❌ ${isLogin ? 'Login' : 'Signup'} error:`, err);
-      
+
       // Manejo de errores mejorado
       if (err.message === 'Invalid login credentials') {
         setError('Credenciales inválidas. Verifica tu email y contraseña.');
       } else if (err.message?.includes('Email not confirmed')) {
-        setError('Por favor confirma tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada y también tu carpeta de spam.');
+        setError(
+          'Por favor confirma tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada y también tu carpeta de spam.'
+        );
       } else if (err.message?.includes('Too many requests')) {
         setError('Demasiados intentos. Espera unos minutos antes de intentar de nuevo.');
       } else {
@@ -229,210 +263,254 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">
+    <div className='min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4'>
       {/* Background decoration */}
-      <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/20 via-transparent to-blue-900/20"></div>
-      
-      <div className="relative w-full max-w-5xl h-auto bg-gray-800/30 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
-        <div className="flex flex-col md:flex-row w-full h-full">
+      <div className='absolute inset-0 bg-gradient-to-br from-cyan-900/20 via-transparent to-blue-900/20'></div>
+
+      <div className='relative w-full max-w-5xl h-auto bg-gray-800/30 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700 overflow-hidden'>
+        <div className='flex flex-col md:flex-row w-full h-full'>
           {/* Login Form */}
-          <div className={`w-full md:w-1/2 transition-all duration-500 ease-in-out p-8 ${isLogin ? 'block' : 'hidden md:block'}`}>
-            <form onSubmit={handleSubmit} className="w-full max-w-md mx-auto space-y-6">
-              <div className="text-center mb-8">
-                <Stethoscope className="h-12 w-12 text-cyan-400 mx-auto mb-4" />
-                <h1 className="text-3xl font-bold text-white mb-2">Iniciar Sesión</h1>
-                <p className="text-gray-400">Accede a Expediente DLM</p>
+          <div
+            className={`w-full md:w-1/2 transition-all duration-500 ease-in-out p-8 ${isLogin ? 'block' : 'hidden md:block'}`}
+          >
+            <form onSubmit={handleSubmit} className='w-full max-w-md mx-auto space-y-6'>
+              <div className='text-center mb-8'>
+                <Stethoscope className='h-12 w-12 text-cyan-400 mx-auto mb-4' />
+                <h1 className='text-3xl font-bold text-white mb-2'>Iniciar Sesión</h1>
+                <p className='text-gray-400'>Accede a Expediente DLM</p>
               </div>
 
               {error && (
-                <div className="bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center text-sm mb-4">
-                  <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+                <div className='bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center text-sm mb-4'>
+                  <AlertCircle className='h-5 w-5 mr-2 flex-shrink-0' />
                   {error}
                 </div>
               )}
 
-              <div className="space-y-4">
+              <div className='space-y-4'>
                 <div>
-                  <label htmlFor="email-login" className="block text-sm font-medium text-gray-300 mb-2">Correo electrónico</label>
-                  <div className="relative">
+                  <label
+                    htmlFor='email-login'
+                    className='block text-sm font-medium text-gray-300 mb-2'
+                  >
+                    Correo electrónico
+                  </label>
+                  <div className='relative'>
                     <input
-                      id="email-login"
-                      type="email"
-                      name="email"
-                      placeholder="ejemplo@deepluxmed.com"
+                      id='email-login'
+                      type='email'
+                      name='email'
+                      placeholder='ejemplo@deepluxmed.com'
                       required
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                      className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all'
                     />
-                    <Mail className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Mail className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="password-login" className="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
-                  <div className="relative">
+                  <label
+                    htmlFor='password-login'
+                    className='block text-sm font-medium text-gray-300 mb-2'
+                  >
+                    Contraseña
+                  </label>
+                  <div className='relative'>
                     <input
-                      id="password-login"
-                      type="password"
-                      name="password"
-                      placeholder="••••••••"
+                      id='password-login'
+                      type='password'
+                      name='password'
+                      placeholder='••••••••'
                       required
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all"
+                      className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all'
                     />
-                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Lock className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
+                </div>
+                {/* hCaptcha Widget */}
+                <div className='mt-2'>
+                  <div
+                    className='h-captcha'
+                    data-sitekey='5e0e8956-46b8-4a76-a756-b5d0cdc02d24'
+                  ></div>
                 </div>
               </div>
 
-              <div className="text-right">
-                <a href="#" className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
+              <div className='text-right'>
+                <a href='#' className='text-sm text-cyan-400 hover:text-cyan-300 transition-colors'>
                   ¿Olvidaste tu contraseña?
                 </a>
               </div>
 
               <button
-                type="submit"
+                type='submit'
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                className='w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg'
               >
                 {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </button>
-              
+
               {/* OAuth Buttons for Login */}
-              <div className="mt-6">
-                <OAuthButtons 
-                  mode="login" 
-                  onError={setError}
-                />
+              <div className='mt-6'>
+                <OAuthButtons mode='login' onError={setError} />
               </div>
             </form>
           </div>
 
           {/* Register Form */}
-          <div className={`w-full md:w-1/2 transition-all duration-500 ease-in-out p-8 ${isLogin ? 'hidden md:block' : 'block'}`}>
-            <form onSubmit={handleSubmit} className="w-full max-w-md mx-auto space-y-6">
-              <div className="text-center mb-8">
-                <Stethoscope className="h-12 w-12 text-cyan-400 mx-auto mb-4" />
-                <h1 className="text-3xl font-bold text-white mb-2">Crear Cuenta</h1>
-                <p className="text-gray-400">Únete a DeepLuxMed</p>
+          <div
+            className={`w-full md:w-1/2 transition-all duration-500 ease-in-out p-8 ${isLogin ? 'hidden md:block' : 'block'}`}
+          >
+            <form onSubmit={handleSubmit} className='w-full max-w-md mx-auto space-y-6'>
+              <div className='text-center mb-8'>
+                <Stethoscope className='h-12 w-12 text-cyan-400 mx-auto mb-4' />
+                <h1 className='text-3xl font-bold text-white mb-2'>Crear Cuenta</h1>
+                <p className='text-gray-400'>Únete a DeepLuxMed</p>
               </div>
 
               {error && (
-                <div className="bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center text-sm mb-4">
-                  <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+                <div className='bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center text-sm mb-4'>
+                  <AlertCircle className='h-5 w-5 mr-2 flex-shrink-0' />
                   {error}
                 </div>
               )}
 
-              <div className="space-y-4">
+              <div className='space-y-4'>
                 <div>
-                  <label htmlFor="email-register" className="block text-sm font-medium text-gray-300 mb-2">Correo electrónico</label>
-                  <div className="relative">
+                  <label
+                    htmlFor='email-register'
+                    className='block text-sm font-medium text-gray-300 mb-2'
+                  >
+                    Correo electrónico
+                  </label>
+                  <div className='relative'>
                     <input
-                      id="email-register"
-                      type="email"
-                      name="email"
-                      placeholder="ejemplo@correo.com"
+                      id='email-register'
+                      type='email'
+                      name='email'
+                      placeholder='ejemplo@correo.com'
                       required
                       disabled={checkingEmail}
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
+                      className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50'
                     />
                     {checkingEmail ? (
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-cyan-400"></div>
+                      <div className='absolute right-3 top-1/2 transform -translate-y-1/2'>
+                        <div className='animate-spin rounded-full h-5 w-5 border-b-2 border-cyan-400'></div>
                       </div>
                     ) : (
-                      <Mail className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                      <Mail className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                     )}
                   </div>
-                  <p className="text-xs text-cyan-400 mt-1">
-                    {checkingEmail ? '🔍 Verificando disponibilidad del email...' : '✨ Solo necesitamos tu email para comenzar'}
+                  <p className='text-xs text-cyan-400 mt-1'>
+                    {checkingEmail
+                      ? '🔍 Verificando disponibilidad del email...'
+                      : '✨ Solo necesitamos tu email para comenzar'}
                   </p>
                 </div>
-                
+
                 <div>
-                  <label htmlFor="password-register" className="block text-sm font-medium text-gray-300 mb-2">Contraseña *</label>
-                  <div className="relative">
+                  <label
+                    htmlFor='password-register'
+                    className='block text-sm font-medium text-gray-300 mb-2'
+                  >
+                    Contraseña *
+                  </label>
+                  <div className='relative'>
                     <input
-                      id="password-register"
+                      id='password-register'
                       type={showRegisterPassword ? 'text' : 'password'}
-                      name="password"
-                      placeholder="••••••••"
+                      name='password'
+                      placeholder='••••••••'
                       required
                       minLength={6}
                       disabled={checkingEmail}
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
+                      className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50'
                     />
                     <button
-                      type="button"
+                      type='button'
                       onClick={() => setShowRegisterPassword(!showRegisterPassword)}
-                      className="absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                      className='absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 disabled:opacity-50'
                       disabled={checkingEmail}
                     >
-                      {showRegisterPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showRegisterPassword ? (
+                        <EyeOff className='h-5 w-5' />
+                      ) : (
+                        <Eye className='h-5 w-5' />
+                      )}
                     </button>
-                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Lock className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-xs text-gray-400">Mínimo 6 caracteres</p>
-                    <div className="text-xs" id="password-strength"></div>
+                  <div className='flex items-center justify-between mt-1'>
+                    <p className='text-xs text-gray-400'>Mínimo 6 caracteres</p>
+                    <div className='text-xs' id='password-strength'></div>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="confirm-password-register" className="block text-sm font-medium text-gray-300 mb-2">Confirmar contraseña *</label>
-                  <div className="relative">
+                  <label
+                    htmlFor='confirm-password-register'
+                    className='block text-sm font-medium text-gray-300 mb-2'
+                  >
+                    Confirmar contraseña *
+                  </label>
+                  <div className='relative'>
                     <input
-                      id="confirm-password-register"
+                      id='confirm-password-register'
                       type={showRegisterConfirmPassword ? 'text' : 'password'}
-                      name="confirmPassword"
-                      placeholder="••••••••"
+                      name='confirmPassword'
+                      placeholder='••••••••'
                       required
                       minLength={6}
                       disabled={checkingEmail}
-                      className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50"
+                      className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-20 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all disabled:opacity-50'
                     />
                     <button
-                      type="button"
+                      type='button'
                       onClick={() => setShowRegisterConfirmPassword(!showRegisterConfirmPassword)}
-                      className="absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                      className='absolute right-12 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 disabled:opacity-50'
                       disabled={checkingEmail}
                     >
-                      {showRegisterConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showRegisterConfirmPassword ? (
+                        <EyeOff className='h-5 w-5' />
+                      ) : (
+                        <Eye className='h-5 w-5' />
+                      )}
                     </button>
-                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Lock className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
-                  <div className="text-xs mt-1" id="password-match"></div>
+                  <div className='text-xs mt-1' id='password-match'></div>
                 </div>
               </div>
 
-              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <div className="w-6 h-6 bg-blue-400 rounded-full flex items-center justify-center">
-                      <span className="text-blue-900 text-xs font-bold">1</span>
+              <div className='bg-blue-900/30 border border-blue-700 rounded-lg p-4'>
+                <div className='flex items-start space-x-3'>
+                  <div className='flex-shrink-0'>
+                    <div className='w-6 h-6 bg-blue-400 rounded-full flex items-center justify-center'>
+                      <span className='text-blue-900 text-xs font-bold'>1</span>
                     </div>
                   </div>
                   <div>
-                    <p className="text-blue-300 text-sm font-medium mb-1">
+                    <p className='text-blue-300 text-sm font-medium mb-1'>
                       ✨ Registro inteligente y seguro
                     </p>
-                    <p className="text-blue-200 text-xs">
-                      • Credenciales verificadas antes del cuestionario<br/>
-                      • Usuario creado solo al completar todo el proceso<br/>
-                      • Sin usuarios basura en la base de datos
+                    <p className='text-blue-200 text-xs'>
+                      • Credenciales verificadas antes del cuestionario
+                      <br />
+                      • Usuario creado solo al completar todo el proceso
+                      <br />• Sin usuarios basura en la base de datos
                     </p>
                   </div>
                 </div>
               </div>
 
               <button
-                type="submit"
+                type='submit'
                 disabled={loading || checkingEmail}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center"
+                className='w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center'
               >
                 {checkingEmail ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
                     Verificando email...
                   </>
                 ) : loading ? (
@@ -441,23 +519,20 @@ export default function Auth() {
                   'Comenzar Registro →'
                 )}
               </button>
-              
+
               {/* OAuth Buttons for Signup */}
-              <div className="mt-6">
-                <OAuthButtons 
-                  mode="signup" 
-                  onError={setError}
-                />
+              <div className='mt-6'>
+                <OAuthButtons mode='signup' onError={setError} />
               </div>
 
-              <div className="text-center">
+              <div className='text-center'>
                 <button
-                  type="button"
+                  type='button'
                   onClick={() => {
                     setIsLogin(true);
                     setError(null);
                   }}
-                  className="text-cyan-400 text-sm hover:text-cyan-300 transition-colors"
+                  className='text-cyan-400 text-sm hover:text-cyan-300 transition-colors'
                 >
                   ¿Ya tienes una cuenta? Iniciar sesión
                 </button>
@@ -466,49 +541,57 @@ export default function Auth() {
           </div>
 
           {/* Toggle Panel - Desktop */}
-          <div className={`hidden md:block absolute inset-y-0 w-1/2 bg-gradient-to-br from-cyan-600 to-blue-700 transition-all duration-700 ease-in-out z-10 shadow-2xl ${
-            isLogin ? 'right-0' : 'right-1/2'
-          }`}
-               style={{ 
-                 borderRadius: isLogin ? '0 1rem 1rem 0' : '1rem 0 0 1rem'
-               }}>
-            <div className="flex flex-col h-full items-center justify-center p-8 text-white relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-black/20 to-transparent"></div>
-              <div className="relative z-10 text-center">
+          <div
+            className={`hidden md:block absolute inset-y-0 w-1/2 bg-gradient-to-br from-cyan-600 to-blue-700 transition-all duration-700 ease-in-out z-10 shadow-2xl ${
+              isLogin ? 'right-0' : 'right-1/2'
+            }`}
+            style={{
+              borderRadius: isLogin ? '0 1rem 1rem 0' : '1rem 0 0 1rem',
+            }}
+          >
+            <div className='flex flex-col h-full items-center justify-center p-8 text-white relative'>
+              <div className='absolute inset-0 bg-gradient-to-br from-black/20 to-transparent'></div>
+              <div className='relative z-10 text-center'>
                 {isLogin ? (
                   <>
-                    <div className="mb-6">
-                      <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <User className="h-8 w-8 text-white" />
+                    <div className='mb-6'>
+                      <div className='w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4'>
+                        <User className='h-8 w-8 text-white' />
                       </div>
                     </div>
-                    <h2 className="text-3xl font-bold mb-4">¡Bienvenido!</h2>
-                    <p className="text-cyan-100 mb-8 text-lg">¿Aún no tienes una cuenta? Únete a DeepLuxMed y accede a la tecnología médica más avanzada</p>
+                    <h2 className='text-3xl font-bold mb-4'>¡Bienvenido!</h2>
+                    <p className='text-cyan-100 mb-8 text-lg'>
+                      ¿Aún no tienes una cuenta? Únete a DeepLuxMed y accede a la tecnología médica
+                      más avanzada
+                    </p>
                     <button
                       onClick={() => {
                         setIsLogin(false);
                         setError(null);
                       }}
-                      className="px-8 py-3 border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-cyan-600 transition-all duration-300"
+                      className='px-8 py-3 border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-cyan-600 transition-all duration-300'
                     >
                       Crear Cuenta
                     </button>
                   </>
                 ) : (
                   <>
-                    <div className="mb-6">
-                      <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Stethoscope className="h-8 w-8 text-white" />
+                    <div className='mb-6'>
+                      <div className='w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4'>
+                        <Stethoscope className='h-8 w-8 text-white' />
                       </div>
                     </div>
-                    <h2 className="text-3xl font-bold mb-4">¡Te esperamos!</h2>
-                    <p className="text-cyan-100 mb-8 text-lg">¿Ya eres parte de DeepLuxMed? Inicia sesión y continúa transformando la medicina</p>
+                    <h2 className='text-3xl font-bold mb-4'>¡Te esperamos!</h2>
+                    <p className='text-cyan-100 mb-8 text-lg'>
+                      ¿Ya eres parte de DeepLuxMed? Inicia sesión y continúa transformando la
+                      medicina
+                    </p>
                     <button
                       onClick={() => {
                         setIsLogin(true);
                         setError(null);
                       }}
-                      className="px-8 py-3 border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-cyan-600 transition-all duration-300"
+                      className='px-8 py-3 border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-cyan-600 transition-all duration-300'
                     >
                       Iniciar Sesión
                     </button>
@@ -519,16 +602,16 @@ export default function Auth() {
           </div>
 
           {/* Mobile Toggle */}
-          <div className="md:hidden w-full p-6 text-center border-t border-gray-700">
+          <div className='md:hidden w-full p-6 text-center border-t border-gray-700'>
             {isLogin ? (
               <button
                 onClick={() => {
                   setIsLogin(false);
                   setError(null);
                 }}
-                className="text-cyan-400 font-medium hover:text-cyan-300 transition-colors"
+                className='text-cyan-400 font-medium hover:text-cyan-300 transition-colors'
               >
-                ¿No tienes una cuenta? <span className="underline">Crear cuenta</span>
+                ¿No tienes una cuenta? <span className='underline'>Crear cuenta</span>
               </button>
             ) : (
               <button
@@ -536,9 +619,9 @@ export default function Auth() {
                   setIsLogin(true);
                   setError(null);
                 }}
-                className="text-cyan-400 font-medium hover:text-cyan-300 transition-colors"
+                className='text-cyan-400 font-medium hover:text-cyan-300 transition-colors'
               >
-                ¿Ya tienes una cuenta? <span className="underline">Iniciar sesión</span>
+                ¿Ya tienes una cuenta? <span className='underline'>Iniciar sesión</span>
               </button>
             )}
           </div>

@@ -1,6 +1,6 @@
-import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
-import type { User, AuthError } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 // Tipos de la base de datos
 type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -39,7 +39,6 @@ export interface ProfileData {
  * Maneja login, registro, perfiles y sesiones
  */
 export class AuthService {
-  
   /**
    * Iniciar sesión con email y contraseña
    */
@@ -47,7 +46,7 @@ export class AuthService {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
-        password: credentials.password
+        password: credentials.password,
       });
 
       if (error) {
@@ -55,22 +54,23 @@ export class AuthService {
         return {
           data: null,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data: data.user,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al iniciar sesión';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al iniciar sesión';
       console.error('Service error in signIn:', err);
       return {
         data: null,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -85,7 +85,7 @@ export class AuthService {
         return {
           data: null,
           error: 'Las contraseñas no coinciden',
-          success: false
+          success: false,
         };
       }
 
@@ -93,7 +93,7 @@ export class AuthService {
         return {
           data: null,
           error: 'La contraseña debe tener al menos 6 caracteres',
-          success: false
+          success: false,
         };
       }
 
@@ -101,11 +101,12 @@ export class AuthService {
         email: registerData.email,
         password: registerData.password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             full_name: registerData.fullName,
-            role: registerData.role || 'staff'
-          }
-        }
+            role: registerData.role || 'staff',
+          },
+        },
       });
 
       if (error) {
@@ -113,14 +114,14 @@ export class AuthService {
         return {
           data: null,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data: data.user,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido al registrarse';
@@ -128,7 +129,7 @@ export class AuthService {
       return {
         data: null,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -145,22 +146,23 @@ export class AuthService {
         return {
           data: false,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data: true,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al cerrar sesión';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al cerrar sesión';
       console.error('Service error in signOut:', err);
       return {
         data: false,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -170,29 +172,33 @@ export class AuthService {
    */
   static async getCurrentUser(): Promise<AuthServiceResponse<User>> {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
 
       if (error) {
         console.error('Get user error:', error);
         return {
           data: null,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data: user,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al obtener usuario';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al obtener usuario';
       console.error('Service error in getCurrentUser:', err);
       return {
         data: null,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -202,33 +208,30 @@ export class AuthService {
    */
   static async getUserProfile(userId: string): Promise<AuthServiceResponse<Profile>> {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
 
       if (error) {
         console.error('Get profile error:', error);
         return {
           data: null,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al obtener perfil';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al obtener perfil';
       console.error('Service error in getUserProfile:', err);
       return {
         data: null,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -237,7 +240,7 @@ export class AuthService {
    * Actualizar perfil del usuario
    */
   static async updateUserProfile(
-    userId: string, 
+    userId: string,
     updates: ProfileUpdate
   ): Promise<AuthServiceResponse<Profile>> {
     try {
@@ -245,7 +248,7 @@ export class AuthService {
         .from('profiles')
         .update({
           ...updates,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', userId)
         .select()
@@ -256,22 +259,23 @@ export class AuthService {
         return {
           data: null,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al actualizar perfil';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al actualizar perfil';
       console.error('Service error in updateUserProfile:', err);
       return {
         data: null,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -280,7 +284,7 @@ export class AuthService {
    * Crear perfil para usuario nuevo
    */
   static async createUserProfile(
-    userId: string, 
+    userId: string,
     profileData: ProfileData
   ): Promise<AuthServiceResponse<Profile>> {
     try {
@@ -290,7 +294,7 @@ export class AuthService {
           id: userId,
           ...profileData,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -300,14 +304,14 @@ export class AuthService {
         return {
           data: null,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido al crear perfil';
@@ -315,7 +319,7 @@ export class AuthService {
       return {
         data: null,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -326,7 +330,7 @@ export class AuthService {
   static async resetPassword(email: string): Promise<AuthServiceResponse<boolean>> {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`
+        redirectTo: `${window.location.origin}/auth/reset-password`,
       });
 
       if (error) {
@@ -334,22 +338,23 @@ export class AuthService {
         return {
           data: false,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data: true,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al restablecer contraseña';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al restablecer contraseña';
       console.error('Service error in resetPassword:', err);
       return {
         data: false,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -360,7 +365,7 @@ export class AuthService {
   static async updatePassword(newPassword: string): Promise<AuthServiceResponse<boolean>> {
     try {
       const { error } = await supabase.auth.updateUser({
-        password: newPassword
+        password: newPassword,
       });
 
       if (error) {
@@ -368,22 +373,23 @@ export class AuthService {
         return {
           data: false,
           error: error.message,
-          success: false
+          success: false,
         };
       }
 
       return {
         data: true,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al actualizar contraseña';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al actualizar contraseña';
       console.error('Service error in updatePassword:', err);
       return {
         data: false,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -391,32 +397,36 @@ export class AuthService {
   /**
    * Verificar si el usuario tiene un rol específico
    */
-  static async hasRole(userId: string, requiredRole: string): Promise<AuthServiceResponse<boolean>> {
+  static async hasRole(
+    userId: string,
+    requiredRole: string
+  ): Promise<AuthServiceResponse<boolean>> {
     try {
       const profileResponse = await this.getUserProfile(userId);
-      
+
       if (!profileResponse.success || !profileResponse.data) {
         return {
           data: false,
           error: profileResponse.error || 'No se pudo obtener el perfil',
-          success: false
+          success: false,
         };
       }
 
       const hasRequiredRole = profileResponse.data.role === requiredRole;
-      
+
       return {
         data: hasRequiredRole,
         error: null,
-        success: true
+        success: true,
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al verificar rol';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Error desconocido al verificar rol';
       console.error('Service error in hasRole:', err);
       return {
         data: false,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
   }
@@ -433,8 +443,8 @@ export const {
   createUserProfile,
   resetPassword,
   updatePassword,
-  hasRole
+  hasRole,
 } = AuthService;
 
 // Exportar tipos
-export type { Profile, ProfileInsert, ProfileUpdate, LoginCredentials, RegisterData, ProfileData };
+export type { LoginCredentials, Profile, ProfileData, ProfileInsert, ProfileUpdate, RegisterData };

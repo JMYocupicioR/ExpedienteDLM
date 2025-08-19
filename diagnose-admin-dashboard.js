@@ -88,9 +88,9 @@ async function diagnoseDashboard() {
     // 5. Diagnóstico final
     console.log('\n🎯 DIAGNÓSTICO FINAL:');
     console.log('=====================================');
-    
+
     const shouldShowAdminSection = isAdminRole && profile.clinic_id;
-    
+
     if (shouldShowAdminSection) {
       console.log('✅ DEBERÍAS ver la sección "Pacientes de la Clínica"');
       console.log('\nPosibles razones por las que NO aparece:');
@@ -107,7 +107,7 @@ async function diagnoseDashboard() {
       console.log('❌ NO deberías ver la sección de admin porque:');
       if (!isAdminRole) console.log('   - No tienes rol de admin (actual:', profile.role, ')');
       if (!profile.clinic_id) console.log('   - No tienes clínica asignada');
-      
+
       console.log('\n🔧 Para solucionarlo:');
       if (!isAdminRole) {
         console.log('   Ejecuta este SQL:');
@@ -122,17 +122,19 @@ async function diagnoseDashboard() {
     console.log('\n🔍 Prueba de consulta directa:');
     const testQuery = await supabase
       .from('patients')
-      .select(`
-        id, 
-        full_name, 
-        phone, 
-        email, 
+      .select(
+        `
+        id,
+        full_name,
+        phone,
+        email,
         created_at,
         consultations (
           id,
           created_at
         )
-      `)
+      `
+      )
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -142,7 +144,6 @@ async function diagnoseDashboard() {
       console.log('✅ La consulta funciona correctamente');
       console.log('   Registros obtenidos:', testQuery.data?.length || 0);
     }
-
   } catch (error) {
     console.error('❌ Error general:', error);
   }

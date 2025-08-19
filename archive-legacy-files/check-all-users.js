@@ -11,7 +11,7 @@ async function checkUsers() {
   try {
     // Buscar en auth.users
     const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-    
+
     if (!authError && authUsers) {
       console.log('👤 Usuarios en auth.users:');
       console.log('========================');
@@ -30,7 +30,7 @@ async function checkUsers() {
 
     console.log('\n\n📋 Perfiles en la tabla profiles:');
     console.log('=================================');
-    
+
     if (!profilesError && profiles) {
       if (profiles.length === 0) {
         console.log('No hay perfiles en la base de datos');
@@ -66,7 +66,6 @@ async function checkUsers() {
       console.log('2. El email está registrado de forma diferente');
       console.log('\nIntenta iniciar sesión nuevamente para que se cree el perfil automáticamente');
     }
-
   } catch (error) {
     console.error('❌ Error:', error);
   }

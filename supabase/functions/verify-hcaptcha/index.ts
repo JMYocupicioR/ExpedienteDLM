@@ -1,0 +1,81 @@
+// Deno Deploy / Supabase Edge Function to verify hCaptcha token
+// Endpoint: /functions/v1/verify-hcaptcha
+// cspell:ignore Supabase hcaptcha supabase HCAPTCHA remoteip siteverify
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import '../global.d.ts';
+
+interface VerifyRequestBody {
+  token?: string;
+  sitekey?: string;
+}
+
+interface HCaptchaResponse {
+  success: boolean;
+  'error-codes'?: string[];
+  challenge_ts?: string;
+  hostname?: string;
+  credit?: boolean;
+  score?: number;
+  score_reason?: string[];
+}
+
+const VERIFY_URL = 'https://api.hcaptcha.com/siteverify';
+
+export default async function handler(req: Request): Promise<Response> {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    const { token, sitekey }: VerifyRequestBody = await req.json().catch(() => ({}));
+    if (!token) {
+      return new Response(JSON.stringify({ success: false, error: 'Missing token' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Secret must be configured in the function environment variables
+    const secret = Deno.env.get('HCAPTCHA_SECRET');
+    if (!secret) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Server captcha secret not configured' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Optionally get client IP
+    const forwardedFor = req.headers.get('x-forwarded-for') ?? undefined;
+    const clientIp = forwardedFor?.split(',')[0]?.trim();
+
+    const form = new URLSearchParams();
+    form.set('secret', secret);
+    form.set('response', token);
+    if (clientIp) form.set('remoteip', clientIp);
+    if (sitekey) form.set('sitekey', sitekey);
+
+    const verifyRes = await fetch(VERIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+
+    const verifyJson = (await verifyRes.json()) as HCaptchaResponse;
+
+    return new Response(JSON.stringify(verifyJson), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ success: false, error: (err as Error).message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
