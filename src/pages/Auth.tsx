@@ -32,22 +32,34 @@ export default function Auth() {
       const password = passwordInput.value;
       let strength = '';
       let strengthClass = '';
+      let strengthIcon = '';
 
       if (password.length === 0) {
         strength = '';
-      } else if (password.length < 6) {
-        strength = '✗ Muy débil';
-        strengthClass = 'text-red-400';
-      } else if (password.length < 8) {
-        strength = '⚠ Moderada';
-        strengthClass = 'text-yellow-400';
       } else {
-        strength = '✓ Fuerte';
-        strengthClass = 'text-green-400';
+        // Criterios de validación más detallados
+        const hasLength = password.length >= 8;
+        const hasUpper = /[A-Z]/.test(password);
+        const hasLower = /[a-z]/.test(password);
+        const hasNumber = /\d/.test(password);
+        const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+        
+        const score = [hasLength, hasUpper, hasLower, hasNumber, hasSpecial].filter(Boolean).length;
+        
+        if (score < 2) {
+          strength = '🔴 Muy débil';
+          strengthClass = 'text-red-400';
+        } else if (score < 4) {
+          strength = '🟡 Moderada';
+          strengthClass = 'text-yellow-400';
+        } else {
+          strength = '🟢 Fuerte';
+          strengthClass = 'text-green-400';
+        }
       }
 
       strengthDiv.textContent = strength;
-      strengthDiv.className = `text-xs ${strengthClass}`;
+      strengthDiv.className = `text-xs ${strengthClass} transition-all duration-300`;
     };
 
     const validatePasswordMatch = () => {
@@ -58,13 +70,13 @@ export default function Auth() {
 
       if (confirmPassword.length === 0) {
         matchDiv.textContent = '';
-        matchDiv.className = 'text-xs mt-1';
+        matchDiv.className = 'text-xs mt-1 transition-all duration-300';
       } else if (password === confirmPassword) {
-        matchDiv.textContent = '✓ Las contraseñas coinciden';
-        matchDiv.className = 'text-xs mt-1 text-green-400';
+        matchDiv.textContent = '🟢 Las contraseñas coinciden';
+        matchDiv.className = 'text-xs mt-1 text-green-400 transition-all duration-300';
       } else {
-        matchDiv.textContent = '✗ Las contraseñas no coinciden';
-        matchDiv.className = 'text-xs mt-1 text-red-400';
+        matchDiv.textContent = '🔴 Las contraseñas no coinciden';
+        matchDiv.className = 'text-xs mt-1 text-red-400 transition-all duration-300';
       }
     };
 
@@ -104,15 +116,15 @@ export default function Auth() {
     try {
       if (isLogin) {
         console.log('🔐 Logging in...');
-        // Requiere captcha cuando está habilitado en Supabase
-        if (!hcaptchaToken) {
-          setError('Por favor, verifica el captcha.');
-          return;
-        }
+        // TODO: hCaptcha deshabilitado temporalmente para testing
+        // if (!hcaptchaToken) {
+        //   setError('Por favor, verifica el captcha.');
+        //   return;
+        // }
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
-          options: { captchaToken: hcaptchaToken || undefined },
+          // options: { captchaToken: hcaptchaToken || undefined },
         });
 
         if (error) throw error;
@@ -125,28 +137,28 @@ export default function Auth() {
         setCheckingEmail(true);
 
         try {
-          // Verificar hCaptcha (requerido para signup)
-          if (!hcaptchaToken) {
-            setError('Por favor, verifica el captcha.');
-            return;
-          }
+          // TODO: hCaptcha deshabilitado temporalmente para testing
+          // if (!hcaptchaToken) {
+          //   setError('Por favor, verifica el captcha.');
+          //   return;
+          // }
 
-          // Llamar a función Edge para validar el token del lado del servidor
-          const { data: verifyJson, error: verifyError } = await supabase.functions.invoke(
-            'verify-hcaptcha',
-            {
-              body: {
-                token: hcaptchaToken,
-                sitekey: '5e0e8956-46b8-4a76-a756-b5d0cdc02d24',
-              },
-            }
-          );
-          if (verifyError || !verifyJson?.success) {
-            setError('Verificación de captcha falló. Intenta nuevamente.');
-            return;
-          }
+          // TODO: Edge function verificación deshabilitada temporalmente
+          // const { data: verifyJson, error: verifyError } = await supabase.functions.invoke(
+          //   'verify-hcaptcha',
+          //   {
+          //     body: {
+          //       token: hcaptchaToken,
+          //       sitekey: '5e0e8956-46b8-4a76-a756-b5d0cdc02d24',
+          //     },
+          //   }
+          // );
+          // if (verifyError || !verifyJson?.success) {
+          //   setError('Verificación de captcha falló. Intenta nuevamente.');
+          //   return;
+          // }
 
-          // NUEVO FLUJO: Solo validar el email sin crear usuario
+          // NUEVO FLUJO: Validar, crear usuario y enviar email de verificación
           console.log('🔍 Validando formato de email:', email);
 
           // Validación básica del email
@@ -223,22 +235,40 @@ export default function Auth() {
             return;
           }
 
-          console.log('✅ Email disponible, redirigiendo al cuestionario...');
+          console.log('📧 Creando usuario y enviando email de verificación...');
 
-          // Guardar datos temporalmente en sessionStorage (más seguro que crear usuario)
+          // Crear usuario en Supabase Auth y enviar email de verificación
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: email.toLowerCase().trim(),
+            password: password,
+            options: {
+              emailRedirectTo: `${window.location.origin}/signup-questionnaire`,
+              data: {
+                email_confirmed: false,
+                registration_step: 'email_verification'
+              }
+            }
+          });
+
+          if (signUpError) {
+            throw signUpError;
+          }
+
+          console.log('✅ Usuario creado, email de verificación enviado');
+
+          // Guardar datos temporalmente para el cuestionario
           sessionStorage.setItem(
             'pendingRegistration',
             JSON.stringify({
               email: email.toLowerCase().trim(),
               password: password,
-              confirmPassword: confirmPassword,
-              hcaptchaToken,
+              userId: signUpData.user?.id,
               timestamp: Date.now(),
             })
           );
 
-          // Redirigir al cuestionario SIN crear usuario
-          navigate('/signup-questionnaire', {
+          // Redirigir a página de verificación de email
+          navigate('/email-verification', {
             state: {
               email: email.toLowerCase().trim(),
               fromRegistration: true,
@@ -288,9 +318,12 @@ export default function Auth() {
               </div>
 
               {error && (
-                <div className='bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center text-sm mb-4'>
-                  <AlertCircle className='h-5 w-5 mr-2 flex-shrink-0' />
-                  {error}
+                <div className='bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-start text-sm mb-4 animate-in slide-in-from-top-2 duration-300'>
+                  <AlertCircle className='h-5 w-5 mr-3 flex-shrink-0 mt-0.5' />
+                  <div>
+                    <div className='font-medium mb-1'>Error de Inicio de Sesión</div>
+                    <div className='text-red-200'>{error}</div>
+                  </div>
                 </div>
               )}
 
@@ -334,13 +367,13 @@ export default function Auth() {
                     <Lock className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
-                {/* hCaptcha Widget */}
-                <div className='mt-2'>
+                {/* TODO: hCaptcha Widget - Deshabilitado temporalmente */}
+                {/* <div className='mt-2'>
                   <div
                     className='h-captcha'
                     data-sitekey='5e0e8956-46b8-4a76-a756-b5d0cdc02d24'
                   ></div>
-                </div>
+                </div> */}
               </div>
 
               <div className='text-right'>
@@ -348,20 +381,27 @@ export default function Auth() {
                   ¿Olvidaste tu contraseña?
                 </a>
               </div>
-              {/* hCaptcha Widget (login) */}
-              <div className='mt-2'>
+              {/* TODO: hCaptcha Widget (login) - Deshabilitado temporalmente */}
+              {/* <div className='mt-2'>
                 <div
                   className='h-captcha'
                   data-sitekey='5e0e8956-46b8-4a76-a756-b5d0cdc02d24'
                 ></div>
-              </div>
+              </div> */}
 
               <button
                 type='submit'
                 disabled={loading}
-                className='w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg'
+                className='w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center'
               >
-                {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+                {loading ? (
+                  <>
+                    <div className='animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2'></div>
+                    Iniciando sesión...
+                  </>
+                ) : (
+                  'Iniciar Sesión'
+                )}
               </button>
 
               {/* OAuth Buttons for Login */}
@@ -383,9 +423,12 @@ export default function Auth() {
               </div>
 
               {error && (
-                <div className='bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-center text-sm mb-4'>
-                  <AlertCircle className='h-5 w-5 mr-2 flex-shrink-0' />
-                  {error}
+                <div className='bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg flex items-start text-sm mb-4 animate-in slide-in-from-top-2 duration-300'>
+                  <AlertCircle className='h-5 w-5 mr-3 flex-shrink-0 mt-0.5' />
+                  <div>
+                    <div className='font-medium mb-1'>Error de Registro</div>
+                    <div className='text-red-200'>{error}</div>
+                  </div>
                 </div>
               )}
 
@@ -520,17 +563,23 @@ export default function Auth() {
               <button
                 type='submit'
                 disabled={loading || checkingEmail}
-                className='w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center'
+                className='w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center transform hover:scale-[1.02] active:scale-[0.98]'
               >
                 {checkingEmail ? (
                   <>
                     <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
-                    Verificando email...
+                    <span className='animate-pulse'>Verificando email...</span>
                   </>
                 ) : loading ? (
-                  'Iniciando registro...'
+                  <>
+                    <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
+                    <span className='animate-pulse'>Iniciando registro...</span>
+                  </>
                 ) : (
-                  'Comenzar Registro →'
+                  <>
+                    Comenzar Registro 
+                    <span className='ml-2 transition-transform group-hover:translate-x-1'>→</span>
+                  </>
                 )}
               </button>
 

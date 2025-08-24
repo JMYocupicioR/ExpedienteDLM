@@ -345,9 +345,30 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
     }
   };
 
+  const setActiveClinicWithSideEffect = async (clinic: Clinic | null) => {
+    try {
+      if (clinic) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
+        const { error } = await supabase
+          .from('profiles')
+          .update({ clinic_id: clinic.id })
+          .eq('id', user.id);
+
+        if (error) throw error;
+      }
+      setActiveClinic(clinic);
+    } catch (err) {
+      console.error('Error updating active clinic in profile:', err);
+    }
+  };
+
   const value: ClinicContextType = {
     activeClinic,
-    setActiveClinic,
+    setActiveClinic: setActiveClinicWithSideEffect,
     userClinics,
     isLoading,
     refreshUserClinics,

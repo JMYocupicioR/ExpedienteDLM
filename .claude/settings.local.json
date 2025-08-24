@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(supabase db reset:*)",
+      "Bash(psql:*)",
+      "Bash(grep:*)",
+      "Bash(npx eslint:*)",
+      "Bash(supabase db push:*)",
+      "Bash(supabase sql:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

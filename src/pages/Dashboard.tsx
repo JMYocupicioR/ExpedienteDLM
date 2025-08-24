@@ -3,6 +3,7 @@ import GenerateInvitationLinkModal from '@/components/GenerateInvitationLinkModa
 import QuickStartModal from '@/components/QuickStartModal';
 import { Button } from '@/components/ui/button';
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { Appointment, appointmentService } from '@/lib/services/appointment-service';
 import { supabase } from '@/lib/supabase';
 import { addDays, format, isToday, isTomorrow } from 'date-fns';
@@ -27,9 +28,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import ActivityLogViewer from '@/components/Logs/ActivityLogViewer';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { activeClinic, userClinics, isLoading: isClinicLoading } = useClinic();
   const [user, setUser] = useState<{ email?: string } | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -83,34 +86,25 @@ const Dashboard = () => {
 
         setUser(user);
         if (user) {
-          // Cargar perfil para verificar si es admin
+          // El rol y la clínica ahora vienen de useClinic,
+          // pero mantenemos la carga del perfil para otros datos.
           const { data: profile } = await supabase
             .from('profiles')
-            .select('*, clinic_id, role')
+            .select('*')
             .eq('id', user.id)
             .single();
 
           if (cancelled) return;
           setUserProfile(profile);
 
-          // Verificar si es admin (usando clinic_members)
-          if (
-            profile?.clinic_id &&
-            (profile?.role === 'admin_staff' || profile?.role === 'super_admin')
-          ) {
-            const { data: rel } = await supabase
-              .from('clinic_members')
-              .select('role')
-              .eq('user_id', user.id)
-              .eq('clinic_id', profile.clinic_id)
-              .maybeSingle();
+          // La verificación de admin ahora puede usar userClinics
+          const currentMembership = userClinics.find(m => m.clinic_id === activeClinic?.id);
+          setIsAdmin(currentMembership?.role === 'admin' || profile?.role === 'super_admin');
 
-            if (cancelled) return;
-            setIsAdmin(rel?.role === 'admin' || profile?.role === 'super_admin');
+          if (activeClinic) {
+            await loadDashboardData(activeClinic.id);
+            await loadUpcomingAppointments(user.id, activeClinic.id);
           }
-
-          await loadDashboardData();
-          await loadUpcomingAppointments(user.id);
         }
       } catch (error) {
         console.error('Error getting user:', error);
@@ -119,30 +113,32 @@ const Dashboard = () => {
       }
     };
 
-    bootstrap();
+    if (!isClinicLoading) {
+      bootstrap();
+    }
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, isClinicLoading, activeClinic, userClinics]);
 
   useEffect(() => {
-    if (searchTerm.length > 2) {
-      performQuickSearch();
+    if (searchTerm.length > 2 && activeClinic) {
+      performQuickSearch(activeClinic.id);
     } else {
       setQuickSearchResults([]);
       setShowQuickSearch(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
+  }, [searchTerm, activeClinic]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (clinicId: string) => {
     try {
-      // Cargar estadísticas reales
+      // Cargar estadísticas reales filtradas por clínica
       const [patientsResult, consultationsResult, prescriptionsResult, recentPatientsResult] =
         await Promise.all([
-          supabase.from('patients').select('id', { count: 'exact' }),
-          supabase.from('consultations').select('id', { count: 'exact' }),
-          supabase.from('prescriptions').select('id', { count: 'exact' }),
+          supabase.from('patients').select('id', { count: 'exact' }).eq('clinic_id', clinicId),
+          supabase.from('consultations').select('id', { count: 'exact' }).eq('clinic_id', clinicId),
+          supabase.from('prescriptions').select('id', { count: 'exact' }).eq('clinic_id', clinicId),
           supabase
             .from('patients')
             .select(
@@ -158,6 +154,7 @@ const Dashboard = () => {
             )
           `
             )
+            .eq('clinic_id', clinicId)
             .order('created_at', { ascending: false })
             .limit(isAdmin ? 10 : 5),
         ]);
@@ -167,6 +164,7 @@ const Dashboard = () => {
       const todayConsultationsResult = await supabase
         .from('consultations')
         .select('id', { count: 'exact' })
+        .eq('clinic_id', clinicId)
         .gte('created_at', `${today}T00:00:00`)
         .lt('created_at', `${today}T23:59:59`);
 
@@ -197,7 +195,7 @@ const Dashboard = () => {
     }
   };
 
-  const loadUpcomingAppointments = async (userId: string) => {
+  const loadUpcomingAppointments = async (userId: string, clinicId: string) => {
     try {
       setLoadingAppointments(true);
 
@@ -208,7 +206,8 @@ const Dashboard = () => {
       const appointments = await appointmentService.getAppointmentsByDateRange(
         format(today, 'yyyy-MM-dd'),
         format(nextWeek, 'yyyy-MM-dd'),
-        userId
+        userId,
+        clinicId
       );
 
       // Filtrar solo citas pendientes y confirmadas
@@ -241,11 +240,12 @@ const Dashboard = () => {
     }
   };
 
-  const performQuickSearch = async () => {
+  const performQuickSearch = async (clinicId: string) => {
     try {
       const { data, error } = await supabase
         .from('patients')
         .select('id, full_name, phone, email')
+        .eq('clinic_id', clinicId)
         .or(
           `full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`
         )
@@ -300,7 +300,9 @@ const Dashboard = () => {
 
   const handleNewPatientCreated = (newPatient: { id: string }) => {
     // Recargar datos del dashboard para actualizar estadísticas
-    loadDashboardData();
+    if (activeClinic) {
+      loadDashboardData(activeClinic.id);
+    }
 
     // Opcional: Navegar al expediente del nuevo paciente
     navigate(`/expediente/${newPatient.id}`);
@@ -505,21 +507,13 @@ const Dashboard = () => {
           </div>
         </section>
 
-        {/* Clinic Status Section - Solo para doctores y personal de salud */}
-        {userProfile?.role &&
-          ['doctor', 'health_staff', 'admin_staff'].includes(userProfile.role) && (
-            <section className='section'>
-              <ClinicStatusCard
-                onStatusUpdate={() => {
-                  // Recargar datos del dashboard cuando cambie el estado
-                  loadDashboardData();
-                }}
-              />
-            </section>
-          )}
+        {/* Clinic Status Section - Ahora controlado por el contexto */}
+        <section className='section'>
+          <ClinicStatusCard />
+        </section>
 
         {/* Admin Section - Lista de Pacientes */}
-        {isAdmin && (
+        {isAdmin && activeClinic && (
           <section className='section'>
             <div className='card'>
               <div className='flex items-center justify-between mb-6'>
@@ -927,6 +921,9 @@ const Dashboard = () => {
             )}
           </div>
         </section>
+
+        {/* Visor de Logs de Actividad */}
+        <ActivityLogViewer />
       </main>
 
       {/* Modal de Nuevo Paciente */}

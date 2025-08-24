@@ -12,8 +12,7 @@ import {
   User
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ClinicStaffService } from '@/lib/services/clinic-staff-service';
-import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 
 interface ClinicStatusCardProps {
   onStatusUpdate?: () => void;
@@ -62,36 +61,19 @@ const statusConfig = {
 };
 
 export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardProps) {
-  const { user } = useAuth();
-  const [clinicStatus, setClinicStatus] = useState<ClinicStatus>({ hasRelationship: false });
-  const [loading, setLoading] = useState(true);
+  const { activeClinic, userClinics, isLoading, error, refreshUserClinics } = useClinic();
   const [sendingRequest, setSendingRequest] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const loadClinicStatus = async () => {
-    if (!user?.id) return;
-
-    setLoading(true);
-    try {
-      const status = await ClinicStaffService.getUserClinicStatus(user.id);
-      setClinicStatus(status);
-    } catch (error) {
-      console.error('Error loading clinic status:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadClinicStatus();
-  }, [user?.id]);
+  const currentMembership = activeClinic 
+    ? userClinics.find(m => m.clinic_id === activeClinic.id) 
+    : null;
 
   const handleSendRequest = async () => {
-    if (!clinicStatus.clinic?.id) {
-      // Si no hay clínica, redirigir a búsqueda o registro
+    if (!activeClinic) {
       setMessage({
         type: 'error',
-        text: 'Primero debes registrarte en una clínica o buscar clínicas disponibles'
+        text: 'No hay una clínica activa para reenviar la solicitud.'
       });
       return;
     }
@@ -100,23 +82,23 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
     setMessage(null);
 
     try {
-      const result = await ClinicStaffService.resendClinicRequest(
-        clinicStatus.clinic.id,
-        'doctor' // Asumiendo que el perfil es de doctor
-      );
+      // Esta lógica podría necesitar una función dedicada en el contexto
+      // pero por ahora, la mantenemos simple.
+      const { error } = await supabase.from('clinic_user_relationships')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .eq('user_id', currentMembership!.user_id)
+        .eq('clinic_id', activeClinic.id);
 
-      if (result.success) {
-        setMessage({ type: 'success', text: result.message });
-        // Recargar el estado después de enviar
-        await loadClinicStatus();
-        onStatusUpdate?.();
-      } else {
-        setMessage({ type: 'error', text: result.message });
-      }
+      if (error) throw error;
+
+      setMessage({ type: 'success', text: "Solicitud reenviada con éxito." });
+      await refreshUserClinics();
+      onStatusUpdate?.();
+
     } catch (error) {
       setMessage({
         type: 'error',
-        text: 'Error al enviar la solicitud. Inténtalo de nuevo.'
+        text: 'Error al reenviar la solicitud. Inténtalo de nuevo.'
       });
     } finally {
       setSendingRequest(false);
@@ -137,7 +119,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
         <div className="flex items-center justify-center">
@@ -149,7 +131,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
   }
 
   // Usuario sin relación con clínica
-  if (!clinicStatus.hasRelationship) {
+  if (!activeClinic || !currentMembership) {
     return (
       <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
         <div className="flex items-start space-x-4">
@@ -190,7 +172,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
     );
   }
 
-  const currentStatus = clinicStatus.status!;
+  const currentStatus = currentMembership.role === 'pending_approval' ? 'pending' : 'approved'; // Simplificación
   const config = statusConfig[currentStatus];
   const StatusIcon = config.icon;
 
@@ -204,10 +186,10 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
         <div className="flex-1">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-semibold text-white">
-              Estado en {clinicStatus.clinic?.name}
+              Estado en {activeClinic.name}
             </h3>
             <button
-              onClick={loadClinicStatus}
+              onClick={refreshUserClinics}
               className="p-1 text-gray-400 hover:text-white transition-colors"
               title="Actualizar estado"
             >
@@ -224,48 +206,27 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
           
           {/* Información adicional según el estado */}
           <div className="mt-4 space-y-2 text-sm">
-            {clinicStatus.clinic && (
+            {activeClinic.address && (
               <div className="flex items-center text-gray-400">
                 <Building className="h-4 w-4 mr-2" />
-                <span className="capitalize">{clinicStatus.clinic.type}</span>
+                <span>{activeClinic.address}</span>
               </div>
             )}
             
-            {clinicStatus.role_in_clinic && (
+            {currentMembership.role && (
               <div className="flex items-center text-gray-400">
                 <User className="h-4 w-4 mr-2" />
                 <span className="capitalize">
-                  {clinicStatus.role_in_clinic === 'doctor' ? 'Médico' : 'Personal Administrativo'}
+                  {currentMembership.role === 'doctor' ? 'Médico' : 
+                   currentMembership.role === 'admin' ? 'Administrador' : 'Personal'}
                 </span>
               </div>
             )}
             
-            {clinicStatus.created_at && (
+            {currentMembership.joined_at && (
               <div className="flex items-center text-gray-400">
                 <Calendar className="h-4 w-4 mr-2" />
-                <span>Solicitud enviada: {formatDate(clinicStatus.created_at)}</span>
-              </div>
-            )}
-            
-            {clinicStatus.approved_at && currentStatus === 'approved' && (
-              <div className="flex items-center text-green-400">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                <span>Aprobado: {formatDate(clinicStatus.approved_at)}</span>
-              </div>
-            )}
-            
-            {clinicStatus.rejected_at && currentStatus === 'rejected' && (
-              <div className="flex items-center text-red-400">
-                <XCircle className="h-4 w-4 mr-2" />
-                <span>Rechazado: {formatDate(clinicStatus.rejected_at)}</span>
-              </div>
-            )}
-            
-            {clinicStatus.rejection_reason && currentStatus === 'rejected' && (
-              <div className="mt-3 p-3 bg-red-900 border border-red-700 rounded-lg">
-                <p className="text-red-300 text-sm">
-                  <strong>Motivo del rechazo:</strong> {clinicStatus.rejection_reason}
-                </p>
+                <span>Miembro desde: {formatDate(currentMembership.joined_at)}</span>
               </div>
             )}
           </div>

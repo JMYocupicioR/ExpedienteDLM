@@ -222,37 +222,28 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
 
         {/* User Profile Section */}
         <div className="p-4 border-b border-gray-800">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
-              <User className="h-5 w-5 text-white" />
-            </div>
+          <Link to="/profile" className="flex items-center space-x-3 group">
+            <img
+              src={profile?.avatar_url || 'https://avatar.vercel.sh/user.svg'}
+              alt={profile?.full_name || user?.email}
+              className="w-10 h-10 rounded-full object-cover border-2 border-gray-700 group-hover:border-cyan-400 transition-colors"
+            />
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-medium truncate">
-                  {profile?.full_name || 'Usuario'}
-                </p>
-                <p className="text-gray-400 text-xs capitalize">
-                  {profile?.role === 'doctor' ? 'Médico' : 
-                   profile?.role === 'health_staff' ? 'Personal de Salud' :
-                   profile?.role === 'admin_staff' ? 'Administrador' :
-                   profile?.role === 'patient' ? 'Paciente' : 
-                   profile?.role}
-                </p>
+                <p className="font-semibold text-white truncate">{profile?.full_name || 'Usuario'}</p>
+                <p className="text-sm text-gray-400 truncate">{profile?.role || user?.email}</p>
               </div>
             )}
-          </div>
-          
-          {/* Clinic Switcher */}
-          {!isCollapsed && (profile?.role === 'doctor' || profile?.role === 'admin_staff' || profile?.role === 'super_admin') && (
-            <div className="mt-3 px-1">
-              <div className="text-xs text-gray-500 mb-2 px-2">Clínica Activa</div>
-              <ClinicSwitcher />
-            </div>
-          )}
+          </Link>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+        {/* Clinic Switcher */}
+        <div className="border-b border-gray-800">
+          <ClinicSwitcher isCollapsed={isCollapsed} />
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-2 py-4 space-y-2 overflow-y-auto">
           {navItems.map((item) => (
             <NavItemComponent
               key={item.id}

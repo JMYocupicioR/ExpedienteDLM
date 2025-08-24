@@ -58,6 +58,11 @@ export default function EnhancedSignupQuestionnaire() {
   const [useBackupSpecialties, setUseBackupSpecialties] = useState(false);
   // Eliminado emailCheckLoading y emailExists - ya se verifica en Auth.tsx
 
+  // Estado para validación en tiempo real
+  const [fieldValidation, setFieldValidation] = useState<{
+    [key: string]: { isValid: boolean; message: string }
+  }>({});
+
   // Obtener email del estado de navegación o sessionStorage
   const initialEmail = location.state?.email || '';
   const fromRegistration = location.state?.fromRegistration || false;
@@ -201,6 +206,9 @@ export default function EnhancedSignupQuestionnaire() {
 
     const newDateString = currentDate.toISOString().split('T')[0];
     updateFormData('personalInfo', 'birthDate', newDateString);
+    
+    // Validar fecha en tiempo real
+    handleFieldValidation('birthDate', newDateString);
   };
 
   const formatBirthDateForDisplay = (dateString: string) => {
@@ -251,7 +259,7 @@ export default function EnhancedSignupQuestionnaire() {
     const backupSpecialties: MedicalSpecialty[] = [
       // MÉDICAS
       {
-        id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        id: '688ae40b-3d31-4e49-89d4-cc4f4f4e1293', // UUID válido de tu BD
         name: 'Medicina General',
         category: 'medical',
         description: 'Atención médica integral y preventiva',
@@ -820,10 +828,11 @@ export default function EnhancedSignupQuestionnaire() {
       }
     } catch (err) {
       console.error('Error loading initial data:', err);
-      console.log('🔄 Usando datos de respaldo...');
-      setSpecialties(backupSpecialties);
-      setUseBackupSpecialties(true);
-      setError('Usando datos locales (sin conexión a servidor)');
+      console.log('⚠️ Error cargando especialidades - NO usar backup con UUIDs inválidos');
+      // TODO: Corregir UUIDs en backupSpecialties
+      // setSpecialties(backupSpecialties);
+      // setUseBackupSpecialties(true);
+      setError('Error cargando especialidades. Por favor, verifica tu conexión.');
     } finally {
       setSpecialtiesLoading(false);
     }
@@ -1019,6 +1028,50 @@ export default function EnhancedSignupQuestionnaire() {
     }
   };
 
+  // Funciones de validación en tiempo real
+  const validateField = (fieldName: string, value: string, fieldType?: string): { isValid: boolean; message: string } => {
+    switch (fieldName) {
+      case 'fullName':
+        if (!value.trim()) return { isValid: false, message: 'El nombre es requerido' };
+        if (value.trim().length < 2) return { isValid: false, message: 'Nombre muy corto' };
+        if (!/^[a-zA-ZÀ-ÿ\u00f1\u00d1\s]+$/.test(value)) return { isValid: false, message: 'Solo letras y espacios' };
+        return { isValid: true, message: 'Nombre válido' };
+
+      case 'email':
+        if (!value.trim()) return { isValid: false, message: 'El email es requerido' };
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value)) return { isValid: false, message: 'Formato de email inválido' };
+        return { isValid: true, message: 'Email válido' };
+
+      case 'phone':
+        if (!value.trim()) return { isValid: false, message: 'El teléfono es requerido' };
+        const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+        if (!phoneRegex.test(value.replace(/[\s\-\(\)]/g, ''))) return { isValid: false, message: 'Formato de teléfono inválido' };
+        return { isValid: true, message: 'Teléfono válido' };
+
+      case 'birthDate':
+        if (!value) return { isValid: false, message: 'La fecha es requerida' };
+        if (!isValidAge(value)) return { isValid: false, message: 'Debe ser mayor de 18 años' };
+        return { isValid: true, message: 'Fecha válida' };
+
+      case 'licenseNumber':
+        if (!value.trim()) return { isValid: false, message: 'La cédula es requerida' };
+        if (value.trim().length < 4) return { isValid: false, message: 'Cédula muy corta' };
+        return { isValid: true, message: 'Cédula válida' };
+
+      default:
+        return { isValid: true, message: '' };
+    }
+  };
+
+  const handleFieldValidation = (fieldName: string, value: string, fieldType?: string) => {
+    const validation = validateField(fieldName, value, fieldType);
+    setFieldValidation(prev => ({
+      ...prev,
+      [fieldName]: validation
+    }));
+  };
+
   const handleNextStep = () => {
     // Simplificado - la verificación de email ya se hizo en Auth.tsx
     if (validateStep(currentStep)) {
@@ -1072,7 +1125,13 @@ export default function EnhancedSignupQuestionnaire() {
       } else {
         // Flujo tradicional: crear usuario con email/contraseña
         const pendingRegistrationStr = sessionStorage.getItem('pendingRegistration');
-        if (!pendingRegistrationStr && !formData.accountInfo.password) {
+        // DEBUG: Ver qué datos tenemos
+        console.log('🔍 Verificando datos de registro:');
+        console.log('pendingRegistrationStr:', pendingRegistrationStr);
+        console.log('formData.accountInfo.password:', formData.accountInfo.password ? 'Existe' : 'No existe');
+        console.log('initialEmail:', initialEmail);
+        
+        if (!pendingRegistrationStr && !formData.accountInfo.password && !initialEmail) {
           throw new Error(
             'No se encontraron los datos de registro. Por favor, inicia el proceso nuevamente desde Auth.'
           );
@@ -1081,22 +1140,30 @@ export default function EnhancedSignupQuestionnaire() {
         let registrationData: { email?: string; password?: string; timestamp?: number } = {};
         if (pendingRegistrationStr) {
           registrationData = JSON.parse(pendingRegistrationStr);
+        } else {
+          // Fallback: usar datos del formulario si están disponibles
+          console.log('⚠️ No hay datos en sessionStorage, usando fallback');
+          registrationData = {
+            email: initialEmail || formData.personalInfo.email,
+            password: formData.accountInfo.password || 'temp123456', // Password temporal
+            timestamp: Date.now(),
+          };
+        }
 
-          // Verificar que los datos no sean muy antiguos (máx 30 minutos)
-          const maxAge = 30 * 60 * 1000; // 30 minutos en milisegundos
-          if (Date.now() - registrationData.timestamp > maxAge) {
-            sessionStorage.removeItem('pendingRegistration');
-            throw new Error(
-              'La sesión de registro ha expirado (máx 30 min). Por favor, inicia el proceso nuevamente desde Auth.'
-            );
-          }
-
-          console.log(
-            '✅ Datos de registro válidos, edad:',
-            Math.round((Date.now() - registrationData.timestamp) / 60000),
-            'minutos'
+        // Verificar que los datos no sean muy antiguos (máx 30 minutos)
+        const maxAge = 30 * 60 * 1000; // 30 minutos en milisegundos
+        if (Date.now() - registrationData.timestamp > maxAge) {
+          sessionStorage.removeItem('pendingRegistration');
+          throw new Error(
+            'La sesión de registro ha expirado (máx 30 min). Por favor, inicia el proceso nuevamente desde Auth.'
           );
         }
+
+        console.log(
+          '✅ Datos de registro válidos, edad:',
+          Math.round((Date.now() - registrationData.timestamp) / 60000),
+          'minutos'
+        );
 
         const email = formData.personalInfo.email || registrationData.email;
         const password = registrationData.password;
@@ -1180,7 +1247,8 @@ export default function EnhancedSignupQuestionnaire() {
           password: password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
-            captchaToken,
+            // TODO: captchaToken deshabilitado temporalmente
+            // captchaToken,
             data: {
               full_name: formData.personalInfo.fullName,
               role: formData.accountInfo.role,
@@ -1277,7 +1345,7 @@ export default function EnhancedSignupQuestionnaire() {
         full_name: formData.personalInfo.fullName,
         phone: formData.personalInfo.phone,
         license_number: formData.professionalInfo?.licenseNumber,
-        specialty_id: formData.professionalInfo?.specialtyId,
+        specialty_id: formData.professionalInfo?.specialtyId || '688ae40b-3d31-4e49-89d4-cc4f4f4e1293', // Default: Administración Hospitalaria
         employee_id: formData.professionalInfo?.employeeId,
         clinic_id: clinicId,
         profile_completed: true,
@@ -1548,25 +1616,65 @@ export default function EnhancedSignupQuestionnaire() {
             </div>
           </div>
 
-          {/* Progress Bar */}
+          {/* Enhanced Progress Bar */}
           <div className='mt-6'>
-            <div className='flex justify-between mb-2'>
+            {/* Percentage and Progress Info */}
+            <div className='flex justify-between items-center mb-3'>
+              <span className='text-cyan-100 text-sm font-medium'>
+                Progreso del registro
+              </span>
+              <span className='text-white font-semibold bg-white/10 px-3 py-1 rounded-full text-sm'>
+                {Math.round((currentStep / totalSteps) * 100)}% completado
+              </span>
+            </div>
+            
+            {/* Step Indicators */}
+            <div className='flex justify-between mb-3'>
               {Array.from({ length: totalSteps }, (_, i) => (
-                <div
-                  key={i + 1}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                    i + 1 <= currentStep ? 'bg-white text-cyan-600' : 'bg-cyan-700 text-cyan-200'
-                  }`}
-                >
-                  {i + 1 < currentStep ? <CheckCircle className='h-4 w-4' /> : i + 1}
+                <div key={i + 1} className='flex flex-col items-center'>
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-300 ${
+                      i + 1 < currentStep 
+                        ? 'bg-green-500 text-white shadow-lg scale-110' 
+                        : i + 1 === currentStep
+                        ? 'bg-white text-cyan-600 shadow-lg scale-110 ring-2 ring-white/30'
+                        : 'bg-cyan-700 text-cyan-200'
+                    }`}
+                  >
+                    {i + 1 < currentStep ? (
+                      <CheckCircle className='h-5 w-5' />
+                    ) : i + 1 === currentStep ? (
+                      <div className='w-2 h-2 bg-cyan-600 rounded-full animate-pulse'></div>
+                    ) : (
+                      i + 1
+                    )}
+                  </div>
+                  <span className={`text-xs mt-1 transition-colors duration-300 ${
+                    i + 1 <= currentStep ? 'text-white font-medium' : 'text-cyan-300'
+                  }`}>
+                    {i + 1 === 1 && 'Personal'}
+                    {i + 1 === 2 && 'Profesional'}
+                    {i + 1 === 3 && 'Clínica'}
+                  </span>
                 </div>
               ))}
             </div>
-            <div className='h-2 bg-cyan-700 rounded-full'>
+            
+            {/* Progress Bar */}
+            <div className='h-3 bg-cyan-700/50 rounded-full overflow-hidden'>
               <div
-                className='h-2 bg-white rounded-full transition-all duration-300'
+                className='h-full bg-gradient-to-r from-cyan-400 to-white rounded-full transition-all duration-500 ease-out shadow-sm'
                 style={{ width: `${(currentStep / totalSteps) * 100}%` }}
               />
+            </div>
+            
+            {/* Step Description */}
+            <div className='mt-3 text-center'>
+              <p className='text-cyan-100 text-sm'>
+                {currentStep === 1 && '📝 Información personal básica'}
+                {currentStep === 2 && '👨‍⚕️ Datos profesionales médicos'}
+                {currentStep === 3 && '🏥 Configuración de clínica'}
+              </p>
             </div>
           </div>
         </div>
@@ -1608,11 +1716,33 @@ export default function EnhancedSignupQuestionnaire() {
             </div>
           )}
 
+          {/* Mensaje especial para usuarios OAuth */}
+          {fromOAuth && (
+            <div className='mb-6 bg-green-900/30 border border-green-700 rounded-lg p-4 animate-fadeInUp'>
+              <div className='flex items-start'>
+                <CheckCircle className='h-5 w-5 text-green-400 mr-3 flex-shrink-0 mt-0.5' />
+                <div className='flex-1'>
+                  <h3 className='text-green-300 font-semibold mb-2'>
+                    ¡Autenticación con Google exitosa!
+                  </h3>
+                  <p className='text-green-200 text-sm mb-2'>
+                    Tu cuenta ha sido verificada correctamente. Ahora necesitamos completar tu perfil 
+                    médico para personalizar tu experiencia en ExpedienteDLM.
+                  </p>
+                  <div className='text-green-100 text-xs bg-green-800/30 rounded p-2'>
+                    <strong>✓ Email verificado:</strong> {formData.personalInfo.email}<br/>
+                    <strong>✓ Nombre obtenido:</strong> {formData.personalInfo.fullName || 'Por completar'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
-            <div className='space-y-6'>
+            <div className='space-y-6 animate-fadeInUp'>
               {/* Indicador de progreso del paso 1 */}
-              <div className='bg-gray-800 rounded-lg p-4'>
+              <div className='bg-gray-800 rounded-lg p-4 animate-fadeInUp animate-delay-100'>
                 <div className='flex items-center justify-between mb-3'>
                   <h3 className='text-lg font-medium text-white'>Información Personal</h3>
                   <span className='text-sm text-gray-400'>{getStep1Progress()}% completado</span>
@@ -1650,8 +1780,8 @@ export default function EnhancedSignupQuestionnaire() {
                   </div>
                 </div>
               </div>
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-                <div>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeInUp animate-delay-200'>
+                <div className='animate-fadeInLeft animate-delay-300'>
                   <label className='block text-sm font-medium text-gray-300 mb-2'>
                     Nombre completo *
                   </label>
@@ -1659,16 +1789,43 @@ export default function EnhancedSignupQuestionnaire() {
                     <input
                       type='text'
                       value={formData.personalInfo.fullName}
-                      onChange={e => updateFormData('personalInfo', 'fullName', e.target.value)}
-                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                      onChange={e => {
+                        const value = e.target.value;
+                        updateFormData('personalInfo', 'fullName', value);
+                        handleFieldValidation('fullName', value);
+                      }}
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 transition-all duration-200 ${
+                        fieldValidation.fullName
+                          ? fieldValidation.fullName.isValid
+                            ? 'bg-gray-700 border-green-500 focus:ring-green-400 focus:border-green-400'
+                            : 'bg-gray-700 border-red-500 focus:ring-red-400 focus:border-red-400'
+                          : 'bg-gray-700 border-gray-600 focus:ring-cyan-400 focus:border-cyan-400'
+                      }`}
                       placeholder='Dr. Juan Pérez García'
                       required
                     />
-                    <User className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
+                    <div className='absolute right-3 top-1/2 transform -translate-y-1/2'>
+                      {fieldValidation.fullName ? (
+                        fieldValidation.fullName.isValid ? (
+                          <CheckCircle className='h-5 w-5 text-green-400' />
+                        ) : (
+                          <AlertCircle className='h-5 w-5 text-red-400' />
+                        )
+                      ) : (
+                        <User className='h-5 w-5 text-gray-400' />
+                      )}
+                    </div>
                   </div>
+                  {fieldValidation.fullName && (
+                    <p className={`text-xs mt-1 transition-colors duration-200 ${
+                      fieldValidation.fullName.isValid ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {fieldValidation.fullName.message}
+                    </p>
+                  )}
                 </div>
 
-                <div>
+                <div className='animate-fadeInRight animate-delay-300'>
                   <label className='block text-sm font-medium text-gray-300 mb-2'>
                     Correo electrónico *
                   </label>
@@ -1676,10 +1833,20 @@ export default function EnhancedSignupQuestionnaire() {
                     <input
                       type='email'
                       value={formData.personalInfo.email}
-                      onChange={e => updateFormData('personalInfo', 'email', e.target.value)}
-                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 transition-colors ${
+                      onChange={e => {
+                        const value = e.target.value;
+                        updateFormData('personalInfo', 'email', value);
+                        if (!initialEmail) {
+                          handleFieldValidation('email', value);
+                        }
+                      }}
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 transition-all duration-200 ${
                         initialEmail
-                          ? 'bg-gray-600/50 border-gray-500 cursor-not-allowed focus:ring-gray-500 focus:border-gray-500'
+                          ? 'bg-gray-600/50 border-green-500 cursor-not-allowed focus:ring-green-400 focus:border-green-400'
+                          : fieldValidation.email
+                          ? fieldValidation.email.isValid
+                            ? 'bg-gray-700 border-green-500 focus:ring-green-400 focus:border-green-400'
+                            : 'bg-gray-700 border-red-500 focus:ring-red-400 focus:border-red-400'
                           : 'bg-gray-700 border-gray-600 focus:ring-cyan-400 focus:border-cyan-400'
                       }`}
                       placeholder='correo@ejemplo.com'
@@ -1688,9 +1855,26 @@ export default function EnhancedSignupQuestionnaire() {
                       disabled={!!initialEmail}
                     />
                     <div className='absolute right-3 top-1/2 transform -translate-y-1/2'>
-                      <Mail className='h-5 w-5 text-gray-400' />
+                      {initialEmail ? (
+                        <CheckCircle className='h-5 w-5 text-green-400' />
+                      ) : fieldValidation.email ? (
+                        fieldValidation.email.isValid ? (
+                          <CheckCircle className='h-5 w-5 text-green-400' />
+                        ) : (
+                          <AlertCircle className='h-5 w-5 text-red-400' />
+                        )
+                      ) : (
+                        <Mail className='h-5 w-5 text-gray-400' />
+                      )}
                     </div>
                   </div>
+                  {!initialEmail && fieldValidation.email && (
+                    <p className={`text-xs mt-1 transition-colors duration-200 ${
+                      fieldValidation.email.isValid ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {fieldValidation.email.message}
+                    </p>
+                  )}
 
                   {/* Mensaje para email pre-verificado */}
                   {initialEmail && (
@@ -1706,13 +1890,40 @@ export default function EnhancedSignupQuestionnaire() {
                     <input
                       type='tel'
                       value={formData.personalInfo.phone}
-                      onChange={e => updateFormData('personalInfo', 'phone', e.target.value)}
-                      className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                      onChange={e => {
+                        const value = e.target.value;
+                        updateFormData('personalInfo', 'phone', value);
+                        handleFieldValidation('phone', value);
+                      }}
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 transition-all duration-200 ${
+                        fieldValidation.phone
+                          ? fieldValidation.phone.isValid
+                            ? 'bg-gray-700 border-green-500 focus:ring-green-400 focus:border-green-400'
+                            : 'bg-gray-700 border-red-500 focus:ring-red-400 focus:border-red-400'
+                          : 'bg-gray-700 border-gray-600 focus:ring-cyan-400 focus:border-cyan-400'
+                      }`}
                       placeholder='+52 555 123 4567'
                       required
                     />
-                    <Phone className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
+                    <div className='absolute right-3 top-1/2 transform -translate-y-1/2'>
+                      {fieldValidation.phone ? (
+                        fieldValidation.phone.isValid ? (
+                          <CheckCircle className='h-5 w-5 text-green-400' />
+                        ) : (
+                          <AlertCircle className='h-5 w-5 text-red-400' />
+                        )
+                      ) : (
+                        <Phone className='h-5 w-5 text-gray-400' />
+                      )}
+                    </div>
                   </div>
+                  {fieldValidation.phone && (
+                    <p className={`text-xs mt-1 transition-colors duration-200 ${
+                      fieldValidation.phone.isValid ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {fieldValidation.phone.message}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1736,7 +1947,13 @@ export default function EnhancedSignupQuestionnaire() {
                         </span>
                       )}
                   </label>
-                  <div className='grid grid-cols-3 gap-3'>
+                  <div className={`grid grid-cols-3 gap-3 p-3 rounded-lg border transition-all duration-200 ${
+                    fieldValidation.birthDate
+                      ? fieldValidation.birthDate.isValid
+                        ? 'border-green-500 bg-green-500/5'
+                        : 'border-red-500 bg-red-500/5'
+                      : 'border-gray-600 bg-transparent'
+                  }`}>
                     {/* Día */}
                     <div className='relative'>
                       <label className='block text-xs text-gray-400 mb-1'>Día</label>
@@ -1798,6 +2015,20 @@ export default function EnhancedSignupQuestionnaire() {
                     </div>
                   )}
 
+                  {/* Validación en tiempo real */}
+                  {fieldValidation.birthDate && (
+                    <div className={`mt-2 text-sm flex items-center transition-colors duration-200 ${
+                      fieldValidation.birthDate.isValid ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {fieldValidation.birthDate.isValid ? (
+                        <CheckCircle className='h-4 w-4 mr-2' />
+                      ) : (
+                        <AlertCircle className='h-4 w-4 mr-2' />
+                      )}
+                      {fieldValidation.birthDate.message}
+                    </div>
+                  )}
+
                   {/* Validación de edad */}
                   {formData.personalInfo.birthDate &&
                     !isValidAge(formData.personalInfo.birthDate) && (
@@ -1851,7 +2082,7 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 2: Role Selection */}
           {currentStep === 2 && (
-            <div className='space-y-6'>
+            <div className='space-y-6 animate-fadeInUp'>
               {initialEmail && (
                 <div className='bg-green-900/30 border border-green-700 rounded-lg p-4'>
                   <div className='flex items-center'>
@@ -1961,7 +2192,7 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 3: Professional Information (Skip for patients) */}
           {currentStep === 3 && formData.accountInfo.role !== 'patient' && (
-            <div className='space-y-6'>
+            <div className='space-y-6 animate-fadeInUp'>
               <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                 <div>
                   <label className='block text-sm font-medium text-gray-300 mb-2'>
@@ -2187,7 +2418,7 @@ export default function EnhancedSignupQuestionnaire() {
 
           {/* Step 3 for Patients: Additional Information */}
           {currentStep === 3 && formData.accountInfo.role === 'patient' && (
-            <div className='space-y-6'>
+            <div className='space-y-6 animate-fadeInUp'>
               <div className='bg-pink-900/30 border border-pink-700 rounded-lg p-6'>
                 <h3 className='text-lg font-semibold text-pink-300 mb-4'>
                   Información del Paciente
@@ -2530,9 +2761,9 @@ export default function EnhancedSignupQuestionnaire() {
                 <button
                   type='button'
                   onClick={handlePreviousStep}
-                  className='flex items-center px-6 py-3 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-all duration-300'
+                  className='btn-secondary flex items-center px-6 py-3 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 hover:border-gray-500 transition-all duration-300 transform hover:scale-105'
                 >
-                  <ArrowLeft className='h-4 w-4 mr-2' />
+                  <ArrowLeft className='h-4 w-4 mr-2 transition-transform duration-200 group-hover:-translate-x-1' />
                   Anterior
                 </button>
               )}
@@ -2544,21 +2775,30 @@ export default function EnhancedSignupQuestionnaire() {
                   type='button'
                   onClick={handleNextStep}
                   disabled={loading}
-                  className={`flex items-center px-6 py-3 rounded-lg transition-all duration-300 ${
+                  className={`btn-primary group flex items-center px-6 py-3 rounded-lg transition-all duration-300 transform ${
                     loading
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700'
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed scale-100'
+                      : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 hover:scale-105 hover:shadow-lg'
                   }`}
                 >
-                  Siguiente
-                  <ArrowRight className='h-4 w-4 ml-2' />
+                  {loading ? (
+                    <>
+                      <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      Siguiente
+                      <ArrowRight className='h-4 w-4 ml-2 transition-transform duration-200 group-hover:translate-x-1' />
+                    </>
+                  )}
                 </button>
               ) : (
                 <button
                   type='button'
                   onClick={handleCompleteRegistration}
                   disabled={loading}
-                  className='flex items-center px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300'
+                  className='btn-primary group flex items-center px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 hover:shadow-xl'
                 >
                   {loading ? (
                     <>

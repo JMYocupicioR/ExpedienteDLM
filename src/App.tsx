@@ -14,6 +14,7 @@ import ClinicSettings from '@/pages/ClinicSettings';
 import ClinicStaff from '@/pages/ClinicStaff';
 import ClinicSummary from '@/pages/ClinicSummary';
 import Dashboard from '@/pages/Dashboard';
+import EmailVerification from '@/pages/EmailVerification';
 import EnhancedSignupQuestionnaire from '@/pages/EnhancedSignupQuestionnaire';
 import LandingPage from '@/pages/LandingPage';
 import MedicalScaleBarthel from '@/pages/MedicalScaleBarthel';
@@ -88,6 +89,7 @@ function App() {
               element={isAuthenticated || allowAuthBypass ? <Navigate to='/dashboard' /> : <Auth />}
             />
             <Route path='/signup-questionnaire' element={<EnhancedSignupQuestionnaire />} />
+            <Route path='/email-verification' element={<EmailVerification />} />
             <Route path='/auth/callback' element={<AuthCallback />} />
             <Route path='/register/patient/:token' element={<PatientPublicRegistration />} />
 

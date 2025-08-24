@@ -21,7 +21,7 @@ export default function OAuthButtons({ mode, onError }: OAuthButtonsProps) {
         provider,
         options: {
           // Redirigir a una página de callback que maneje el flujo
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback?auth_mode=${mode}`,
           // Agregar scopes necesarios
           scopes: provider === 'google' ? 'email profile' : 'email public_profile',
           // Indicar si es signup para manejo posterior
