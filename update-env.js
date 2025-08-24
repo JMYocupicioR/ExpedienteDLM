@@ -4,8 +4,7 @@ import { readFileSync, writeFileSync } from 'fs';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://YOUR_PROJECT_REF.supabase.co';
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
 
-console.log('🔧 Actualizando archivo .env con credenciales...
-');
+console.log('🔧 Actualizando archivo .env con credenciales...');
 
 try {
   // Leer el archivo .env actual
