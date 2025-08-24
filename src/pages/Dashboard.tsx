@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import ActivityLogViewer from '@/components/Logs/ActivityLogViewer';
+import ActivityLogViewer from '@/components/Logs/ActivityLogViewer.tsx';
 
 const Dashboard = () => {
   const navigate = useNavigate();
