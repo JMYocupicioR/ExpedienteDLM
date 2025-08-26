@@ -174,10 +174,30 @@ export default function Auth() {
           setError('Por favor, verifica el captcha.');
           return;
         }
+
+        // Verify hCaptcha token first
+        console.log('🔒 Verifying hCaptcha token...');
+        const { data: captchaResponse } = await supabase.functions.invoke('verify-hcaptcha', {
+          body: { token: hcaptchaToken, sitekey: import.meta.env.VITE_HCAPTCHA_SITEKEY }
+        });
+
+        if (!captchaResponse?.success) {
+          console.log('❌ hCaptcha verification failed:', captchaResponse);
+          setError('Verificación de captcha fallida. Por favor, inténtalo de nuevo.');
+          // Reset hCaptcha widgets
+          if (window.hcaptcha) {
+            const loginWidget = document.getElementById('hcaptcha-login');
+            const signupWidget = document.getElementById('hcaptcha-signup');
+            if (loginWidget) window.hcaptcha.reset(loginWidget);
+            if (signupWidget) window.hcaptcha.reset(signupWidget);
+          }
+          return;
+        }
+
+        console.log('✅ hCaptcha verified successfully');
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
-          options: { captchaToken: hcaptchaToken || undefined },
         });
 
         if (error) throw error;
@@ -194,6 +214,24 @@ export default function Auth() {
             setError('Por favor, verifica el captcha.');
             return;
           }
+
+          // Verify hCaptcha token first
+          console.log('🔒 Verifying hCaptcha token for signup...');
+          const { data: captchaResponse } = await supabase.functions.invoke('verify-hcaptcha', {
+            body: { token: hcaptchaToken, sitekey: import.meta.env.VITE_HCAPTCHA_SITEKEY }
+          });
+
+          if (!captchaResponse?.success) {
+            console.log('❌ hCaptcha verification failed:', captchaResponse);
+            setError('Verificación de captcha fallida. Por favor, inténtalo de nuevo.');
+            // Reset hCaptcha widgets
+            if (window.hcaptcha) {
+              window.hcaptcha.reset();
+            }
+            return;
+          }
+
+          console.log('✅ hCaptcha verified successfully for signup');
 
           // La verificación por Edge Function ahora es manejada por Supabase Auth
           // así que este bloque ya no es necesario si se usa RLS con captcha.
@@ -333,6 +371,14 @@ export default function Auth() {
         setError('Demasiados intentos. Espera unos minutos antes de intentar de nuevo.');
       } else {
         setError(err.message || 'Error desconocido');
+      }
+      
+      // Reset hCaptcha on any error
+      if (window.hcaptcha) {
+        const loginWidget = document.getElementById('hcaptcha-login');
+        const signupWidget = document.getElementById('hcaptcha-signup');
+        if (loginWidget) window.hcaptcha.reset(loginWidget);
+        if (signupWidget) window.hcaptcha.reset(signupWidget);
       }
     } finally {
       setLoading(false);
