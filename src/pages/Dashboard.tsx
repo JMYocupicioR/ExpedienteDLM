@@ -4,7 +4,8 @@ import QuickStartModal from '@/components/QuickStartModal';
 import { Button } from '@/components/ui/button';
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
 import { useClinic } from '@/features/clinic/context/ClinicContext';
-import { Appointment, appointmentService } from '@/lib/services/appointment-service';
+import { EnhancedAppointment } from '@/lib/services/enhanced-appointment-service';
+import { getAppointmentsByDateRange } from '@/lib/services/enhanced-appointment-service';
 import { supabase } from '@/lib/supabase';
 import { addDays, format, isToday, isTomorrow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -28,13 +29,12 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import ActivityLogViewer from '@/components/Logs/ActivityLogViewer.tsx';
+import ActivityLogViewer from '@/components/Logs/ActivityLogViewer';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { activeClinic, userClinics, isLoading: isClinicLoading } = useClinic();
   const [user, setUser] = useState<{ email?: string } | null>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,7 +60,7 @@ const Dashboard = () => {
       last_consultation?: string;
     }>
   >([]);
-  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<EnhancedAppointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -87,15 +87,14 @@ const Dashboard = () => {
         setUser(user);
         if (user) {
           // El rol y la clínica ahora vienen de useClinic,
-          // pero mantenemos la carga del perfil para otros datos.
+          // pero mantenemos la carga del perfil para verificar admin.
           const { data: profile } = await supabase
             .from('profiles')
-            .select('*')
+            .select('role')
             .eq('id', user.id)
             .single();
 
           if (cancelled) return;
-          setUserProfile(profile);
 
           // La verificación de admin ahora puede usar userClinics
           const currentMembership = userClinics.find(m => m.clinic_id === activeClinic?.id);
@@ -203,7 +202,7 @@ const Dashboard = () => {
       const today = new Date();
       const nextWeek = addDays(today, 7);
 
-      const appointments = await appointmentService.getAppointmentsByDateRange(
+      const appointments = await getAppointmentsByDateRange(
         format(today, 'yyyy-MM-dd'),
         format(nextWeek, 'yyyy-MM-dd'),
         userId,
