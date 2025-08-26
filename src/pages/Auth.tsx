@@ -1,8 +1,9 @@
 import OAuthButtons from '@/features/authentication/components/OAuthButtons';
 import { supabase } from '@/lib/supabase';
 import { AlertCircle, Eye, EyeOff, Lock, Mail, Stethoscope, User } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import HCaptcha from '@hcaptcha/react-hcaptcha';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -11,68 +12,37 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
+  const [hcaptchaToken, setHcaptchaToken] = useState<string | null>(null);
+  const loginCaptchaRef = useRef<HCaptcha>(null);
+  const signupCaptchaRef = useRef<HCaptcha>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    console.log('🔍 Auth component mounted');
-    console.log('🔑 VITE_HCAPTCHA_SITEKEY:', import.meta.env.VITE_HCAPTCHA_SITEKEY);
-    console.log('🌐 All env vars:', import.meta.env);
-    
-    // Check if hCaptcha script is loaded and render widgets
-    const checkHCaptcha = () => {
-      if (typeof window !== 'undefined' && window.hcaptcha) {
-        console.log('✅ hCaptcha script loaded successfully');
-        console.log('🔧 hCaptcha object:', window.hcaptcha);
-        
-        // Force render hCaptcha widgets
-        setTimeout(() => {
-          const sitekey = import.meta.env.VITE_HCAPTCHA_SITEKEY;
-          console.log('🔑 Using sitekey:', sitekey);
-          
-          if (sitekey) {
-            // Render login hCaptcha
-            const loginContainer = document.getElementById('hcaptcha-login');
-            if (loginContainer && !loginContainer.hasChildNodes()) {
-              try {
-                const widgetId = window.hcaptcha.render(loginContainer, {
-                  sitekey: sitekey,
-                  callback: (token: string) => console.log('Login hCaptcha solved:', token),
-                  'error-callback': (error: any) => console.log('Login hCaptcha error:', error)
-                });
-                console.log('✅ Login hCaptcha rendered with widget ID:', widgetId);
-              } catch (error) {
-                console.log('❌ Error rendering login hCaptcha:', error);
-              }
-            }
-            
-            // Render signup hCaptcha
-            const signupContainer = document.getElementById('hcaptcha-signup');
-            if (signupContainer && !signupContainer.hasChildNodes()) {
-              try {
-                const widgetId = window.hcaptcha.render(signupContainer, {
-                  sitekey: sitekey,
-                  callback: (token: string) => console.log('Signup hCaptcha solved:', token),
-                  'error-callback': (error: any) => console.log('Signup hCaptcha error:', error)
-                });
-                console.log('✅ Signup hCaptcha rendered with widget ID:', widgetId);
-              } catch (error) {
-                console.log('❌ Error rendering signup hCaptcha:', error);
-              }
-            }
-          } else {
-            console.log('❌ No sitekey found, hCaptcha cannot be rendered');
-          }
-        }, 500);
-      } else {
-        console.log('❌ hCaptcha script not loaded yet, retrying...');
-        setTimeout(checkHCaptcha, 1000);
-      }
-    };
-    checkHCaptcha();
-  }, []);
+  const handleCaptchaVerify = (token: string) => {
+    console.log('✅ hCaptcha solved:', token);
+    setHcaptchaToken(token);
+  };
+
+  const handleCaptchaError = (error: any) => {
+    console.log('❌ hCaptcha error:', error);
+    setHcaptchaToken(null);
+  };
+
+  const handleCaptchaExpire = () => {
+    console.log('⏰ hCaptcha expired');
+    setHcaptchaToken(null);
+  };
+
+  const resetCaptcha = () => {
+    if (isLogin && loginCaptchaRef.current) {
+      loginCaptchaRef.current.resetCaptcha();
+    } else if (!isLogin && signupCaptchaRef.current) {
+      signupCaptchaRef.current.resetCaptcha();
+    }
+    setHcaptchaToken(null);
+  };
 
   // Validación en tiempo real de contraseñas
-  useEffect(() => {
+  React.useEffect(() => {
     const passwordInput = document.getElementById('password-register') as HTMLInputElement;
     const confirmPasswordInput = document.getElementById(
       'confirm-password-register'
@@ -86,7 +56,6 @@ export default function Auth() {
       const password = passwordInput.value;
       let strength = '';
       let strengthClass = '';
-      let strengthIcon = '';
 
       if (password.length === 0) {
         strength = '';
@@ -163,7 +132,6 @@ export default function Auth() {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     const confirmPassword = formData.get('confirmPassword') as string;
-    const hcaptchaToken = formData.get('h-captcha-response') as string | null;
 
     console.log(`🔑 Attempting ${isLogin ? 'login' : 'signup'} for:`, email);
 
@@ -184,13 +152,7 @@ export default function Auth() {
         if (!captchaResponse?.success) {
           console.log('❌ hCaptcha verification failed:', captchaResponse);
           setError('Verificación de captcha fallida. Por favor, inténtalo de nuevo.');
-          // Reset hCaptcha widgets
-          if (window.hcaptcha) {
-            const loginWidget = document.getElementById('hcaptcha-login');
-            const signupWidget = document.getElementById('hcaptcha-signup');
-            if (loginWidget) window.hcaptcha.reset(loginWidget);
-            if (signupWidget) window.hcaptcha.reset(signupWidget);
-          }
+          resetCaptcha();
           return;
         }
 
@@ -224,10 +186,7 @@ export default function Auth() {
           if (!captchaResponse?.success) {
             console.log('❌ hCaptcha verification failed:', captchaResponse);
             setError('Verificación de captcha fallida. Por favor, inténtalo de nuevo.');
-            // Reset hCaptcha widgets
-            if (window.hcaptcha) {
-              window.hcaptcha.reset();
-            }
+            resetCaptcha();
             return;
           }
 
@@ -374,12 +333,7 @@ export default function Auth() {
       }
       
       // Reset hCaptcha on any error
-      if (window.hcaptcha) {
-        const loginWidget = document.getElementById('hcaptcha-login');
-        const signupWidget = document.getElementById('hcaptcha-signup');
-        if (loginWidget) window.hcaptcha.reset(loginWidget);
-        if (signupWidget) window.hcaptcha.reset(signupWidget);
-      }
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -453,13 +407,16 @@ export default function Auth() {
                     <Lock className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
-                {/* hCaptcha Widget: Se reactiva y se elimina el duplicado */}
+                {/* hCaptcha Widget for Login */}
                 <div className='mt-2'>
-                  <div
-                    id='hcaptcha-login'
-                    className='h-captcha'
-                    data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
-                  ></div>
+                  <HCaptcha
+                    ref={loginCaptchaRef}
+                    sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
+                    onVerify={handleCaptchaVerify}
+                    onError={handleCaptchaError}
+                    onExpire={handleCaptchaExpire}
+                    theme='dark'
+                  />
                 </div>
               </div>
 
@@ -642,11 +599,14 @@ export default function Auth() {
 
               {/* hCaptcha Widget for Registration */}
               <div className='mt-4'>
-                <div
-                  id='hcaptcha-signup'
-                  className='h-captcha'
-                  data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
-                ></div>
+                <HCaptcha
+                  ref={signupCaptchaRef}
+                  sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
+                  onVerify={handleCaptchaVerify}
+                  onError={handleCaptchaError}
+                  onExpire={handleCaptchaExpire}
+                  theme='dark'
+                />
               </div>
 
               <button
