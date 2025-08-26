@@ -116,15 +116,14 @@ export default function Auth() {
     try {
       if (isLogin) {
         console.log('🔐 Logging in...');
-        // TODO: hCaptcha deshabilitado temporalmente para testing
-        // if (!hcaptchaToken) {
-        //   setError('Por favor, verifica el captcha.');
-        //   return;
-        // }
+        if (!hcaptchaToken) {
+          setError('Por favor, verifica el captcha.');
+          return;
+        }
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
-          // options: { captchaToken: hcaptchaToken || undefined },
+          options: { captchaToken: hcaptchaToken || undefined },
         });
 
         if (error) throw error;
@@ -137,27 +136,14 @@ export default function Auth() {
         setCheckingEmail(true);
 
         try {
-          // TODO: hCaptcha deshabilitado temporalmente para testing
-          // if (!hcaptchaToken) {
-          //   setError('Por favor, verifica el captcha.');
-          //   return;
-          // }
+          if (!hcaptchaToken) {
+            setError('Por favor, verifica el captcha.');
+            return;
+          }
 
-          // TODO: Edge function verificación deshabilitada temporalmente
-          // const { data: verifyJson, error: verifyError } = await supabase.functions.invoke(
-          //   'verify-hcaptcha',
-          //   {
-          //     body: {
-          //       token: hcaptchaToken,
-          //       sitekey: '5e0e8956-46b8-4a76-a756-b5d0cdc02d24',
-          //     },
-          //   }
-          // );
-          // if (verifyError || !verifyJson?.success) {
-          //   setError('Verificación de captcha falló. Intenta nuevamente.');
-          //   return;
-          // }
-
+          // La verificación por Edge Function ahora es manejada por Supabase Auth
+          // así que este bloque ya no es necesario si se usa RLS con captcha.
+          
           // NUEVO FLUJO: Validar, crear usuario y enviar email de verificación
           console.log('🔍 Validando formato de email:', email);
 
@@ -367,13 +353,13 @@ export default function Auth() {
                     <Lock className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
                   </div>
                 </div>
-                {/* TODO: hCaptcha Widget - Deshabilitado temporalmente */}
-                {/* <div className='mt-2'>
+                {/* hCaptcha Widget: Se reactiva y se elimina el duplicado */}
+                <div className='mt-2'>
                   <div
                     className='h-captcha'
-                    data-sitekey='5e0e8956-46b8-4a76-a756-b5d0cdc02d24'
+                    data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY}
                   ></div>
-                </div> */}
+                </div>
               </div>
 
               <div className='text-right'>
@@ -381,13 +367,6 @@ export default function Auth() {
                   ¿Olvidaste tu contraseña?
                 </a>
               </div>
-              {/* TODO: hCaptcha Widget (login) - Deshabilitado temporalmente */}
-              {/* <div className='mt-2'>
-                <div
-                  className='h-captcha'
-                  data-sitekey='5e0e8956-46b8-4a76-a756-b5d0cdc02d24'
-                ></div>
-              </div> */}
 
               <button
                 type='submit'
