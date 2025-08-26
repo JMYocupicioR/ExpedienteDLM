@@ -15,6 +15,60 @@ export default function Auth() {
 
   useEffect(() => {
     console.log('🔍 Auth component mounted');
+    console.log('🔑 VITE_HCAPTCHA_SITEKEY:', import.meta.env.VITE_HCAPTCHA_SITEKEY);
+    console.log('🌐 All env vars:', import.meta.env);
+    
+    // Check if hCaptcha script is loaded and render widgets
+    const checkHCaptcha = () => {
+      if (typeof window !== 'undefined' && window.hcaptcha) {
+        console.log('✅ hCaptcha script loaded successfully');
+        console.log('🔧 hCaptcha object:', window.hcaptcha);
+        
+        // Force render hCaptcha widgets
+        setTimeout(() => {
+          const sitekey = import.meta.env.VITE_HCAPTCHA_SITEKEY;
+          console.log('🔑 Using sitekey:', sitekey);
+          
+          if (sitekey) {
+            // Render login hCaptcha
+            const loginContainer = document.getElementById('hcaptcha-login');
+            if (loginContainer && !loginContainer.hasChildNodes()) {
+              try {
+                const widgetId = window.hcaptcha.render(loginContainer, {
+                  sitekey: sitekey,
+                  callback: (token: string) => console.log('Login hCaptcha solved:', token),
+                  'error-callback': (error: any) => console.log('Login hCaptcha error:', error)
+                });
+                console.log('✅ Login hCaptcha rendered with widget ID:', widgetId);
+              } catch (error) {
+                console.log('❌ Error rendering login hCaptcha:', error);
+              }
+            }
+            
+            // Render signup hCaptcha
+            const signupContainer = document.getElementById('hcaptcha-signup');
+            if (signupContainer && !signupContainer.hasChildNodes()) {
+              try {
+                const widgetId = window.hcaptcha.render(signupContainer, {
+                  sitekey: sitekey,
+                  callback: (token: string) => console.log('Signup hCaptcha solved:', token),
+                  'error-callback': (error: any) => console.log('Signup hCaptcha error:', error)
+                });
+                console.log('✅ Signup hCaptcha rendered with widget ID:', widgetId);
+              } catch (error) {
+                console.log('❌ Error rendering signup hCaptcha:', error);
+              }
+            }
+          } else {
+            console.log('❌ No sitekey found, hCaptcha cannot be rendered');
+          }
+        }, 500);
+      } else {
+        console.log('❌ hCaptcha script not loaded yet, retrying...');
+        setTimeout(checkHCaptcha, 1000);
+      }
+    };
+    checkHCaptcha();
   }, []);
 
   // Validación en tiempo real de contraseñas
@@ -356,6 +410,7 @@ export default function Auth() {
                 {/* hCaptcha Widget: Se reactiva y se elimina el duplicado */}
                 <div className='mt-2'>
                   <div
+                    id='hcaptcha-login'
                     className='h-captcha'
                     data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
                   ></div>
@@ -542,6 +597,7 @@ export default function Auth() {
               {/* hCaptcha Widget for Registration */}
               <div className='mt-4'>
                 <div
+                  id='hcaptcha-signup'
                   className='h-captcha'
                   data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
                 ></div>
