@@ -539,6 +539,14 @@ export default function Auth() {
                 </div>
               </div>
 
+              {/* hCaptcha Widget for Registration */}
+              <div className='mt-4'>
+                <div
+                  className='h-captcha'
+                  data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
+                ></div>
+              </div>
+
               <button
                 type='submit'
                 disabled={loading || checkingEmail}
