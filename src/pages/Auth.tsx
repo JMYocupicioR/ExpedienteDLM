@@ -357,7 +357,7 @@ export default function Auth() {
                 <div className='mt-2'>
                   <div
                     className='h-captcha'
-                    data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY}
+                    data-sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
                   ></div>
                 </div>
               </div>
