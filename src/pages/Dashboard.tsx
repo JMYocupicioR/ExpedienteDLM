@@ -29,7 +29,6 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import ActivityLogViewer from '@/components/Logs/ActivityLogViewer.tsx';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -921,8 +920,6 @@ const Dashboard = () => {
           </div>
         </section>
 
-        {/* Visor de Logs de Actividad */}
-        <ActivityLogViewer />
       </main>
 
       {/* Modal de Nuevo Paciente */}

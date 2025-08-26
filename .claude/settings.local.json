@@ -9,7 +9,8 @@
       "Bash(supabase db push:*)",
       "Bash(supabase sql:*)",
       "Bash(npm run build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git ls-tree:*)"
     ],
     "deny": [],
     "ask": []
