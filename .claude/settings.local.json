@@ -17,7 +17,8 @@
       "Bash(copy:*)",
       "Bash(netlify env:list:*)",
       "Bash(netlify build:*)",
-      "Bash(netlify deploy:*)"
+      "Bash(netlify deploy:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
