@@ -139,27 +139,18 @@ export default function Auth() {
       if (isLogin) {
         console.log('🔐 Logging in...');
         if (!hcaptchaToken) {
-          setError('Por favor, verifica el captcha.');
+          setError('Por favor, completa el captcha para continuar.');
+          setLoading(false); // Detener el loading
           return;
         }
 
-        // Verify hCaptcha token first
-        console.log('🔒 Verifying hCaptcha token...');
-        const { data: captchaResponse } = await supabase.functions.invoke('verify-hcaptcha', {
-          body: { token: hcaptchaToken, sitekey: import.meta.env.VITE_HCAPTCHA_SITEKEY }
-        });
-
-        if (!captchaResponse?.success) {
-          console.log('❌ hCaptcha verification failed:', captchaResponse);
-          setError('Verificación de captcha fallida. Por favor, inténtalo de nuevo.');
-          resetCaptcha();
-          return;
-        }
-
-        console.log('✅ hCaptcha verified successfully');
+        console.log('✅ Captcha token obtained, proceeding with login...');
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
+          options: {
+            captchaToken: hcaptchaToken,
+          },
         });
 
         if (error) throw error;
@@ -173,27 +164,12 @@ export default function Auth() {
 
         try {
           if (!hcaptchaToken) {
-            setError('Por favor, verifica el captcha.');
+            setError('Por favor, completa el captcha para continuar.');
+            setLoading(false); // Detener el loading
             return;
           }
 
-          // Verify hCaptcha token first
-          console.log('🔒 Verifying hCaptcha token for signup...');
-          const { data: captchaResponse } = await supabase.functions.invoke('verify-hcaptcha', {
-            body: { token: hcaptchaToken, sitekey: import.meta.env.VITE_HCAPTCHA_SITEKEY }
-          });
-
-          if (!captchaResponse?.success) {
-            console.log('❌ hCaptcha verification failed:', captchaResponse);
-            setError('Verificación de captcha fallida. Por favor, inténtalo de nuevo.');
-            resetCaptcha();
-            return;
-          }
-
-          console.log('✅ hCaptcha verified successfully for signup');
-
-          // La verificación por Edge Function ahora es manejada por Supabase Auth
-          // así que este bloque ya no es necesario si se usa RLS con captcha.
+          console.log('✅ Captcha token obtained, proceeding with signup...');
           
           // NUEVO FLUJO: Validar, crear usuario y enviar email de verificación
           console.log('🔍 Validando formato de email:', email);
@@ -279,6 +255,7 @@ export default function Auth() {
             email: email.toLowerCase().trim(),
             password: password,
             options: {
+              captchaToken: hcaptchaToken,
               emailRedirectTo: `${window.location.origin}/signup-questionnaire`,
               data: {
                 email_confirmed: false,
@@ -411,7 +388,7 @@ export default function Auth() {
                 <div className='mt-2'>
                   <HCaptcha
                     ref={loginCaptchaRef}
-                    sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
+                    sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY || ''}
                     onVerify={handleCaptchaVerify}
                     onError={handleCaptchaError}
                     onExpire={handleCaptchaExpire}
@@ -601,7 +578,7 @@ export default function Auth() {
               <div className='mt-4'>
                 <HCaptcha
                   ref={signupCaptchaRef}
-                  sitekey={import.meta.env.VITE_HCAPTCHA_SITEKEY || ''}
+                  sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY || ''}
                   onVerify={handleCaptchaVerify}
                   onError={handleCaptchaError}
                   onExpire={handleCaptchaExpire}

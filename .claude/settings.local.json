@@ -18,7 +18,9 @@
       "Bash(netlify env:list:*)",
       "Bash(netlify build:*)",
       "Bash(netlify deploy:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(netlify env:get:*)",
+      "Bash(netlify env:set:*)"
     ],
     "deny": [],
     "ask": []
