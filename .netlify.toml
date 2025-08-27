@@ -4,7 +4,12 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  SECRETS_SCAN_ENABLED = "false"
+  # Configuración segura del escaneo de secretos
+  SECRETS_SCAN_ENABLED = "true"
+  # Omitir archivos de documentación y configuración que no son código de producción
+  SECRETS_SCAN_OMIT_PATHS = "archive-legacy-files/**,docs/**,*.md,*.MD,package-lock.json,.netlify/**,SUPABASE_CONFIGURATION.md,env.example,build-config.md,netlify-build-config.md"
+  # Omitir nombres de variables de ejemplo que no son secretos reales
+  SECRETS_SCAN_OMIT_KEYS = "your_supabase_url_here,your_supabase_anon_key_here,your_hcaptcha_site_key_here,example_url,example_key,placeholder_value"
 
 [[redirects]]
   from = "/*"
