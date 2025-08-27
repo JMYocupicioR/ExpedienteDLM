@@ -1,0 +1,45 @@
+# Archivos y directorios a ignorar durante el deploy de Netlify
+
+# Archivos de desarrollo que contienen "secretos" falsos positivos
+archive-legacy-files/
+docs/
+*.md
+*.sql
+build-config.md
+complete_medical_specialties.sql
+supabase/migrations/
+medical_specialties_rows.csv
+temp_fix.sql
+populate_medical_specialties.sql
+populate_medical_specialties_fixed.sql
+check_medical_specialties.sql
+create_email_availability_function.sql
+disable_audit_trigger.sql
+fix_audit_patient_creation.sql
+fix_rls_functions.sql
+
+# Scripts de desarrollo
+*.cjs
+*.mjs
+*.ps1
+setup-*.js
+test-*.js
+test-*.html
+debug-*.js
+check-*.js
+apply-*.js
+fix-*.js
+migrate-*.js
+update-env.js
+emergency-policy-cleanup.js
+verify-supabase-setup.mjs
+verificar-tablas-supabase.mjs
+
+# Archivos de configuración local
+tsconfig.tsbuildinfo
+.vscode/
+.claude/
+
+# Archivos de backup
+*.backup.tsx
+*.sql.backup
