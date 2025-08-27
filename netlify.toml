@@ -7,23 +7,27 @@
   # Configurar escaneo de secretos para omitir archivos problemáticos
   SECRETS_SCAN_OMIT_PATHS = "archive-legacy-files/**/*,docs/**/*,*.md,*.sql,build-config.md,complete_medical_specialties.sql,supabase/migrations/**/*,medical_specialties_rows.csv,temp_fix.sql,populate_medical_specialties.sql,populate_medical_specialties_fixed.sql,check_medical_specialties.sql,create_email_availability_function.sql,disable_audit_trigger.sql,fix_audit_patient_creation.sql,fix_rls_functions.sql,*.cjs,*.mjs,*.ps1"
 
-# Headers para optimizar el cacheo
+# Headers básicos de seguridad
 [[headers]]
   for = "/*"
   [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-XSS-Protection = "1; mode=block"
 
 [[headers]]
   for = "*.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 # Redirects para SPA
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-# Funciones de Supabase Edge (si las usas directamente en Netlify)
-[functions]
-  external_node_modules = ["@supabase/supabase-js"]

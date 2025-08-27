@@ -14,7 +14,10 @@
       "Bash(git commit:*)",
       "Bash(supabase functions:*)",
       "Bash(npm ls:*)",
-      "Bash(copy:*)"
+      "Bash(copy:*)",
+      "Bash(netlify env:list:*)",
+      "Bash(netlify build:*)",
+      "Bash(netlify deploy:*)"
     ],
     "deny": [],
     "ask": []
