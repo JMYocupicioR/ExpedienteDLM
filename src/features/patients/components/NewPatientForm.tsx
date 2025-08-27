@@ -1,10 +1,11 @@
 import { useValidationNotifications } from '@/components/ValidationNotification';
-import type { Database } from '@/lib/database.types';
-import { supabase } from '@/lib/supabase';
-import { AlertCircle, Calendar, ExternalLink, Mail, MapPin, Phone, User, X, Building } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { usePatients } from '@/features/patients/hooks/usePatients';
+import type { Patient, PatientInsert } from '@/features/patients/services/patientService';
+import { supabase } from '@/lib/supabase';
+import { AlertCircle, Building, Calendar, ExternalLink, Mail, MapPin, Phone, User, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
 
@@ -23,13 +24,15 @@ export default function NewPatientForm({
 }: NewPatientFormProps) {
   const { addError, addSuccess, addWarning } = useValidationNotifications();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const { activeClinic, loading: clinicsLoading, error: clinicError } = useClinic();
+  const { createPatientMutation } = usePatients();
+
+  // Estados locales para el manejo del formulario y validaciones en tiempo real
   const [checkingCurp, setCheckingCurp] = useState(false);
   const [existingPatient, setExistingPatient] = useState<{ id: string; name: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const { activeClinic, loading: clinicsLoading, error: clinicError } = useClinic();
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Omit<PatientInsert, 'clinic_id' | 'primary_doctor_id'>>({
     full_name: initialName,
     curp: '',
     phone: '',
@@ -134,116 +137,58 @@ export default function NewPatientForm({
 
     if (!validateForm()) return;
 
-    setLoading(true);
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
-        addError('Sesión requerida', 'Debes iniciar sesión para crear pacientes.');
-        setLoading(false);
+      if (!currentUser || !activeClinic) {
+        addError('Error de Sesión', 'No se pudo verificar la sesión de usuario o la clínica activa.');
         return;
       }
 
-      if (!activeClinic) {
-        addError('Clínica no seleccionada', 'Por favor, selecciona una clínica activa para registrar al paciente.');
-        setLoading(false);
-        return;
-      }
-
-      // Debug: verificar el perfil del usuario y permisos
-      console.log('🔍 DEBUG - Current user ID:', currentUser.id);
-      console.log('🔍 DEBUG - Active clinic ID:', activeClinic.id);
-      
-      // Verificar perfil del usuario
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', currentUser.id)
-        .single();
-      console.log('🔍 DEBUG - User profile:', profile);
-      if (profileError) console.log('❌ DEBUG - Profile error:', profileError);
-
-      // Verificar relaciones con clínica
-      const { data: relationships, error: relError } = await supabase
-        .from('clinic_user_relationships')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .eq('clinic_id', activeClinic.id);
-      console.log('🔍 DEBUG - User clinic relationships:', relationships);
-      if (relError) console.log('❌ DEBUG - Relationships error:', relError);
-
-      // Verificar si la función RLS funciona
-      const { data: clinicCheck, error: clinicError } = await supabase
-        .rpc('get_user_clinic_id');
-      console.log('🔍 DEBUG - get_user_clinic_id() result:', clinicCheck);
-      if (clinicError) console.log('❌ DEBUG - get_user_clinic_id error:', clinicError);
-
-      // Primero intentar insertar sin SELECT para evitar problemas con RLS
-      const { error: insertError } = await supabase
-        .from('patients')
-        .insert({
-          full_name: formData.full_name.trim(),
-          curp: formData.curp.trim() || null,
-          phone: formData.phone.trim() || null,
-          email: formData.email.trim() || null,
-          birth_date: formData.birth_date || '1900-01-01',
-          gender: formData.gender || null,
-          address: formData.address.trim() || null,
-          insurance_info: formData.insurance_info.trim() || null,
-          emergency_contact: formData.emergency_contact.trim() || null,
-          is_active: true,
-          clinic_id: activeClinic.id,
-          primary_doctor_id: currentUser.id,
-        });
-
-      if (insertError) {
-        console.error('Error creating patient:', insertError);
-        console.error('Error details:', {
-          message: insertError.message,
-          details: insertError.details,
-          hint: insertError.hint,
-          code: insertError.code
-        });
-        
-        // Si es un error del trigger de auditoría, avisar pero continuar
-        if (insertError.code === '42703' && insertError.message.includes('audit_logs')) {
-          addWarning('Advertencia', 'Paciente creado exitosamente, pero hubo un problema con el sistema de auditoría.');
-        } else {
-          addError('Error', `No se pudo crear el paciente: ${insertError.message}`);
-          return;
-        }
-      } else {
-        addSuccess('Éxito', `Paciente "${formData.full_name.trim()}" creado correctamente`);
-      }
-
-      // Crear datos mock para callback (ya que no podemos hacer SELECT debido a RLS)
-      const mockPatientData = { 
-        id: crypto.randomUUID(), 
+      // Preparamos el objeto del paciente para la inserción
+      const patientData: PatientInsert = {
+        ...formData,
         full_name: formData.full_name.trim(),
-        clinic_id: activeClinic.id
+        clinic_id: activeClinic.id,
+        primary_doctor_id: currentUser.id,
+        is_active: true,
       };
-      onSave(mockPatientData as any);
-      onClose();
 
-      // Reset form
-      setFormData({
-        full_name: '',
-        curp: '',
-        phone: '',
-        email: '',
-        birth_date: '',
-        gender: '',
-        address: '',
-        emergency_contact: '',
-        insurance_info: '',
-        notes: '',
+      // Usamos la mutación de React Query
+      createPatientMutation.mutate(patientData, {
+        onSuccess: (newPatient) => {
+          // ¡Éxito! Tenemos el paciente real con su ID definitivo.
+          addSuccess('Éxito', `Paciente "${newPatient.full_name}" creado correctamente.`);
+          onSave(newPatient); // Devolvemos el paciente real
+          onClose();
+          resetForm();
+        },
+        onError: (error) => {
+          // El error ya se maneja en el servicio (ej. CURP duplicado)
+          addError('Error al crear', error.message);
+        },
       });
-      setExistingPatient(null);
-    } catch (error) {
-      console.error('Error creating patient:', error);
-      addError('Error', 'Ocurrió un error inesperado. Intente nuevamente.');
-    } finally {
-      setLoading(false);
+
+    } catch (error: any) {
+      console.error('Error inesperado en handleSubmit:', error);
+      addError('Error inesperado', error.message || 'Ocurrió un error inesperado. Intente nuevamente.');
     }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      full_name: '',
+      curp: '',
+      phone: '',
+      email: '',
+      birth_date: '',
+      gender: '',
+      address: '',
+      emergency_contact: '',
+      insurance_info: '',
+      notes: '',
+    });
+    setExistingPatient(null);
+    setErrors({});
   };
 
   if (!isOpen) return null;
@@ -500,16 +445,16 @@ export default function NewPatientForm({
               type='button'
               onClick={onClose}
               className='px-6 py-3 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors'
-              disabled={loading}
+              disabled={createPatientMutation.isPending}
             >
               Cancelar
             </button>
             <button
               type='submit'
-              disabled={loading}
+              disabled={createPatientMutation.isPending || !!existingPatient}
               className='px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center'
             >
-              {loading ? (
+              {createPatientMutation.isPending ? (
                 <>
                   <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
                   Creando...

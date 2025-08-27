@@ -1,20 +1,17 @@
 import { Button } from '@/components/ui/button';
+import NewPatientForm from '@/features/patients/components/NewPatientForm';
+import { usePatients } from '@/features/patients/hooks/usePatients';
+import type { Patient } from '@/features/patients/services/patientService';
 import { supabase } from '@/lib/supabase';
 import { Check, Mail, Phone, Plus, Search, User, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 
-export interface Patient {
-  id: string;
-  full_name: string;
-  phone?: string;
-  email?: string;
-  birth_date?: string;
-  gender?: string;
-}
+// El tipo Patient ahora se importa desde el servicio
+// ...
 
 interface PatientSelectorProps {
   selectedPatientId?: string;
-  onPatientSelect: (patient: Patient) => void;
+  onPatientSelect: (patient: Patient | null) => void; // Permitir nulo para deseleccionar
   onNewPatient?: (patient: Patient) => void;
   placeholder?: string;
   className?: string;
@@ -32,20 +29,21 @@ export default function PatientSelector({
   showRecentPatients = false,
 }: PatientSelectorProps) {
   const [searchTerm, setSearchTerm] = useState(searchQuery);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const { patientsQuery } = usePatients(); // Usar el hook centralizado
+  const { data: patients = [], isLoading: loading } = patientsQuery;
+  
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Cargar pacientes iniciales
-  useEffect(() => {
-    loadPatients();
-  }, [showRecentPatients]);
+  // Cargar pacientes es manejado por usePatients() hook
+  // useEffect(() => {
+  //   loadPatients();
+  // }, [showRecentPatients]);
 
   // Actualizar paciente seleccionado cuando cambia el ID
   useEffect(() => {
@@ -55,6 +53,10 @@ export default function PatientSelector({
         setSelectedPatient(patient);
         setSearchTerm(patient.full_name);
       }
+    } else if (!selectedPatientId) {
+      // Limpiar selección si el ID se vuelve nulo o vacío
+      setSelectedPatient(null);
+      setSearchTerm('');
     }
   }, [selectedPatientId, patients]);
 
@@ -75,7 +77,8 @@ export default function PatientSelector({
       );
       setFilteredPatients(filtered);
     } else {
-      setFilteredPatients(patients.slice(0, 10)); // Mostrar solo los primeros 10
+      // Mostrar recientes o los primeros 10 si no hay término de búsqueda
+      setFilteredPatients(patients.slice(0, 10));
     }
   }, [searchTerm, patients]);
 
@@ -95,68 +98,10 @@ export default function PatientSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const loadPatients = async () => {
-    try {
-      setLoading(true);
-      const query = supabase
-        .from('patients')
-        .select('id, full_name, phone, email, birth_date, gender')
-        .eq('is_active', true);
-
-      // Order by recent activity if showRecentPatients is true
-      if (showRecentPatients) {
-        query.order('updated_at', { ascending: false }).limit(20);
-      } else {
-        query.order('full_name', { ascending: true }).limit(100);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error loading patients:', error);
-        // Usar datos mock si falla la carga
-        setPatients([
-          {
-            id: 'patient_1',
-            full_name: 'María González',
-            phone: '+52 555 123 4567',
-            email: 'maria.gonzalez@email.com',
-          },
-          {
-            id: 'patient_2',
-            full_name: 'Carlos Rodríguez',
-            phone: '+52 555 987 6543',
-            email: 'carlos.rodriguez@email.com',
-          },
-          {
-            id: 'patient_3',
-            full_name: 'Ana Martínez',
-            phone: '+52 555 456 7890',
-            email: 'ana.martinez@email.com',
-          },
-          {
-            id: 'patient_4',
-            full_name: 'Luis Hernández',
-            phone: '+52 555 321 9876',
-            email: 'luis.hernandez@email.com',
-          },
-          {
-            id: 'patient_5',
-            full_name: 'Carmen López',
-            phone: '+52 555 654 3210',
-            email: 'carmen.lopez@email.com',
-          },
-        ]);
-      } else {
-        setPatients(data || []);
-      }
-    } catch (error) {
-      console.error('Error loading patients:', error);
-      setPatients([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // loadPatients() ya no es necesario, es manejado por React Query en usePatients
+  /*
+  const loadPatients = async () => { ... }
+  */
 
   const handlePatientSelect = (patient: Patient) => {
     setSelectedPatient(patient);
@@ -180,7 +125,7 @@ export default function PatientSelector({
 
     if (!value && selectedPatient) {
       setSelectedPatient(null);
-      onPatientSelect({ id: '', full_name: '', phone: '', email: '' });
+      onPatientSelect(null); // Usar null para limpiar
     }
   };
 
@@ -193,7 +138,7 @@ export default function PatientSelector({
   const clearSelection = () => {
     setSelectedPatient(null);
     setSearchTerm('');
-    onPatientSelect({ id: '', full_name: '', phone: '', email: '' });
+    onPatientSelect(null); // Usar null para limpiar
     searchRef.current?.focus();
   };
 
@@ -342,11 +287,13 @@ export default function PatientSelector({
 
       {/* Modal de nuevo paciente */}
       {showNewPatientForm && (
-        <NewPatientModal
+        <NewPatientForm
           isOpen={showNewPatientForm}
           onClose={() => setShowNewPatientForm(false)}
           onSave={newPatient => {
-            setPatients(prev => [newPatient, ...prev]);
+            // La caché de usePatients se invalida automáticamente,
+            // por lo que no necesitamos actualizar el estado local de 'patients'.
+            // Simplemente seleccionamos el nuevo paciente.
             handlePatientSelect(newPatient);
             setShowNewPatientForm(false);
             onNewPatient?.(newPatient);
@@ -358,231 +305,5 @@ export default function PatientSelector({
   );
 }
 
-// Modal para crear nuevo paciente
-interface NewPatientModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (patient: Patient) => void;
-  initialName?: string;
-}
-
-function NewPatientModal({ isOpen, onClose, onSave, initialName = '' }: NewPatientModalProps) {
-  const [formData, setFormData] = useState({
-    full_name: initialName,
-    phone: '',
-    email: '',
-    birth_date: '',
-    gender: '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.full_name.trim()) {
-      newErrors.full_name = 'El nombre completo es obligatorio';
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'El email no tiene un formato válido';
-    }
-
-    if (formData.phone && !/^[\+]?[0-9\s\-\(\)]{10,}$/.test(formData.phone)) {
-      newErrors.phone = 'El teléfono debe tener al menos 10 dígitos';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!validateForm()) return;
-
-    setLoading(true);
-    try {
-      // Obtener clínica activa desde perfiles/relación
-      let clinicId: string | null = null;
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth?.user?.id || '';
-      if (userId) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('clinic_id')
-          .eq('id', userId)
-          .single();
-        clinicId = profile?.clinic_id ?? null;
-        if (!clinicId) {
-          const { data: rel } = await supabase
-            .from('clinic_user_relationships')
-            .select('clinic_id')
-            .eq('user_id', userId)
-            .eq('is_active', true)
-            .order('start_date', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          clinicId = rel?.clinic_id ?? null;
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('patients')
-        .insert({
-          full_name: formData.full_name.trim(),
-          phone: formData.phone.trim() || null,
-          email: formData.email.trim() || null,
-          birth_date: formData.birth_date || '1900-01-01',
-          gender: formData.gender || 'no_especificado',
-          is_active: true,
-          clinic_id: clinicId || undefined,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating patient:', error);
-        // En caso de error, crear paciente temporal para continuar
-        const tempPatient: Patient = {
-          id: `temp_${Date.now()}`,
-          full_name: formData.full_name.trim(),
-          phone: formData.phone.trim() || undefined,
-          email: formData.email.trim() || undefined,
-          birth_date: formData.birth_date || undefined,
-          gender: formData.gender || undefined,
-        };
-        onSave(tempPatient);
-      } else {
-        onSave(data);
-      }
-    } catch (error) {
-      console.error('Error creating patient:', error);
-      // Crear paciente temporal como fallback
-      const tempPatient: Patient = {
-        id: `temp_${Date.now()}`,
-        full_name: formData.full_name.trim(),
-        phone: formData.phone.trim() || undefined,
-        email: formData.email.trim() || undefined,
-        birth_date: formData.birth_date || undefined,
-        gender: formData.gender || undefined,
-      };
-      onSave(tempPatient);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4'>
-      <div className='bg-gray-800 rounded-lg shadow-xl max-w-md w-full'>
-        <div className='flex items-center justify-between p-6 border-b border-gray-700'>
-          <h3 className='text-lg font-semibold text-white'>Nuevo Paciente</h3>
-          <button onClick={onClose} className='text-gray-400 hover:text-white p-2'>
-            <X className='h-5 w-5' />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className='p-6 space-y-4'>
-          <div>
-            <label className='block text-sm font-medium text-gray-300 mb-2'>
-              Nombre Completo *
-            </label>
-            <input
-              type='text'
-              value={formData.full_name}
-              onChange={e => handleInputChange('full_name', e.target.value)}
-              className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                errors.full_name ? 'border-red-500' : 'border-gray-600'
-              }`}
-              placeholder='Ej. Juan Pérez García'
-              required
-            />
-            {errors.full_name && <p className='text-red-400 text-xs mt-1'>{errors.full_name}</p>}
-          </div>
-
-          <div className='grid grid-cols-2 gap-4'>
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>Teléfono</label>
-              <input
-                type='tel'
-                value={formData.phone}
-                onChange={e => handleInputChange('phone', e.target.value)}
-                className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                  errors.phone ? 'border-red-500' : 'border-gray-600'
-                }`}
-                placeholder='+52 555 123 4567'
-              />
-              {errors.phone && <p className='text-red-400 text-xs mt-1'>{errors.phone}</p>}
-            </div>
-
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>Género</label>
-              <select
-                value={formData.gender}
-                onChange={e => handleInputChange('gender', e.target.value)}
-                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400'
-              >
-                <option value=''>Seleccionar</option>
-                <option value='masculino'>Masculino</option>
-                <option value='femenino'>Femenino</option>
-                <option value='otro'>Otro</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className='block text-sm font-medium text-gray-300 mb-2'>Email</label>
-            <input
-              type='email'
-              value={formData.email}
-              onChange={e => handleInputChange('email', e.target.value)}
-              className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                errors.email ? 'border-red-500' : 'border-gray-600'
-              }`}
-              placeholder='juan.perez@email.com'
-            />
-            {errors.email && <p className='text-red-400 text-xs mt-1'>{errors.email}</p>}
-          </div>
-
-          <div>
-            <label className='block text-sm font-medium text-gray-300 mb-2'>
-              Fecha de Nacimiento
-            </label>
-            <input
-              type='date'
-              value={formData.birth_date}
-              onChange={e => handleInputChange('birth_date', e.target.value)}
-              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400'
-            />
-          </div>
-
-          <div className='flex justify-end space-x-3 pt-4 border-t border-gray-700'>
-            <Button type='button' variant='outline' onClick={onClose} disabled={loading}>
-              Cancelar
-            </Button>
-            <Button type='submit' disabled={loading} className='min-w-[100px]'>
-              {loading ? (
-                <div className='flex items-center'>
-                  <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
-                  Guardando...
-                </div>
-              ) : (
-                'Guardar'
-              )}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+// El modal NewPatientModal ha sido eliminado por completo.
+// Se ha reemplazado por el componente reutilizable y refactorizado NewPatientForm.

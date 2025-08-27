@@ -26,20 +26,47 @@ export async function getPatientById(patientId: string, clinicId?: string): Prom
   return data as Patient;
 }
 
+/**
+ * Crea un nuevo paciente en la base de datos.
+ * Esta función es el único punto de entrada para la creación de pacientes.
+ * Se encarga de limpiar los datos y devolver el objeto completo del paciente creado.
+ * @param patientData - Los datos del paciente a crear.
+ * @param clinicId - El ID de la clínica a la que pertenece el paciente.
+ * @returns El objeto completo del paciente recién creado.
+ */
 export async function createPatient(
-  patientData: Omit<PatientInsert, 'id' | 'created_at' | 'updated_at'>,
+  patientData: PatientInsert,
   clinicId: string
 ): Promise<Patient> {
+  // 1. Limpieza y preparación de datos
+  const dataToInsert: PatientInsert = {
+    ...patientData,
+    clinic_id: clinicId,
+    // Asegurar que CURP se guarde en mayúsculas y sin espacios
+    curp: patientData.curp ? patientData.curp.toUpperCase().trim() : null,
+    // Manejar birth_date: si es una cadena vacía o nulo, se guarda como NULL.
+    birth_date: patientData.birth_date || null,
+    // Asegurar que las notas se incluyan, si existen
+    notes: patientData.notes || null,
+  };
+
+  // 2. Inserción en la base de datos y devolución del registro completo
   const { data, error } = await supabase
     .from('patients')
-    .insert({
-      ...patientData,
-      clinic_id: clinicId,
-    })
+    .insert(dataToInsert)
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  // 3. Manejo de errores
+  if (error) {
+    // Error de duplicado de CURP (código 23505 para unique_violation)
+    if (error.code === '23505' && error.message.includes('unique_clinic_curp')) {
+      throw new Error('Ya existe un paciente con este CURP en la clínica.');
+    }
+    console.error('Error creating patient:', error);
+    throw new Error(`Error al crear el paciente: ${error.message}`);
+  }
+
   return data as Patient;
 }
 

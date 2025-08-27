@@ -31,16 +31,26 @@ export const usePatients = (): UsePatientsResult => {
     enabled: !!activeClinic?.id,
   });
 
-  const createPatientMutation = useMutation({
-    mutationFn: async (
-      patientData: Omit<PatientInsert, 'id' | 'created_at' | 'updated_at' | 'clinic_id'>
-    ) => {
-      if (!activeClinic?.id) throw new Error('No hay clínica activa');
-      const res = await createPatientSvc(patientData as any, activeClinic.id);
-      return res as Patient;
+  const createPatientMutation = useMutation<Patient, Error, PatientInsert>({
+    mutationFn: (patientData: PatientInsert) => {
+      if (!activeClinic?.id) {
+        throw new Error('No hay una clínica activa para crear el paciente.');
+      }
+      // Llamamos a nuestro servicio refactorizado
+      return createPatientSvc(patientData, activeClinic.id);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patients'] });
+    onSuccess: (newPatient) => {
+      console.log('✅ Paciente creado, invalidando caché...', { newPatient });
+      // Invalidación precisa: solo la lista de pacientes de la clínica activa
+      queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
+      // Opcional: también podemos actualizar la caché manualmente para una respuesta instantánea
+      // queryClient.setQueryData(['patients', activeClinic?.id], (oldData: Patient[] | undefined) => 
+      //   oldData ? [...oldData, newPatient] : [newPatient]
+      // );
+    },
+    onError: (error) => {
+      console.error('❌ Error al crear el paciente:', error.message);
+      // Aquí se pueden mostrar notificaciones de error al usuario
     },
   });
 
@@ -51,7 +61,7 @@ export const usePatients = (): UsePatientsResult => {
       return res as Patient;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
     },
   });
 
@@ -62,7 +72,7 @@ export const usePatients = (): UsePatientsResult => {
       return true;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
     },
   });
 
