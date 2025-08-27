@@ -4,10 +4,12 @@
 archive-legacy-files/
 docs/
 *.md
+*.MD
 *.sql
 build-config.md
 complete_medical_specialties.sql
 supabase/migrations/
+supabase/config.toml
 medical_specialties_rows.csv
 temp_fix.sql
 populate_medical_specialties.sql
@@ -17,6 +19,16 @@ create_email_availability_function.sql
 disable_audit_trigger.sql
 fix_audit_patient_creation.sql
 fix_rls_functions.sql
+
+# Archivos de configuración y environment
+.env
+.env.*
+env.example
+*.env
+.env.local
+.env.development
+.env.production
+.env.staging
 
 # Scripts de desarrollo
 *.cjs
@@ -34,12 +46,39 @@ update-env.js
 emergency-policy-cleanup.js
 verify-supabase-setup.mjs
 verificar-tablas-supabase.mjs
+link-supabase.js
+insert-test-email.js
+configure-smtp-env.js
+convert-to-absolute-imports.mjs
+diagnose-admin-dashboard.js
+debug-profiles-issue.cjs
 
 # Archivos de configuración local
 tsconfig.tsbuildinfo
 .vscode/
 .claude/
+.netlify/
 
-# Archivos de backup
+# Archivos de backup y temporales
 *.backup.tsx
 *.sql.backup
+ESTADO_FINAL_MIGRACION.md
+FINAL_STATUS.md
+IMPORT_ISSUES_RESOLVED.md
+MEJORAS_PENDIENTES.md
+MIGRATION_COMPLETED.md
+MIGRATION_FIXES.md
+MIGRATION_SUCCESS.md
+OBSOLETE_FILES_TO_DELETE.md
+PROBLEMA_RESUELTO.md
+PROGRESO_COMPONENTES.md
+REGISTRO_FIXED_README.md
+SUPABASE_CONFIGURATION.md
+VSCODE_EXTENSIONS_FIXED.md
+
+# Archivos de logs y compilación
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+node_modules/
