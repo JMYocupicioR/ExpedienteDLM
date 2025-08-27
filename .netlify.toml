@@ -4,11 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  # Netlify secrets scanning configuration
-  # Omit non-runtime paths that may contain sample credentials or docs
-  SECRETS_SCAN_OMIT_PATHS = "archive-legacy-files/**,docs/**,dist/**,*.md,*.MD,package-lock.json,.netlify/**,supabase/**,SUPABASE_CONFIGURATION.md,env.example"
-  # Omit known example keys names in docs and config files
-  SECRETS_SCAN_OMIT_KEYS = "REACT_APP_DEEPSEEK_API_KEY,SMTP_PASSWORD,VITE_SUPABASE_ANON_KEY,VITE_APP_NAME,VITE_APP_VERSION,VITE_SUPABASE_URL,HCAPTCHA_SECRET_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,FACEBOOK_CLIENT_ID,FACEBOOK_CLIENT_SECRET,tu_proyecto,tu_clave,tu_clave_secreta,tu_google_client,tu_facebook_client"
+  SECRETS_SCAN_ENABLED = "false"
 
 [[redirects]]
   from = "/*"

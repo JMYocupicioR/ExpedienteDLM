@@ -12,9 +12,9 @@ Para que tu aplicación funcione correctamente en Netlify, necesitas configurar 
 
 #### **Variables Requeridas:**
 ```
-VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
-VITE_SUPABASE_ANON_KEY=tu_clave_anonima_aqui
-VITE_HCAPTCHA_SITE_KEY=tu_clave_del_sitio_hcaptcha
+VITE_SUPABASE_URL=your_supabase_url_here
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+VITE_HCAPTCHA_SITE_KEY=your_hcaptcha_site_key_here
 ```
 
 #### **Variables Opcionales:**
