@@ -31,3 +31,24 @@ dist-ssr
 .env
 .env.*
 *.env
+.env.local
+.env.development
+.env.production
+.env.staging
+
+# Supabase local development
+supabase/.env
+supabase/.env.*
+supabase/config.toml.local
+
+# IDE and editor files
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.claude/settings.local.json
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
