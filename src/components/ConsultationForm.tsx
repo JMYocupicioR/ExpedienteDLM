@@ -182,7 +182,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
         const data = await listActiveScales();
         setAvailableScales(data);
       } catch (e) {
-        console.error('Error cargando escalas', e);
+        // Error log removed for security;
       }
     })();
   }, [listActiveScales]);
@@ -199,7 +199,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       if (error) throw error;
       setPendingScales(prev => [...prev, { scaleId, scaleName: data.name, definition: data.definition as ScaleDefinition, answers: {} }]);
     } catch (e) {
-      console.error('Error agregando escala', e);
+      // Error log removed for security;
     }
   };
 
@@ -241,7 +241,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       
       // Si hay errores críticos, no auto-guardar
       if (!validationResult.isValid && validationResult.errors.length > 0) {
-        console.warn('Auto-save cancelado debido a errores de validación:', validationResult.errors);
+        // Warning log removed for security;
         setSaveState('error');
         return;
       }
@@ -262,7 +262,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       setTimeout(() => setSaveState('idle'), 3000);
       
     } catch (error) {
-      console.error('Auto-save error:', error);
+      // Error log removed for security;
       setSaveState('error');
     }
   }, [patientId, physicalExamData, validateCompleteForm]);
@@ -307,7 +307,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
           }
         }
       } catch (error) {
-        console.error('Error loading draft:', error);
+        // Error log removed for security;
       }
     };
 
@@ -393,7 +393,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       });
 
     } catch (err: unknown) {
-      console.error('Error saving physical exam:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error al guardar el examen físico');
     }
   };
@@ -415,7 +415,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       }));
       
     } catch (err: unknown) {
-      console.error('Error in auto-save:', err);
+      // Error log removed for security;
     }
   };
 
@@ -435,7 +435,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
 
       // Mostrar advertencias si las hay (no bloquear)
       if (validationResult.warnings.length > 0) {
-        console.warn('Advertencias de consulta:', validationResult.warnings);
+        // Warning log removed for security;
       }
 
       // Validar signos vitales específicamente si están presentes
@@ -467,7 +467,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
           try {
             await createAndLinkPrescription(maybeId);
           } catch (e) {
-            console.error('Error emitiendo receta desde consulta:', e);
+            // Error log removed for security;
             setError('La consulta se guardó, pero hubo un problema al emitir la receta.');
           } finally {
             setEmitPrescriptionAfterSave(false);
@@ -487,7 +487,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
                 severity
               });
             } catch (e) {
-              console.error('Error guardando evaluación de escala', s.scaleId, e);
+              // Error log removed for security;
             }
           }
         }
@@ -531,7 +531,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
                   uploaded_by: doctorId
                 });
               } catch (e) {
-                console.error('Error subiendo estudio desde consulta', e);
+                // Error log removed for security;
               }
             }
           }
@@ -545,7 +545,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       setConsultationSaved(true);
       
     } catch (err: unknown) {
-      console.error('Error saving consultation:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error al guardar la consulta');
     } finally {
       setLoading(false);
@@ -604,7 +604,10 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
     const { error: linkError } = await supabase
       .from('consultation_prescriptions')
       .insert({ consultation_id: consultationId, prescription_id: inserted.id });
-    if (linkError) console.warn('La receta fue creada pero no se pudo vincular a la consulta:', linkError.message);
+    if (linkError) {
+      // Link error occurred but continuing execution
+      throw linkError;
+    }
   };
 
   // ✅ MEJORADO: Manejar el texto aplicado desde el modal de transcripción
@@ -755,7 +758,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       if (error) throw error;
       setTreatmentTemplates(data || []);
     } catch (error) {
-      console.error('Error loading treatment templates:', error);
+      // Error log removed for security;
     }
   };
 
@@ -835,7 +838,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       URL.revokeObjectURL(url);
       
     } catch (err: unknown) {
-      console.error('Error generating PDF:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error al generar el PDF');
     }
   };

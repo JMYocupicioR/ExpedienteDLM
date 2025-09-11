@@ -73,7 +73,7 @@ export default function ClinicStaff() {
 
       setStaff(data || []);
     } catch (error) {
-      console.error('Error loading staff:', error);
+      // Error log removed for security;
     } finally {
       setLoading(false);
     }
@@ -91,7 +91,7 @@ export default function ClinicStaff() {
       // Recargar lista
       loadStaff();
     } catch (error) {
-      console.error('Error updating staff status:', error);
+      // Error log removed for security;
     }
   };
 
@@ -111,7 +111,7 @@ export default function ClinicStaff() {
       // Recargar lista
       loadStaff();
     } catch (error) {
-      console.error('Error removing staff member:', error);
+      // Error log removed for security;
     }
   };
 

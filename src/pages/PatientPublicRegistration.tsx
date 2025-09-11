@@ -98,7 +98,7 @@ export default function PatientPublicRegistration() {
           setScaleDefs(map);
         }
       } catch (e: any) {
-        console.error('Error validating token', e);
+        // Error log removed for security;
         setError('No se pudo validar el enlace.');
       } finally {
         setLoading(false);
@@ -134,7 +134,7 @@ export default function PatientPublicRegistration() {
       if (error) throw new Error(error.message || 'Error al completar registro');
       setSubmitted(true);
     } catch (e: any) {
-      console.error('Error submit', e);
+      // Error log removed for security;
       setError(e?.message || 'Error al enviar');
     } finally {
       setSubmitting(false);

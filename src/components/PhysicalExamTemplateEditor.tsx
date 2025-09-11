@@ -185,7 +185,7 @@ export default function PhysicalExamTemplateEditor({
         })),
       };
 
-      console.log('Guardando plantilla con definición:', definition);
+      // Sensitive log removed for security;
 
       if (template) {
         // Update existing template
@@ -223,7 +223,7 @@ export default function PhysicalExamTemplateEditor({
 
       onClose();
     } catch (err: any) {
-      console.error('Error saving template:', err);
+      // Error log removed for security;
       setError('Error al guardar la plantilla: ' + err.message);
     } finally {
       setIsLoading(false);

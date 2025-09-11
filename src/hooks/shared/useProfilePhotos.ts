@@ -63,7 +63,7 @@ export const useProfilePhotos = () => {
         .eq('id', user.id);
 
       if (updateError) {
-        console.warn('No se pudo actualizar la URL en el perfil:', updateError);
+        // Warning log removed for security;
       }
 
       return { url: urlData.publicUrl, error: null };
@@ -208,7 +208,7 @@ export const useProfilePhotos = () => {
         .eq('id', user.id);
 
       if (updateError) {
-        console.warn('No se pudo actualizar la URL del icono en el perfil:', updateError);
+        // Warning log removed for security;
       }
 
       return { url: urlData.publicUrl, error: null };
@@ -250,7 +250,7 @@ export const useProfilePhotos = () => {
 
       return null;
     } catch (err) {
-      console.error('Error obteniendo foto de perfil:', err);
+      // Error log removed for security;
       return null;
     }
   }, [user]);
@@ -283,7 +283,7 @@ export const useProfilePhotos = () => {
 
       return null;
     } catch (err) {
-      console.error('Error obteniendo icono de receta:', err);
+      // Error log removed for security;
       return null;
     }
   }, [user]);
@@ -324,7 +324,7 @@ export const useProfilePhotos = () => {
           .eq('id', user.id);
 
         if (updateError) {
-          console.warn('No se pudo actualizar el perfil:', updateError);
+          // Warning log removed for security;
         }
       }
 
@@ -373,7 +373,7 @@ export const useProfilePhotos = () => {
           .eq('id', user.id);
 
         if (updateError) {
-          console.warn('No se pudo actualizar el perfil:', updateError);
+          // Warning log removed for security;
         }
       }
 

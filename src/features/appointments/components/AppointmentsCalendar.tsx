@@ -136,7 +136,7 @@ export default function AppointmentsCalendar({
       setShowAppointmentForm(false);
       setSelectedTimeSlot('');
     } catch (error) {
-      console.error('Error creating appointment:', error);
+      // Error log removed for security;
       addError('Error', error instanceof Error ? error.message : 'No se pudo crear la cita');
       throw error;
     }
@@ -151,7 +151,7 @@ export default function AppointmentsCalendar({
       setEditingAppointment(null);
       setShowAppointmentForm(false);
     } catch (error) {
-      console.error('Error updating appointment:', error);
+      // Error log removed for security;
       addError('Error', error instanceof Error ? error.message : 'No se pudo actualizar la cita');
       throw error;
     }
@@ -164,7 +164,7 @@ export default function AppointmentsCalendar({
       await cancelAppointment(appointmentId, cancelledBy);
       addSuccess('Éxito', 'Cita cancelada correctamente');
     } catch (error) {
-      console.error('Error cancelling appointment:', error);
+      // Error log removed for security;
       addError('Error', error instanceof Error ? error.message : 'No se pudo cancelar la cita');
     }
   };
@@ -174,7 +174,7 @@ export default function AppointmentsCalendar({
       await updateAppointment(appointmentId, { status: newStatus });
       addSuccess('Éxito', 'Estado de la cita actualizado correctamente');
     } catch (error) {
-      console.error('Error updating appointment status:', error);
+      // Error log removed for security;
       addError('Error', error instanceof Error ? error.message : 'No se pudo actualizar el estado');
     }
   };

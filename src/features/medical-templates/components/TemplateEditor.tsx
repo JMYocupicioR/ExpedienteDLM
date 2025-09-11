@@ -123,7 +123,7 @@ export default function TemplateEditor({
       await onSave(formData);
       onClose();
     } catch (error) {
-      console.error('Error saving template:', error);
+      // Error log removed for security;
       alert('Error al guardar la plantilla');
     } finally {
       setSaving(false);

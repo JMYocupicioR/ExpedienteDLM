@@ -277,7 +277,7 @@ const MedicalTranscription = ({ onClose, onApplyText, isOpen }: MedicalTranscrip
 
             if (testCompletion.choices[0]?.message?.content) {
                 setConnectionStatus('connected');
-                console.log('✅ Conexión con DeepSeek exitosa');
+                // Sensitive log removed for security;
             } else {
                 throw new Error("Respuesta inválida de DeepSeek");
             }
@@ -285,7 +285,7 @@ const MedicalTranscription = ({ onClose, onApplyText, isOpen }: MedicalTranscrip
         } catch (err: any) {
             setConnectionStatus('failed');
             setError(`Error de conexión: ${err.message}`);
-            console.error('❌ Error de conexión con DeepSeek:', err);
+            // Error log removed for security;
         }
     }
 
@@ -363,15 +363,15 @@ Genera la nota médica estructurada:`;
                 };
                 
                 setAnalysisMetrics(metrics);
-                console.log('📊 Métricas de análisis:', metrics);
+                // Sensitive log removed for security;
                 
                 // Validación de calidad de la respuesta
                 if (result.length < 20) {
-                    console.warn('⚠️ Respuesta muy corta, podría indicar un problema');
+                    // Warning log removed for security;
                 }
                 
                 if (!result.includes('Paciente')) {
-                    console.warn('⚠️ Formato no estándar detectado');
+                    // Warning log removed for security;
                 }
                 
             } else {
@@ -379,7 +379,7 @@ Genera la nota médica estructurada:`;
             }
 
         } catch (err: any) {
-            console.error('Error con DeepSeek API:', err);
+            // Error log removed for security;
             setError(err.message || 'No se pudo procesar la solicitud con DeepSeek. Verifica tu API key y conexión.');
         } finally {
             setIsLoading(false);

@@ -34,7 +34,7 @@ export default function MedicalScales() {
         if (error) throw error;
         setScales(data || []);
       } catch (e) {
-        console.error('Error loading scales', e);
+        // Error log removed for security;
       } finally {
         setLoading(false);
       }

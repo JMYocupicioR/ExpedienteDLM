@@ -3,7 +3,7 @@ import GenerateInvitationLinkModal from '@/components/GenerateInvitationLinkModa
 import QuickStartModal from '@/components/QuickStartModal';
 import { Button } from '@/components/ui/button';
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
-import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useClinic } from '@/context/ClinicContext';
 import { EnhancedAppointment } from '@/lib/services/enhanced-appointment-service';
 import { getAppointmentsByDateRange } from '@/lib/services/enhanced-appointment-service';
 import { supabase } from '@/lib/supabase';
@@ -105,7 +105,7 @@ const Dashboard = () => {
           }
         }
       } catch (error) {
-        console.error('Error getting user:', error);
+        // Error log removed for security;
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -189,7 +189,7 @@ const Dashboard = () => {
 
       setRecentPatients(processedPatients);
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      // Error log removed for security;
     }
   };
 
@@ -232,7 +232,7 @@ const Dashboard = () => {
         upcomingAppointments: filteredAppointments.length,
       }));
     } catch (error) {
-      console.error('Error loading upcoming appointments:', error);
+      // Error log removed for security;
     } finally {
       setLoadingAppointments(false);
     }
@@ -262,7 +262,7 @@ const Dashboard = () => {
       );
       setShowQuickSearch(true);
     } catch (error) {
-      console.error('Error in quick search:', error);
+      // Error log removed for security;
     }
   };
 

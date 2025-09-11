@@ -40,7 +40,7 @@ export function useAppointments(filters?: AppointmentFilters): UseAppointmentsRe
       const data = await appointmentService.getAppointments(queryFilters);
       setAppointments(data);
     } catch (err) {
-      console.error('Error loading appointments:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error loading appointments');
     } finally {
       setLoading(false);
@@ -57,7 +57,7 @@ export function useAppointments(filters?: AppointmentFilters): UseAppointmentsRe
       setAppointments(prev => [...prev, newAppointment]);
       return newAppointment;
     } catch (err) {
-      console.error('Error creating appointment:', err);
+      // Error log removed for security;
       throw err;
     }
   }, []);
@@ -70,7 +70,7 @@ export function useAppointments(filters?: AppointmentFilters): UseAppointmentsRe
       );
       return updatedAppointment;
     } catch (err) {
-      console.error('Error updating appointment:', err);
+      // Error log removed for security;
       throw err;
     }
   }, []);
@@ -80,7 +80,7 @@ export function useAppointments(filters?: AppointmentFilters): UseAppointmentsRe
       await appointmentService.deleteAppointment(id);
       setAppointments(prev => prev.filter(apt => apt.id !== id));
     } catch (err) {
-      console.error('Error deleting appointment:', err);
+      // Error log removed for security;
       throw err;
     }
   }, []);
@@ -90,7 +90,7 @@ export function useAppointments(filters?: AppointmentFilters): UseAppointmentsRe
       const dateAppointments = await appointmentService.getAppointmentsByDate(date, user?.id);
       return dateAppointments;
     } catch (err) {
-      console.error('Error getting appointments by date:', err);
+      // Error log removed for security;
       throw err;
     }
   }, [user?.id]);

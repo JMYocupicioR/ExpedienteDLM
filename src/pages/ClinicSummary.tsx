@@ -139,7 +139,7 @@ export default function ClinicSummary() {
       setRecentActivity(activities || []);
 
     } catch (error) {
-      console.error('Error loading clinic data:', error);
+      // Error log removed for security;
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useClinic } from '@/context/ClinicContext';
 import { Building } from 'lucide-react';
 
 const ClinicSwitcher: React.FC<{ isCollapsed: boolean }> = ({ isCollapsed }) => {
@@ -21,7 +21,7 @@ const ClinicSwitcher: React.FC<{ isCollapsed: boolean }> = ({ isCollapsed }) => 
     );
   }
 
-  const availableClinics = userClinics.map(membership => membership.clinic).filter(Boolean);
+  const availableClinics = (userClinics || []).map(membership => membership.clinic).filter(Boolean);
 
   if (availableClinics.length === 0) {
     return (

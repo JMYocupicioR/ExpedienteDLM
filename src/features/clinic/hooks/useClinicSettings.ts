@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useClinic } from '@/context/ClinicContext';
 
 export interface ClinicSettings {
   id: string;
@@ -57,7 +57,7 @@ export const useClinicSettings = () => {
 
       setSettings(data);
     } catch (err: any) {
-      console.error('Error loading clinic settings:', err);
+      // Error log removed for security;
       setError(err.message);
     } finally {
       setLoading(false);
@@ -83,7 +83,7 @@ export const useClinicSettings = () => {
       setSettings(data);
       return { success: true, data };
     } catch (err: any) {
-      console.error('Error updating clinic settings:', err);
+      // Error log removed for security;
       return { success: false, error: err.message };
     }
   };
@@ -132,7 +132,7 @@ export const useClinicSettings = () => {
       const result = await updateSettings({ logo_url: publicUrl });
       return result;
     } catch (err: any) {
-      console.error('Error uploading logo:', err);
+      // Error log removed for security;
       return { success: false, error: err.message };
     }
   };
@@ -152,7 +152,7 @@ export const useClinicSettings = () => {
 
       return data.role === 'admin';
     } catch (err) {
-      console.error('Error checking permissions:', err);
+      // Error log removed for security;
       return false;
     }
   };

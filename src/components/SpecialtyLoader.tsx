@@ -25,7 +25,7 @@ const SpecialtyLoader: React.FC<SpecialtyLoaderProps> = ({ onSuccess, onError })
       setCurrentCount(count || 0);
       return count || 0;
     } catch (error) {
-      console.error('Error verificando especialidades:', error);
+      // Error log removed for security;
       return 0;
     }
   };
@@ -219,7 +219,7 @@ const SpecialtyLoader: React.FC<SpecialtyLoaderProps> = ({ onSuccess, onError })
       if (onSuccess) onSuccess();
       
     } catch (error: any) {
-      console.error('Error cargando especialidades:', error);
+      // Error log removed for security;
       const errorMessage = `Error: ${error.message || 'Error desconocido'}`;
       setMessage(errorMessage);
       if (onError) onError(errorMessage);

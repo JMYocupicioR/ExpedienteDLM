@@ -137,7 +137,7 @@ export default function UserProfile() {
       await loadRecentActivity();
 
     } catch (err: any) {
-      console.error('Error loading profile:', err);
+      // Error log removed for security;
       setError(err.message || 'Error al cargar el perfil');
     } finally {
       setLoading(false);
@@ -185,7 +185,7 @@ export default function UserProfile() {
       });
 
     } catch (err) {
-      console.error('Error loading stats:', err);
+      // Error log removed for security;
     }
   };
 
@@ -243,7 +243,7 @@ export default function UserProfile() {
       setRecentActivity(activities.slice(0, 10));
 
     } catch (err) {
-      console.error('Error loading activity:', err);
+      // Error log removed for security;
     }
   };
 
@@ -284,7 +284,7 @@ export default function UserProfile() {
       await loadUserProfile();
 
     } catch (err: any) {
-      console.error('Error saving profile:', err);
+      // Error log removed for security;
       setError(err.message || 'Error al guardar el perfil');
     } finally {
       setLoading(false);
@@ -650,7 +650,7 @@ export default function UserProfile() {
               activities={recentActivity}
               onActivityClick={(activity) => {
                 // Aquí podrías navegar a detalles de la actividad
-                console.log('Activity clicked:', activity);
+                // Sensitive log removed for security;
               }}
               maxItems={8}
             />

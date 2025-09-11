@@ -11,8 +11,11 @@ import {
   Calendar,
   User
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useClinic } from '@/context/ClinicContext';
+import { useSimpleClinic } from '@/hooks/useSimpleClinic';
+import { supabase } from '@/lib/supabase';
 
 interface ClinicStatusCardProps {
   onStatusUpdate?: () => void;
@@ -61,13 +64,53 @@ const statusConfig = {
 };
 
 export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardProps) {
-  const { activeClinic, userClinics, isLoading, error, refreshUserClinics } = useClinic();
+  const navigate = useNavigate();
+  
+  // Usar contexto complejo y hook simple como fallback
+  const { activeClinic: contextClinic, clinics, loading: contextLoading, error: contextError } = useClinic();
+  const { activeClinic: simpleClinic, loading: simpleLoading, error: simpleError } = useSimpleClinic();
+  
+  // Usar el que esté disponible
+  const activeClinic = contextClinic || simpleClinic;
+  const loading = contextLoading || simpleLoading;
+  const error = contextError || simpleError;
+  
+  console.log('ClinicStatusCard - using clinic:', activeClinic?.name || 'null');
   const [sendingRequest, setSendingRequest] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [userRelationship, setUserRelationship] = useState<any>(null);
 
-  const currentMembership = activeClinic 
-    ? userClinics.find(m => m.clinic_id === activeClinic.id) 
-    : null;
+  // Load user's relationship with current clinic
+  useEffect(() => {
+    const loadUserRelationship = async () => {
+      if (!activeClinic) {
+        setUserRelationship(null);
+        return;
+      }
+
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from('clinic_user_relationships')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('clinic_id', activeClinic.id)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          throw error;
+        }
+
+        setUserRelationship(data);
+      } catch (err) {
+        // Error log removed for security
+      }
+    };
+
+    loadUserRelationship();
+  }, [activeClinic]);
 
   const handleSendRequest = async () => {
     if (!activeClinic) {
@@ -84,15 +127,25 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
     try {
       // Esta lógica podría necesitar una función dedicada en el contexto
       // pero por ahora, la mantenemos simple.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuario no autenticado');
+
       const { error } = await supabase.from('clinic_user_relationships')
         .update({ status: 'pending', updated_at: new Date().toISOString() })
-        .eq('user_id', currentMembership!.user_id)
+        .eq('user_id', user.id)
         .eq('clinic_id', activeClinic.id);
 
       if (error) throw error;
 
       setMessage({ type: 'success', text: "Solicitud reenviada con éxito." });
-      await refreshUserClinics();
+      // Reload relationship
+      const { data } = await supabase
+        .from('clinic_user_relationships')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('clinic_id', activeClinic.id)
+        .single();
+      setUserRelationship(data);
       onStatusUpdate?.();
 
     } catch (error) {
@@ -119,7 +172,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
         <div className="flex items-center justify-center">
@@ -131,7 +184,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
   }
 
   // Usuario sin relación con clínica
-  if (!activeClinic || !currentMembership) {
+  if (!activeClinic || !userRelationship) {
     return (
       <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
         <div className="flex items-start space-x-4">
@@ -151,7 +204,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
             
             <div className="flex space-x-3">
               <Button
-                onClick={() => window.location.href = '/buscar-clinicas'}
+                onClick={() => navigate('/buscar-clinicas')}
                 variant="outline"
                 className="flex items-center"
               >
@@ -159,7 +212,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
                 Buscar Clínicas
               </Button>
               <Button
-                onClick={() => window.location.href = '/registrar-clinica'}
+                onClick={() => navigate('/registrar-clinica')}
                 className="flex items-center"
               >
                 <Building className="h-4 w-4 mr-2" />
@@ -172,7 +225,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
     );
   }
 
-  const currentStatus = currentMembership.role === 'pending_approval' ? 'pending' : 'approved'; // Simplificación
+  const currentStatus = userRelationship?.status || 'approved';
   const config = statusConfig[currentStatus];
   const StatusIcon = config.icon;
 
@@ -189,7 +242,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
               Estado en {activeClinic.name}
             </h3>
             <button
-              onClick={refreshUserClinics}
+              onClick={() => window.location.reload()}
               className="p-1 text-gray-400 hover:text-white transition-colors"
               title="Actualizar estado"
             >
@@ -213,20 +266,20 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
               </div>
             )}
             
-            {currentMembership.role && (
+            {userRelationship?.role_in_clinic && (
               <div className="flex items-center text-gray-400">
                 <User className="h-4 w-4 mr-2" />
                 <span className="capitalize">
-                  {currentMembership.role === 'doctor' ? 'Médico' : 
-                   currentMembership.role === 'admin' ? 'Administrador' : 'Personal'}
+                  {userRelationship.role_in_clinic === 'doctor' ? 'Médico' : 
+                   userRelationship.role_in_clinic === 'admin_staff' ? 'Personal Administrativo' : 'Personal'}
                 </span>
               </div>
             )}
             
-            {currentMembership.joined_at && (
+            {userRelationship?.start_date && (
               <div className="flex items-center text-gray-400">
                 <Calendar className="h-4 w-4 mr-2" />
-                <span>Miembro desde: {formatDate(currentMembership.joined_at)}</span>
+                <span>Miembro desde: {formatDate(userRelationship.start_date)}</span>
               </div>
             )}
           </div>

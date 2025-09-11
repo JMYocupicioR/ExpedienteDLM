@@ -1,5 +1,6 @@
 import type { Database } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
+import { encryptPatientPHI, decryptPatientPHI } from '@/lib/encryption';
 
 // Tipos extraídos de la base de datos
 type Patient = Database['public']['Tables']['patients']['Row'];
@@ -15,7 +16,10 @@ export async function getPatientsByClinic(clinicId: string): Promise<Patient[]> 
     .order('full_name');
 
   if (error) throw new Error(error.message);
-  return data || [];
+  
+  // Temporarily skip decryption for debugging
+  console.log('Patients loaded:', data?.length || 0);
+  return (data || []) as Patient[];
 }
 
 export async function getPatientById(patientId: string, clinicId?: string): Promise<Patient> {
@@ -23,6 +27,9 @@ export async function getPatientById(patientId: string, clinicId?: string): Prom
   if (clinicId) query = query.eq('clinic_id', clinicId);
   const { data, error } = await query.single();
   if (error) throw new Error(error.message);
+  
+  // Temporarily skip decryption for debugging
+  console.log('Patient loaded by ID:', data.id);
   return data as Patient;
 }
 
@@ -38,35 +45,52 @@ export async function createPatient(
   patientData: PatientInsert,
   clinicId: string
 ): Promise<Patient> {
-  // 1. Limpieza y preparación de datos
-  const dataToInsert: PatientInsert = {
-    ...patientData,
-    clinic_id: clinicId,
-    // Asegurar que CURP se guarde en mayúsculas y sin espacios
-    curp: patientData.curp ? patientData.curp.toUpperCase().trim() : null,
-    // Manejar birth_date: si es una cadena vacía o nulo, se guarda como NULL.
+  // 1. Limpieza y preparación de datos - VERSION SIMPLIFICADA PARA DEBUG
+  const cleanedData = {
+    full_name: patientData.full_name,
+    social_security_number: patientData.social_security_number ? patientData.social_security_number.toUpperCase().trim() : null,
+    email: patientData.email || null,
+    phone: patientData.phone || null,
     birth_date: patientData.birth_date || null,
-    // Asegurar que las notas se incluyan, si existen
-    notes: patientData.notes || null,
+    gender: patientData.gender || null,
+    address: patientData.address || null,
+    clinic_id: clinicId,
+    primary_doctor_id: patientData.primary_doctor_id || null,
+    is_active: patientData.is_active !== undefined ? patientData.is_active : true,
+    // Campos JSON como objetos vacíos si no se proporcionan
+    insurance_info: patientData.insurance_info || {},
+    emergency_contact: patientData.emergency_contact || {},
+    notes: patientData.notes || null
   };
 
-  // 2. Inserción en la base de datos y devolución del registro completo
+  // 2. Temporarily skip encryption for debugging
+  console.log('Inserting patient data:', cleanedData);
+  
+  // 3. Inserción en la base de datos y devolución del registro completo
   const { data, error } = await supabase
     .from('patients')
-    .insert(dataToInsert)
+    .insert(cleanedData)
     .select()
     .single();
 
-  // 3. Manejo de errores
+  // 4. Manejo de errores
   if (error) {
+    console.error('Patient creation error details:');
+    console.error('Code:', error.code);
+    console.error('Message:', error.message);
+    console.error('Details:', error.details);
+    console.error('Hint:', error.hint);
+    console.error('Full error object:', error);
+    
     // Error de duplicado de CURP (código 23505 para unique_violation)
-    if (error.code === '23505' && error.message.includes('unique_clinic_curp')) {
-      throw new Error('Ya existe un paciente con este CURP en la clínica.');
+    if (error.code === '23505' && error.message.includes('unique_clinic_social_security')) {
+      throw new Error('Ya existe un paciente con este número de seguridad social en la clínica.');
     }
-    console.error('Error creating patient:', error);
-    throw new Error(`Error al crear el paciente: ${error.message}`);
+    throw new Error(`Error al crear el paciente: ${error.message} (Código: ${error.code})`);
   }
 
+  // 5. Return patient data (temporarily without decryption for debugging)
+  console.log('Patient created successfully:', data);
   return data as Patient;
 }
 
@@ -76,19 +100,26 @@ export async function updatePatient(
   clinicId: string
 ): Promise<Patient> {
   const { id, clinic_id, created_at, ...safeUpdates } = updates as any;
+  
+  // Encrypt PHI data before updating
+  const encryptedUpdates = await encryptPatientPHI({
+    ...safeUpdates,
+    updated_at: new Date().toISOString(),
+  });
+  
   const { data, error } = await supabase
     .from('patients')
-    .update({
-      ...safeUpdates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(encryptedUpdates)
     .eq('id', patientId)
     .eq('clinic_id', clinicId)
     .select()
     .single();
 
   if (error) throw new Error(error.message);
-  return data as Patient;
+  
+  // Decrypt PHI data before returning
+  const decryptedPatient = await decryptPatientPHI(data);
+  return decryptedPatient as Patient;
 }
 
 export async function deletePatient(patientId: string, clinicId: string): Promise<boolean> {
@@ -114,7 +145,10 @@ export async function searchPatients(
     .order('full_name')
     .limit(limit);
   if (error) throw new Error(error.message);
-  return data || [];
+  
+  // Temporarily skip decryption for debugging
+  console.log('Search results:', data?.length || 0);
+  return (data || []) as Patient[];
 }
 
 export async function getPatientStats(clinicId: string): Promise<{

@@ -48,7 +48,7 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
       const staff = await ClinicStaffService.getClinicStaff(clinicId);
       setStaffOverview(staff);
     } catch (error) {
-      console.error('Error cargando personal:', error);
+      // Error log removed for security;
       addNotification('error', 'Error al cargar el personal de la clínica');
     } finally {
       setLoading(false);

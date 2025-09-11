@@ -83,7 +83,7 @@ export default function PrescriptionHistoryViewer({
       const history = await getPrescriptionHistory(id);
       setPrescriptionHistory(history);
     } catch (err) {
-      console.error('Error loading prescription history:', err);
+      // Error log removed for security;
     } finally {
       setHistoryLoading(false);
     }

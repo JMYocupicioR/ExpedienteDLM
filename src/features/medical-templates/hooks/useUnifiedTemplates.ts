@@ -49,7 +49,7 @@ export function useUnifiedTemplates() {
       if (error) throw error;
       return data || [];
     } catch (err) {
-      console.error('Error fetching physical exam templates:', err);
+      // Error log removed for security;
       return [];
     }
   }, []);
@@ -138,7 +138,7 @@ export function useUnifiedTemplates() {
       setUnifiedTemplates(results);
       return results;
     } catch (err) {
-      console.error('Error searching unified templates:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error desconocido');
       return [];
     } finally {
@@ -173,7 +173,7 @@ export function useUnifiedTemplates() {
 
       return stats;
     } catch (err) {
-      console.error('Error getting unified stats:', err);
+      // Error log removed for security;
       return null;
     }
   }, [searchAllTemplates]);
@@ -223,7 +223,7 @@ export function useUnifiedTemplates() {
       // Actualizar lista local
       setUnifiedTemplates(prev => prev.filter(t => t.id !== templateId));
     } catch (err) {
-      console.error('Error deleting unified template:', err);
+      // Error log removed for security;
       throw err;
     }
   }, [medicalTemplatesHook]);

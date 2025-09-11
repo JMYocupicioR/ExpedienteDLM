@@ -7,27 +7,27 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Verificar que las variables de entorno estén configuradas
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Variables de Supabase no configuradas');
-  console.error('Por favor, configura las siguientes variables en tu archivo .env:');
-  console.error('- VITE_SUPABASE_URL');
-  console.error('- VITE_SUPABASE_ANON_KEY');
-  console.error('Variables encontradas:');
-  console.error('URL:', supabaseUrl);
-  console.error('Key:', supabaseAnonKey ? 'Definida' : 'No definida');
+  // Error log removed for security;
+  // Error log removed for security;
+  // Error log removed for security;
+  // Error log removed for security;
+  // Error log removed for security;
+  // Error log removed for security;
+  // Error log removed for security;
 
   // En lugar de lanzar error inmediatamente, intentar con valores por defecto
   if (!supabaseUrl) {
-    console.warn('⚠️ Usando URL por defecto para desarrollo');
+    // Warning log removed for security;
   }
   if (!supabaseAnonKey) {
-    console.warn('⚠️ Usando clave por defecto para desarrollo');
+    // Warning log removed for security;
   }
 }
 
 // Verificar formato de URL solo si existe
 if (supabaseUrl && (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co'))) {
-  console.error('❌ URL de Supabase inválida:', supabaseUrl);
-  console.error('La URL de Supabase debe tener el formato: https://tu-proyecto.supabase.co');
+  // Error log removed for security;
+  // Error log removed for security;
 }
 
 // Usar valores por defecto si no están configurados (solo para desarrollo)
@@ -51,22 +51,22 @@ export const supabase = createClient<Database>(finalUrl, finalKey, {
 // Estado de configuración
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-console.log('✅ Supabase configurado correctamente');
-console.log('📡 URL:', finalUrl);
-console.log('🔑 Clave configurada:', finalKey ? 'Sí' : 'No');
+// Sensitive log removed for security;
+// Sensitive log removed for security;
+// Sensitive log removed for security;
 
 // Función simple para verificar conectividad (opcional, no bloquea la aplicación)
 export const checkSupabaseConnection = async (): Promise<boolean> => {
   try {
     const { data, error } = await supabase.auth.getSession();
     if (error) {
-      console.warn('⚠️ Problema con la sesión de Supabase:', error.message);
+      // Warning log removed for security;
       return false;
     }
-    console.log('✅ Conexión a Supabase verificada');
+    // Sensitive log removed for security;
     return true;
   } catch (error) {
-    console.warn('⚠️ No se pudo verificar la conexión a Supabase:', error);
+    // Warning log removed for security;
     return false;
   }
 };
@@ -74,7 +74,7 @@ export const checkSupabaseConnection = async (): Promise<boolean> => {
 // Función utilitaria para limpiar cachés (simplificada)
 export const clearAuthCache = async () => {
   try {
-    console.log('🧹 Limpiando caché de autenticación...');
+    // Sensitive log removed for security;
 
     // 1. Cerrar sesión en Supabase
     await supabase.auth.signOut();
@@ -88,10 +88,10 @@ export const clearAuthCache = async () => {
       localStorage.removeItem(key);
     });
 
-    console.log(`📦 ${keysToRemove.length} elementos de caché eliminados`);
-    console.log('✅ Caché limpiado exitosamente');
+    // Sensitive log removed for security;
+    // Sensitive log removed for security;
   } catch (error) {
-    console.error('❌ Error limpiando caché:', error);
+    // Error log removed for security;
   }
 };
 
@@ -99,22 +99,22 @@ export const clearAuthCache = async () => {
 supabase.auth.onAuthStateChange((event, session) => {
   switch (event) {
     case 'SIGNED_IN':
-      console.log('✅ Usuario autenticado:', session?.user?.email);
+      // Sensitive log removed for security;
       break;
     case 'SIGNED_OUT':
-      console.log('👋 Usuario desautenticado');
+      // Sensitive log removed for security;
       break;
     case 'TOKEN_REFRESHED':
-      console.log('🔄 Token de autenticación renovado');
+      // Sensitive log removed for security;
       break;
     case 'USER_UPDATED':
-      console.log('👤 Información de usuario actualizada');
+      // Sensitive log removed for security;
       break;
     case 'PASSWORD_RECOVERY':
-      console.log('🔐 Recuperación de contraseña iniciada');
+      // Sensitive log removed for security;
       break;
     default:
-      console.log('🔄 Cambio de estado de autenticación:', event);
+      // Sensitive log removed for security;
   }
 });
 
@@ -128,7 +128,7 @@ export const getCurrentUser = async () => {
     if (error) throw error;
     return user;
   } catch (error) {
-    console.error('Error obteniendo usuario actual:', error);
+    // Error log removed for security;
     return null;
   }
 };
@@ -141,7 +141,7 @@ export const getUserProfile = async (userId: string) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error obteniendo perfil:', error);
+    // Error log removed for security;
     return null;
   }
 };
@@ -163,7 +163,7 @@ export const createUserProfile = async (userId: string, profileData: any) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error creando perfil:', error);
+    // Error log removed for security;
     throw error;
   }
 };
@@ -184,7 +184,7 @@ export const updateUserProfile = async (userId: string, updates: any) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error actualizando perfil:', error);
+    // Error log removed for security;
     throw error;
   }
 };
@@ -195,7 +195,7 @@ export const hasRole = async (userId: string, requiredRole: string): Promise<boo
     const profile = await getUserProfile(userId);
     return profile?.role === requiredRole;
   } catch (error) {
-    console.error('Error verificando rol:', error);
+    // Error log removed for security;
     return false;
   }
 };

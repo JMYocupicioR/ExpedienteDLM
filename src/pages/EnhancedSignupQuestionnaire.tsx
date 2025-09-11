@@ -770,7 +770,7 @@ export default function EnhancedSignupQuestionnaire() {
     setSpecialtiesLoading(true);
     try {
       // Load medical specialties
-      console.log('🔍 Cargando especialidades médicas...');
+      // Sensitive log removed for security;
       const { data: specialtiesData, error: specialtiesError } = await supabase
         .from('medical_specialties')
         .select('*')
@@ -778,16 +778,16 @@ export default function EnhancedSignupQuestionnaire() {
         .order('name');
 
       if (specialtiesError) {
-        console.error('❌ Error al cargar especialidades desde BD:', specialtiesError);
-        console.log('🔄 Usando especialidades de respaldo...');
+        // Error log removed for security;
+        // Sensitive log removed for security;
         setSpecialties(backupSpecialties);
         setUseBackupSpecialties(true);
       } else if (!specialtiesData || specialtiesData.length === 0) {
-        console.log('⚠️ No se encontraron especialidades en BD, usando respaldo...');
+        // Sensitive log removed for security;
         setSpecialties(backupSpecialties);
         setUseBackupSpecialties(true);
       } else {
-        console.log('✅ Especialidades cargadas desde BD:', specialtiesData.length);
+        // Sensitive log removed for security;
         console.log(
           '📋 Lista de especialidades:',
           specialtiesData.map(s => s.name)
@@ -809,7 +809,7 @@ export default function EnhancedSignupQuestionnaire() {
         // Ordenar por nombre
         combinedSpecialties.sort((a, b) => a.name.localeCompare(b.name));
 
-        console.log('🔗 Total de especialidades disponibles:', combinedSpecialties.length);
+        // Sensitive log removed for security;
         setSpecialties(combinedSpecialties);
         setUseBackupSpecialties(false);
       }
@@ -822,13 +822,13 @@ export default function EnhancedSignupQuestionnaire() {
         .order('name');
 
       if (clinicsError) {
-        console.error('❌ Error al cargar clínicas:', clinicsError);
+        // Error log removed for security;
       } else {
         setClinics(clinicsData || []);
       }
     } catch (err) {
-      console.error('Error loading initial data:', err);
-      console.log('⚠️ Error cargando especialidades - NO usar backup con UUIDs inválidos');
+      // Error log removed for security;
+      // Sensitive log removed for security;
       // TODO: Corregir UUIDs en backupSpecialties
       // setSpecialties(backupSpecialties);
       // setUseBackupSpecialties(true);
@@ -840,9 +840,9 @@ export default function EnhancedSignupQuestionnaire() {
 
   // Load initial data
   useEffect(() => {
-    console.log('🔄 Enhanced SignupQuestionnaire mounted');
-    console.log('📧 Initial email:', initialEmail);
-    console.log('📋 From registration:', fromRegistration);
+    // Sensitive log removed for security;
+    // Sensitive log removed for security;
+    // Sensitive log removed for security;
     loadInitialData();
   }, [loadInitialData, initialEmail, fromRegistration]);
 
@@ -856,7 +856,7 @@ export default function EnhancedSignupQuestionnaire() {
     );
     if (specialtySearch.trim() === '') {
       setFilteredSpecialties(specialties);
-      console.log('📋 Mostrando todas las especialidades:', specialties.length);
+      // Sensitive log removed for security;
     } else {
       const filtered = specialties.filter(
         specialty =>
@@ -893,8 +893,8 @@ export default function EnhancedSignupQuestionnaire() {
   // useEffects de verificación de email eliminados - ya se verifica en Auth.tsx
   useEffect(() => {
     if (initialEmail && fromRegistration) {
-      console.log('✅ Email pre-verificado desde Auth.tsx:', initialEmail);
-      console.log('📋 El usuario puede proceder con el registro');
+      // Sensitive log removed for security;
+      // Sensitive log removed for security;
     }
   }, [initialEmail, fromRegistration]);
 
@@ -918,7 +918,7 @@ export default function EnhancedSignupQuestionnaire() {
     try {
       setLoading(true);
       setError(null);
-      console.log('🧹 Intentando limpieza manual...');
+      // Sensitive log removed for security;
 
       const email = formData.personalInfo.email;
       if (!email) {
@@ -934,16 +934,16 @@ export default function EnhancedSignupQuestionnaire() {
         .or('profile_completed.is.null,profile_completed.eq.false,full_name.is.null,full_name.eq.');
 
       if (cleanupError) {
-        console.error('Error en limpieza manual:', cleanupError);
+        // Error log removed for security;
         setError('Error al limpiar registros previos. Por favor, contacta a soporte.');
         return;
       }
 
-      console.log('✅ Limpieza manual completada');
+      // Sensitive log removed for security;
       setError('Limpieza completada. Puedes intentar completar el registro nuevamente.');
       setShowRetryCleanup(false);
     } catch (err) {
-      console.error('Error en handleRetryCleanup:', err);
+      // Error log removed for security;
       setError('Error inesperado durante la limpieza');
     } finally {
       setLoading(false);
@@ -1092,7 +1092,7 @@ export default function EnhancedSignupQuestionnaire() {
       setLoading(true);
       setError(null);
 
-      console.log('🚀 Completando registro para:', formData.personalInfo.email);
+      // Sensitive log removed for security;
 
       // NUEVO FLUJO: Manejar tanto usuarios OAuth como registro tradicional
 
@@ -1100,7 +1100,7 @@ export default function EnhancedSignupQuestionnaire() {
 
       // Verificar si es un usuario OAuth
       if (oauthSessionData) {
-        console.log('🔐 Completando perfil de usuario OAuth...');
+        // Sensitive log removed for security;
         userId = oauthSessionData.userId;
 
         // Actualizar el perfil existente con información completa
@@ -1116,7 +1116,7 @@ export default function EnhancedSignupQuestionnaire() {
           .eq('id', userId);
 
         if (updateError) {
-          console.error('Error actualizando perfil OAuth:', updateError);
+          // Error log removed for security;
           throw new Error('Error al actualizar el perfil');
         }
 
@@ -1126,10 +1126,10 @@ export default function EnhancedSignupQuestionnaire() {
         // Flujo tradicional: crear usuario con email/contraseña
         const pendingRegistrationStr = sessionStorage.getItem('pendingRegistration');
         // DEBUG: Ver qué datos tenemos
-        console.log('🔍 Verificando datos de registro:');
-        console.log('pendingRegistrationStr:', pendingRegistrationStr);
-        console.log('formData.accountInfo.password:', formData.accountInfo.password ? 'Existe' : 'No existe');
-        console.log('initialEmail:', initialEmail);
+        // Sensitive log removed for security;
+        // Sensitive log removed for security;
+        // Sensitive log removed for security;
+        // Sensitive log removed for security;
         
         if (!pendingRegistrationStr && !formData.accountInfo.password && !initialEmail) {
           throw new Error(
@@ -1142,7 +1142,7 @@ export default function EnhancedSignupQuestionnaire() {
           registrationData = JSON.parse(pendingRegistrationStr);
         } else {
           // Fallback: usar datos del formulario si están disponibles
-          console.log('⚠️ No hay datos en sessionStorage, usando fallback');
+          // Sensitive log removed for security;
           registrationData = {
             email: initialEmail || formData.personalInfo.email,
             password: formData.accountInfo.password || 'temp123456', // Password temporal
@@ -1174,10 +1174,10 @@ export default function EnhancedSignupQuestionnaire() {
           );
         }
 
-        console.log('🔐 Creando usuario con email/contraseña...');
+        // Sensitive log removed for security;
 
         // VERIFICACIÓN FINAL INTELIGENTE: Verificar y limpiar si es necesario
-        console.log('🔍 Verificación final inteligente del email antes de crear usuario...');
+        // Sensitive log removed for security;
 
         // Primero verificar en profiles
         const { data: existingProfile, error: profileCheckError } = await supabase
@@ -1187,16 +1187,16 @@ export default function EnhancedSignupQuestionnaire() {
           .maybeSingle();
 
         if (profileCheckError && profileCheckError.code !== 'PGRST116') {
-          console.error('Error verificando email en profiles:', profileCheckError);
+          // Error log removed for security;
           throw new Error('Error al verificar la disponibilidad del email');
         }
 
         if (existingProfile) {
-          console.log('📧 Email encontrado en profiles:', existingProfile);
+          // Sensitive log removed for security;
 
           // Si el perfil está incompleto, intentar limpiarlo
           if (!existingProfile.profile_completed || !existingProfile.full_name) {
-            console.log('🧹 Perfil incompleto detectado, intentando limpiar...');
+            // Sensitive log removed for security;
 
             try {
               // Eliminar el perfil incompleto (esto debería eliminar el usuario en auth.users también por CASCADE)
@@ -1206,29 +1206,29 @@ export default function EnhancedSignupQuestionnaire() {
                 .eq('id', existingProfile.id);
 
               if (deleteError) {
-                console.error('Error eliminando perfil incompleto:', deleteError);
+                // Error log removed for security;
                 throw new Error(
                   'Email ya registrado con registro incompleto. Por favor, contacta a soporte.'
                 );
               }
 
-              console.log('✅ Perfil incompleto eliminado, continuando con la creación...');
+              // Sensitive log removed for security;
             } catch (cleanupError) {
-              console.error('Error en limpieza:', cleanupError);
+              // Error log removed for security;
               throw new Error(
                 'Este correo tiene un registro previo incompleto. Por favor, contacta a soporte para resolverlo.'
               );
             }
           } else {
             // Perfil completo, definitivamente ya registrado
-            console.error('❌ Email ya registrado con perfil completo');
+            // Error log removed for security;
             throw new Error(
               'Este correo electrónico ya está registrado con un perfil completo. Por favor, inicia sesión en lugar de registrarte.'
             );
           }
         }
 
-        console.log('✅ Email disponible en verificación final, procediendo con la creación...');
+        // Sensitive log removed for security;
 
         // Recuperar token de hCaptcha guardado en el primer paso del registro
         const pending = sessionStorage.getItem('pendingRegistration');
@@ -1259,9 +1259,9 @@ export default function EnhancedSignupQuestionnaire() {
         });
 
         if (authError) {
-          console.error('Error de registro:', authError);
-          console.error('Código de error:', authError.status);
-          console.error('Mensaje original:', authError.message);
+          // Error log removed for security;
+          // Error log removed for security;
+          // Error log removed for security;
 
           // Manejo específico de errores de email ya registrado
           if (
@@ -1272,7 +1272,7 @@ export default function EnhancedSignupQuestionnaire() {
             authError.status === 422
           ) {
             // Si es error de email ya registrado, intentar una limpieza más profunda
-            console.log('🧹 Error de email duplicado, intentando limpieza profunda...');
+            // Sensitive log removed for security;
 
             try {
               // Intentar eliminar cualquier registro huérfano
@@ -1283,7 +1283,7 @@ export default function EnhancedSignupQuestionnaire() {
                 .is('profile_completed', null);
 
               if (!cleanupError) {
-                console.log('✅ Registros huérfanos eliminados, sugiriendo reintento...');
+                // Sensitive log removed for security;
                 throw new Error(
                   'Se encontró un registro previo incompleto que fue eliminado. Por favor, intenta registrarte nuevamente.'
                 );
@@ -1305,7 +1305,7 @@ export default function EnhancedSignupQuestionnaire() {
         }
 
         userId = authData.user.id;
-        console.log('✅ Usuario creado exitosamente:', userId);
+        // Sensitive log removed for security;
 
         // Limpiar datos temporales
         sessionStorage.removeItem('pendingRegistration');
@@ -1361,17 +1361,17 @@ export default function EnhancedSignupQuestionnaire() {
       };
 
       // Crear o actualizar perfil de usuario usando upsert
-      console.log('📝 Actualizando perfil de usuario...');
+      // Sensitive log removed for security;
       const { error: profileError } = await supabase.from('profiles').upsert(profileData, {
         onConflict: 'id',
         ignoreDuplicates: false,
       });
 
       if (profileError) {
-        console.error('❌ Error al actualizar perfil:', profileError);
+        // Error log removed for security;
         throw new Error(`Error al actualizar perfil: ${profileError.message}`);
       } else {
-        console.log('✅ Perfil actualizado exitosamente');
+        // Sensitive log removed for security;
       }
 
       // 4. Si es paciente, crear registro en tabla patients
@@ -1413,20 +1413,20 @@ export default function EnhancedSignupQuestionnaire() {
         );
       }
 
-      console.log('✅ Registro completado exitosamente');
+      // Sensitive log removed for security;
 
       // Mostrar mensaje de éxito
       setError(null);
 
       // Registro completado exitosamente
-      console.log('🎉 Registro completado exitosamente');
+      // Sensitive log removed for security;
 
       // Redirigir al dashboard
       setTimeout(() => {
         navigate('/dashboard');
       }, 1000);
     } catch (err: unknown) {
-      console.error('Error durante el registro:', err);
+      // Error log removed for security;
 
       // Mejorar mensajes de error específicos
       if (err instanceof Error) {
@@ -1549,7 +1549,7 @@ export default function EnhancedSignupQuestionnaire() {
     if (formData.accountInfo.role) {
       const selectedRole = roleOptions.find(role => role.value === formData.accountInfo.role);
       if (!selectedRole?.enabled) {
-        console.log('🔄 Reseteando rol deshabilitado:', formData.accountInfo.role);
+        // Sensitive log removed for security;
         setFormData(prev => ({
           ...prev,
           accountInfo: {

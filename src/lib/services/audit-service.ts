@@ -49,7 +49,7 @@ export class AuditService {
         });
 
       if (error) {
-        console.error('Error fetching audit history:', error);
+        // Error log removed for security;
         throw error;
       }
 
@@ -62,7 +62,7 @@ export class AuditService {
       }));
 
     } catch (error) {
-      console.error('Error in getAuditHistoryForRecord:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -94,7 +94,7 @@ export class AuditService {
         combined
       };
     } catch (error) {
-      console.error('Error getting patient audit history:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -149,7 +149,7 @@ export class AuditService {
 
       return stats;
     } catch (error) {
-      console.error('Error getting clinic audit stats:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -328,7 +328,7 @@ export class AuditService {
       }));
 
     } catch (error) {
-      console.error('Error in getAuditHistoryWithFilters:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -377,7 +377,7 @@ export class AuditService {
       };
 
     } catch (error) {
-      console.error('Error verifying audit integrity:', error);
+      // Error log removed for security;
       throw error;
     }
   }

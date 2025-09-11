@@ -70,7 +70,7 @@ export const ClinicProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
       } catch (err: any) {
         setError(err.message);
-        console.error('Error fetching clinics:', err);
+        // Error log removed for security;
       } finally {
         setLoading(false);
       }

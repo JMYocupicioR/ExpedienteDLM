@@ -80,7 +80,7 @@ export function useEnhancedAppointments(
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar las citas';
       setError(errorMessage);
-      console.error('Error loading appointments:', err);
+      // Error log removed for security;
     } finally {
       setLoading(false);
     }

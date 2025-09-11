@@ -79,7 +79,7 @@ export class ClinicStaffService {
         rejectedStaff: staffMembers.filter(m => m.status === 'rejected'),
       };
     } catch (error) {
-      console.error('Error obteniendo personal de la clínica:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -123,7 +123,7 @@ export class ClinicStaffService {
         rejected_by: null,
       }));
     } catch (error) {
-      console.error('Error obteniendo personal aprobado:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -164,7 +164,7 @@ export class ClinicStaffService {
         rejected_by: null,
       }));
     } catch (error) {
-      console.error('Error obteniendo solicitudes pendientes:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -186,7 +186,7 @@ export class ClinicStaffService {
         message: 'Usuario aprobado exitosamente'
       };
     } catch (error: any) {
-      console.error('Error aprobando usuario:', error);
+      // Error log removed for security;
       return {
         success: false,
         message: 'Error al aprobar usuario',
@@ -217,7 +217,7 @@ export class ClinicStaffService {
         message: 'Usuario rechazado exitosamente'
       };
     } catch (error: any) {
-      console.error('Error rechazando usuario:', error);
+      // Error log removed for security;
       return {
         success: false,
         message: 'Error al rechazar usuario',
@@ -252,7 +252,7 @@ export class ClinicStaffService {
         message: 'Solicitud de unión enviada. Esperando aprobación del administrador.'
       };
     } catch (error: any) {
-      console.error('Error creando relación usuario-clínica:', error);
+      // Error log removed for security;
       return {
         success: false,
         message: 'Error al enviar solicitud de unión',
@@ -273,7 +273,7 @@ export class ClinicStaffService {
       if (error) throw error;
       return data || false;
     } catch (error) {
-      console.error('Error verificando acceso aprobado:', error);
+      // Error log removed for security;
       return false;
     }
   }
@@ -290,7 +290,7 @@ export class ClinicStaffService {
       if (error) throw error;
       return data || false;
     } catch (error) {
-      console.error('Error verificando si es admin:', error);
+      // Error log removed for security;
       return false;
     }
   }
@@ -321,7 +321,7 @@ export class ClinicStaffService {
 
       return stats;
     } catch (error) {
-      console.error('Error obteniendo estadísticas del personal:', error);
+      // Error log removed for security;
       return { total: 0, approved: 0, pending: 0, rejected: 0 };
     }
   }
@@ -351,7 +351,7 @@ export class ClinicStaffService {
         clinicUserIds.includes(log.record_id)
       );
     } catch (error) {
-      console.error('Error obteniendo logs de auditoría:', error);
+      // Error log removed for security;
       return [];
     }
   }
@@ -417,7 +417,7 @@ export class ClinicStaffService {
         rejection_reason: data.rejection_reason,
       };
     } catch (error) {
-      console.error('Error obteniendo estado de clínica del usuario:', error);
+      // Error log removed for security;
       return { hasRelationship: false };
     }
   }
@@ -490,7 +490,7 @@ export class ClinicStaffService {
       };
 
     } catch (error) {
-      console.error('Error reenviando solicitud:', error);
+      // Error log removed for security;
       return {
         success: false,
         message: 'Error al enviar la solicitud',
@@ -512,7 +512,7 @@ export class ClinicStaffService {
       if (error) throw error;
       return data.map(item => item.id);
     } catch (error) {
-      console.error('Error obteniendo IDs de usuarios de la clínica:', error);
+      // Error log removed for security;
       return [];
     }
   }

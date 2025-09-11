@@ -50,7 +50,7 @@ export class AuthService {
       });
 
       if (error) {
-        console.error('Sign in error:', error);
+        // Error log removed for security;
         return {
           data: null,
           error: error.message,
@@ -66,7 +66,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al iniciar sesión';
-      console.error('Service error in signIn:', err);
+      // Error log removed for security;
       return {
         data: null,
         error: errorMessage,
@@ -110,7 +110,7 @@ export class AuthService {
       });
 
       if (error) {
-        console.error('Sign up error:', error);
+        // Error log removed for security;
         return {
           data: null,
           error: error.message,
@@ -125,7 +125,7 @@ export class AuthService {
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido al registrarse';
-      console.error('Service error in signUp:', err);
+      // Error log removed for security;
       return {
         data: null,
         error: errorMessage,
@@ -142,7 +142,7 @@ export class AuthService {
       const { error } = await supabase.auth.signOut();
 
       if (error) {
-        console.error('Sign out error:', error);
+        // Error log removed for security;
         return {
           data: false,
           error: error.message,
@@ -158,7 +158,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al cerrar sesión';
-      console.error('Service error in signOut:', err);
+      // Error log removed for security;
       return {
         data: false,
         error: errorMessage,
@@ -178,7 +178,7 @@ export class AuthService {
       } = await supabase.auth.getUser();
 
       if (error) {
-        console.error('Get user error:', error);
+        // Error log removed for security;
         return {
           data: null,
           error: error.message,
@@ -194,7 +194,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al obtener usuario';
-      console.error('Service error in getCurrentUser:', err);
+      // Error log removed for security;
       return {
         data: null,
         error: errorMessage,
@@ -211,7 +211,7 @@ export class AuthService {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
 
       if (error) {
-        console.error('Get profile error:', error);
+        // Error log removed for security;
         return {
           data: null,
           error: error.message,
@@ -227,7 +227,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al obtener perfil';
-      console.error('Service error in getUserProfile:', err);
+      // Error log removed for security;
       return {
         data: null,
         error: errorMessage,
@@ -255,7 +255,7 @@ export class AuthService {
         .single();
 
       if (error) {
-        console.error('Update profile error:', error);
+        // Error log removed for security;
         return {
           data: null,
           error: error.message,
@@ -271,7 +271,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al actualizar perfil';
-      console.error('Service error in updateUserProfile:', err);
+      // Error log removed for security;
       return {
         data: null,
         error: errorMessage,
@@ -300,7 +300,7 @@ export class AuthService {
         .single();
 
       if (error) {
-        console.error('Create profile error:', error);
+        // Error log removed for security;
         return {
           data: null,
           error: error.message,
@@ -315,7 +315,7 @@ export class AuthService {
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido al crear perfil';
-      console.error('Service error in createUserProfile:', err);
+      // Error log removed for security;
       return {
         data: null,
         error: errorMessage,
@@ -334,7 +334,7 @@ export class AuthService {
       });
 
       if (error) {
-        console.error('Reset password error:', error);
+        // Error log removed for security;
         return {
           data: false,
           error: error.message,
@@ -350,7 +350,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al restablecer contraseña';
-      console.error('Service error in resetPassword:', err);
+      // Error log removed for security;
       return {
         data: false,
         error: errorMessage,
@@ -369,7 +369,7 @@ export class AuthService {
       });
 
       if (error) {
-        console.error('Update password error:', error);
+        // Error log removed for security;
         return {
           data: false,
           error: error.message,
@@ -385,7 +385,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al actualizar contraseña';
-      console.error('Service error in updatePassword:', err);
+      // Error log removed for security;
       return {
         data: false,
         error: errorMessage,
@@ -422,7 +422,7 @@ export class AuthService {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Error desconocido al verificar rol';
-      console.error('Service error in hasRole:', err);
+      // Error log removed for security;
       return {
         data: false,
         error: errorMessage,

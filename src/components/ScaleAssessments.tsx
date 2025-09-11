@@ -31,7 +31,7 @@ export default function ScaleAssessments({ consultationId }: ScaleAssessmentsPro
         if (error) throw error;
         setItems(data || []);
       } catch (e) {
-        console.error('Error loading scale assessments', e);
+        // Error log removed for security;
       } finally {
         setLoading(false);
       }

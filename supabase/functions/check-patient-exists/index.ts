@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 interface RequestBody {
   clinic_id: string
-  curp: string
+  social_security_number: string
 }
 
 serve(async (req) => {
@@ -59,9 +59,9 @@ serve(async (req) => {
     // Parse request body
     const body: RequestBody = await req.json()
     
-    if (!body.clinic_id || !body.curp) {
+    if (!body.clinic_id || !body.social_security_number) {
       return new Response(
-        JSON.stringify({ error: 'clinic_id and curp are required' }), 
+        JSON.stringify({ error: 'clinic_id and social_security_number are required' }), 
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -90,9 +90,9 @@ serve(async (req) => {
 
     // Call the database function to check patient existence
     const { data, error } = await supabaseClient
-      .rpc('check_patient_exists_by_curp', {
+      .rpc('check_patient_exists_by_social_security', {
         p_clinic_id: body.clinic_id,
-        p_curp: body.curp
+        p_social_security_number: body.social_security_number
       })
 
     if (error) {

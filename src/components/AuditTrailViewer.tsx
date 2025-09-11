@@ -51,7 +51,7 @@ const AuditTrailViewer: React.FC<AuditTrailViewerProps> = ({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar el historial de auditoría';
       setError(errorMessage);
-      console.error('Error loading audit history:', err);
+      // Error log removed for security;
     } finally {
       setLoading(false);
     }

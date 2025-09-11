@@ -98,7 +98,7 @@ export default function SearchBar({
 
       setResults(searchResults);
     } catch (error) {
-      console.error('Error searching:', error);
+      // Error log removed for security;
     } finally {
       setLoading(false);
     }

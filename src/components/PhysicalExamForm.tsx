@@ -296,7 +296,7 @@ export default function PhysicalExamForm({
         onAutoSave(data);
       }
     } catch (error) {
-      console.error('Error en auto-save:', error);
+      // Error log removed for security;
     }
   }, [onAutoSave]);
 
@@ -310,7 +310,7 @@ export default function PhysicalExamForm({
         setTimeout(() => setSaveState('idle'), 2000);
       } catch (error) {
         setSaveState('error');
-        console.error('Auto-save error:', error);
+        // Error log removed for security;
       }
     }, 3000);
 
@@ -417,7 +417,7 @@ export default function PhysicalExamForm({
       setSaveState('saved');
       
     } catch (err: any) {
-      console.error('Error saving physical exam:', err);
+      // Error log removed for security;
       setError(err.message);
       setSaveState('error');
     } finally {

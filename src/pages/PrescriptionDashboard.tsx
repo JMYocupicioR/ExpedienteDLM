@@ -95,7 +95,7 @@ export default function PrescriptionDashboard() {
       if (error) throw error;
       setPatients(data || []);
     } catch (err) {
-      console.error('Error fetching patients:', err);
+      // Error log removed for security;
     }
   };
 
@@ -161,7 +161,7 @@ export default function PrescriptionDashboard() {
       
       setPrescriptionHistory(formattedHistory);
     } catch (err) {
-      console.error('Error fetching prescription history:', err);
+      // Error log removed for security;
     }
   };
 
@@ -174,7 +174,7 @@ export default function PrescriptionDashboard() {
       const tpl = await getOrCreateTemplateForUser(user.id);
       setPrescriptionTemplate(tpl);
     } catch (err: any) {
-      console.error('Error fetching prescription template:', err.message);
+      // Error log removed for security;
       setError('No se pudo cargar la plantilla de receta.');
     } finally {
       setIsLoadingTemplate(false);
@@ -212,7 +212,7 @@ export default function PrescriptionDashboard() {
       setSaveMessage('Plantilla guardada exitosamente.');
       setTimeout(() => setActiveTab('dashboard'), 1500);
     } catch (err: any) {
-      console.error('Error saving template:', err.message);
+      // Error log removed for security;
       setSaveStatus('error');
       setSaveMessage('Error al guardar la plantilla.');
     }
@@ -258,7 +258,7 @@ export default function PrescriptionDashboard() {
 
     // Mostrar advertencias si las hay (no bloquear, solo informar)
     if (medicationsValidation.warnings.length > 0) {
-      console.warn('Advertencias de medicamentos:', medicationsValidation.warnings);
+      // Warning log removed for security;
       // Aquí podrías mostrar un toast o modal con las advertencias
     }
   };
@@ -275,7 +275,7 @@ export default function PrescriptionDashboard() {
       .single();
   
     if (profileError) {
-      console.error('Error fetching profile:', profileError);
+      // Error log removed for security;
       throw new Error('Error al verificar permisos.');
     }
       
@@ -304,7 +304,7 @@ export default function PrescriptionDashboard() {
         .single();
         
       if (patientError || !patient) {
-        console.error('Patient fetch error:', patientError);
+        // Error log removed for security;
         throw new Error('Paciente no encontrado o error al verificar paciente.');
       }
       
@@ -346,7 +346,7 @@ export default function PrescriptionDashboard() {
             prescription_id: data[0].id
           });
         if (consultationPrescriptionError) {
-          console.error('Error al asociar receta con consulta:', consultationPrescriptionError.message);
+          // Error log removed for security;
           // Decide if this should be a critical error or just a warning
           setSaveMessage('Receta creada, pero hubo un problema al asociarla con la consulta.');
         }
@@ -359,7 +359,7 @@ export default function PrescriptionDashboard() {
       setSaveMessage('Receta creada exitosamente');
       // alert('Receta creada exitosamente'); // Replaced with saveMessage
     } catch (err: any) {
-      console.error('Error detallado al crear la receta:', err);
+      // Error log removed for security;
       setError(err.message || 'Error al crear la receta');
       setSaveStatus('error');
       setSaveMessage(err.message || 'Error al crear la receta');
@@ -415,7 +415,7 @@ export default function PrescriptionDashboard() {
           .eq('id', user.id)
           .single();
         if (profileError) {
-          console.error('Error fetching prescription_style (fallback):', profileError);
+          // Error log removed for security:', profileError);
         } else {
           userPrescriptionStyle = profileData?.prescription_style || {};
         }
@@ -1422,7 +1422,7 @@ function EnhancedPrescriptionForm({
         });
         setQrCodeUrl(url);
       } catch (err) {
-        console.error('Error generating QR code:', err);
+        // Error log removed for security;
       }
     };
 

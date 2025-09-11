@@ -59,7 +59,7 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
       .eq('id', scaleId)
       .single();
     if (error) {
-      console.error('Error loading scale definition', error);
+      // Error log removed for security;
       return;
     }
     setSelectedScaleDef((data?.definition as unknown) as ScaleDefinition);
@@ -103,7 +103,7 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
       setAnswers({});
       await loadExisting();
     } catch (e) {
-      console.error('Error saving scale assessment', e);
+      // Error log removed for security;
     } finally {
       setSaving(false);
     }

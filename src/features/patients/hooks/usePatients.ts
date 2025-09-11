@@ -1,4 +1,4 @@
-import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useClinic } from '@/context/ClinicContext';
 import {
   createPatient as createPatientSvc,
   deletePatient as deletePatientSvc,
@@ -40,7 +40,7 @@ export const usePatients = (): UsePatientsResult => {
       return createPatientSvc(patientData, activeClinic.id);
     },
     onSuccess: (newPatient) => {
-      console.log('✅ Paciente creado, invalidando caché...', { newPatient });
+      // Sensitive log removed for security;
       // Invalidación precisa: solo la lista de pacientes de la clínica activa
       queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
       // Opcional: también podemos actualizar la caché manualmente para una respuesta instantánea
@@ -49,7 +49,7 @@ export const usePatients = (): UsePatientsResult => {
       // );
     },
     onError: (error) => {
-      console.error('❌ Error al crear el paciente:', error.message);
+      // Error log removed for security;
       // Aquí se pueden mostrar notificaciones de error al usuario
     },
   });

@@ -56,16 +56,16 @@ class NotificationService {
       if (error) {
         // Si la tabla no existe, retornar array vacío en lugar de error
         if (error.message.includes('relation "notifications" does not exist')) {
-          console.warn('Notifications table not found. Run migration to create it.');
+          // Warning log removed for security;
           return [];
         }
-        console.error('Error fetching notifications:', error);
+        // Error log removed for security;
         throw error;
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error in getNotifications:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -82,7 +82,7 @@ class NotificationService {
       if (error) {
         // Si la tabla no existe, retornar stats vacías
         if (error.message.includes('relation "notifications" does not exist')) {
-          console.warn('Notifications table not found. Run migration to create it.');
+          // Warning log removed for security;
           return {
             total: 0,
             unread: 0,
@@ -90,7 +90,7 @@ class NotificationService {
             recent: [],
           };
         }
-        console.error('Error fetching notification stats:', error);
+        // Error log removed for security;
         throw error;
       }
 
@@ -119,7 +119,7 @@ class NotificationService {
 
       return stats;
     } catch (error) {
-      console.error('Error in getNotificationStats:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -139,14 +139,14 @@ class NotificationService {
 
       if (error) {
         if (error.message.includes('relation "notifications" does not exist')) {
-          console.warn('Notifications table not found. Skipping mark as read operation.');
+          // Warning log removed for security;
           return;
         }
-        console.error('Error marking notification as read:', error);
+        // Error log removed for security;
         throw error;
       }
     } catch (error) {
-      console.error('Error in markAsRead:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -165,11 +165,11 @@ class NotificationService {
         .in('id', notificationIds);
 
       if (error) {
-        console.error('Error marking multiple notifications as read:', error);
+        // Error log removed for security;
         throw error;
       }
     } catch (error) {
-      console.error('Error in markMultipleAsRead:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -188,11 +188,11 @@ class NotificationService {
         .eq('is_read', false);
 
       if (error) {
-        console.error('Error marking all notifications as read:', error);
+        // Error log removed for security;
         throw error;
       }
     } catch (error) {
-      console.error('Error in markAllAsRead:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -208,11 +208,11 @@ class NotificationService {
         .eq('id', notificationId);
 
       if (error) {
-        console.error('Error deleting notification:', error);
+        // Error log removed for security;
         throw error;
       }
     } catch (error) {
-      console.error('Error in deleteNotification:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -228,11 +228,11 @@ class NotificationService {
         .in('id', notificationIds);
 
       if (error) {
-        console.error('Error deleting multiple notifications:', error);
+        // Error log removed for security;
         throw error;
       }
     } catch (error) {
-      console.error('Error in deleteMultipleNotifications:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -248,11 +248,11 @@ class NotificationService {
         .eq('is_read', true);
 
       if (error) {
-        console.error('Error deleting all read notifications:', error);
+        // Error log removed for security;
         throw error;
       }
     } catch (error) {
-      console.error('Error in deleteAllRead:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -269,13 +269,13 @@ class NotificationService {
         .single();
 
       if (error) {
-        console.error('Error creating notification:', error);
+        // Error log removed for security;
         throw error;
       }
 
       return notification;
     } catch (error) {
-      console.error('Error in createNotification:', error);
+      // Error log removed for security;
       throw error;
     }
   }

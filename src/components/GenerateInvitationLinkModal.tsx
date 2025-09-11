@@ -42,7 +42,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
         if (error) throw error;
         setScales(data || []);
       } catch (e: any) {
-        console.error('Error loading scales', e);
+        // Error log removed for security;
         setError(e?.message || 'No se pudieron cargar las escalas');
       } finally {
         setLoading(false);
@@ -85,7 +85,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
       const link = `${origin}/register/patient/${encodeURIComponent(data.token)}`;
       setResultLink(link);
     } catch (e: any) {
-      console.error('Error creando token', e);
+      // Error log removed for security;
       setError(e?.message || 'No se pudo generar el enlace');
     } finally {
       setLoading(false);
@@ -97,7 +97,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
     try {
       await navigator.clipboard.writeText(resultLink);
     } catch (e) {
-      console.error('No se pudo copiar');
+      // Error log removed for security;
     }
   };
 

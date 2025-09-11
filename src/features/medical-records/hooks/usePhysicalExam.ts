@@ -121,7 +121,7 @@ export function usePhysicalExam({
       
       setTemplates(data || []);
     } catch (err) {
-      console.error('Error loading templates:', err);
+      // Error log removed for security;
       setError('Error al cargar las plantillas');
     } finally {
       setTemplatesLoading(false);
@@ -155,7 +155,7 @@ export function usePhysicalExam({
       );
       
     } catch (err) {
-      console.error('Error saving draft:', err);
+      // Error log removed for security;
       setError('Error al guardar el borrador');
     } finally {
       setSavingDraft(false);
@@ -195,7 +195,7 @@ export function usePhysicalExam({
 
       return null;
     } catch (err) {
-      console.error('Error loading draft:', err);
+      // Error log removed for security;
       setError('Error al cargar el borrador');
       return null;
     } finally {
@@ -220,7 +220,7 @@ export function usePhysicalExam({
         setCurrentDraft(null);
       }
     } catch (err) {
-      console.error('Error deleting draft:', err);
+      // Error log removed for security;
       setError('Error al eliminar el borrador');
     }
   }, [patientId, doctorId, currentDraft]);
@@ -376,7 +376,7 @@ export function usePhysicalExam({
       return blob;
       
     } catch (err) {
-      console.error('Error generating PDF:', err);
+      // Error log removed for security;
       throw new Error('Error al generar el PDF');
     }
   }, []);
@@ -393,7 +393,7 @@ export function usePhysicalExam({
       };
       return JSON.stringify(exportData, null, 2);
     } catch (err) {
-      console.error('Error exporting to JSON:', err);
+      // Error log removed for security;
       throw new Error('Error al exportar los datos');
     }
   }, [patientId, doctorId]);
@@ -410,7 +410,7 @@ export function usePhysicalExam({
       
       return importedData as PhysicalExamFormData;
     } catch (err) {
-      console.error('Error importing from JSON:', err);
+      // Error log removed for security;
       setError('Error al importar los datos');
       return null;
     }
@@ -435,7 +435,7 @@ export function usePhysicalExam({
       await loadTemplates();
       return data;
     } catch (err) {
-      console.error('Error creating template:', err);
+      // Error log removed for security;
       setError('Error al crear la plantilla');
       throw err;
     }
@@ -453,7 +453,7 @@ export function usePhysicalExam({
       
       await loadTemplates();
     } catch (err) {
-      console.error('Error updating template:', err);
+      // Error log removed for security;
       setError('Error al actualizar la plantilla');
       throw err;
     }
@@ -471,7 +471,7 @@ export function usePhysicalExam({
       
       await loadTemplates();
     } catch (err) {
-      console.error('Error deleting template:', err);
+      // Error log removed for security;
       setError('Error al eliminar la plantilla');
       throw err;
     }
@@ -512,7 +512,7 @@ export function usePhysicalExam({
 
       return publicUrl;
     } catch (err) {
-      console.error('Error uploading file:', err);
+      // Error log removed for security;
       setError('Error al subir el archivo');
       throw err;
     }
@@ -528,7 +528,7 @@ export function usePhysicalExam({
 
       if (deleteError) throw deleteError;
     } catch (err) {
-      console.error('Error deleting file:', err);
+      // Error log removed for security;
       setError('Error al eliminar el archivo');
       throw err;
     }
@@ -553,7 +553,7 @@ export function usePhysicalExam({
       
       return data || [];
     } catch (err) {
-      console.error('Error getting exam history:', err);
+      // Error log removed for security;
       setError('Error al obtener el historial');
       return [];
     }
@@ -573,7 +573,7 @@ export function usePhysicalExam({
       
       return data || [];
     } catch (err) {
-      console.error('Error getting change log:', err);
+      // Error log removed for security;
       setError('Error al obtener el registro de cambios');
       return [];
     }

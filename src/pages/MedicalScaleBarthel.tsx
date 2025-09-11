@@ -157,7 +157,7 @@ export default function MedicalScaleBarthel() {
       if (insertError) throw insertError;
       setMessage({ type: 'success', text: 'Evaluación guardada en el expediente.' });
     } catch (e: any) {
-      console.error('Error saving Barthel', e);
+      // Error log removed for security;
       setMessage({ type: 'error', text: e?.message || 'Error al guardar la evaluación.' });
     } finally {
       setSaving(false);

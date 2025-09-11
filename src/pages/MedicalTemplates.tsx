@@ -235,7 +235,7 @@ export default function MedicalTemplates() {
       setIsEditorOpen(false);
       setSelectedTemplate(null);
     } catch (error) {
-      console.error('Error saving template:', error);
+      // Error log removed for security;
       throw error;
     }
   };
@@ -601,7 +601,7 @@ function AIDesignerTab() {
         ]
       });
     } catch (error) {
-      console.error('Error generating recommendations:', error);
+      // Error log removed for security;
       alert('Error al generar recomendaciones');
     } finally {
       setIsGenerating(false);

@@ -1,7 +1,7 @@
 import ErrorBoundary from '@/components/ErrorBoundary';
 import AppLayout from '@/components/Layout/AppLayout';
 import PatientPortalLayout from '@/components/Layout/PatientPortalLayout';
-import { ClinicProvider } from '@/features/clinic/context/ClinicContext';
+import { ClinicProvider } from '@/context/ClinicContext';
 import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/lib/supabase';
 import AboutPage from '@/pages/AboutPage';
@@ -10,6 +10,9 @@ import Auth from '@/pages/Auth';
 import AuthCallback from '@/pages/AuthCallback';
 import ClinicAdminPage from '@/pages/ClinicAdminPage';
 import ClinicPatients from '@/pages/ClinicPatients';
+import ClinicRegistration from '@/pages/ClinicRegistration';
+import ClinicSearch from '@/pages/ClinicSearch';
+import DebugClinics from '@/pages/DebugClinics';
 import ClinicSettings from '@/pages/ClinicSettings';
 import ClinicStaff from '@/pages/ClinicStaff';
 import ClinicSummary from '@/pages/ClinicSummary';
@@ -27,17 +30,40 @@ import PatientRecord from '@/pages/PatientRecord';
 import PatientsList from '@/pages/PatientsList';
 import PrescriptionDashboard from '@/pages/PrescriptionDashboard';
 import PrivacyDashboard from '@/pages/PrivacyDashboard';
+import RequestClinicAccess from '@/pages/RequestClinicAccess';
 import Settings from '@/pages/Settings';
 import UserProfile from '@/pages/UserProfile';
 import { useEffect, useState } from 'react';
-import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes, useNavigate } from 'react-router-dom';
 
 import './App.css';
+
+// Componente interno para manejar navegación automática
+function AuthNavigationHandler() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Navegación automática basada en eventos de autenticación
+      if (event === 'SIGNED_IN') {
+        navigate('/dashboard');
+      }
+      if (event === 'SIGNED_OUT') {
+        navigate('/auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  return null; // Este componente no renderiza nada
+}
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const { resolvedTheme } = useTheme();
-  const allowAuthBypass = import.meta.env.VITE_ALLOW_DASHBOARD_WITHOUT_AUTH === 'true';
 
   useEffect(() => {
     // Check initial auth state
@@ -55,8 +81,8 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Show loading state while checking auth (skip if bypass enabled)
-  if (isAuthenticated === null && !allowAuthBypass) {
+  // Show loading state while checking auth
+  if (isAuthenticated === null) {
     return (
       <div className='min-h-screen flex items-center justify-center'>
         <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600'></div>
@@ -66,39 +92,57 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ClinicProvider>
-        {/* Skip links para navegación accesible */}
-        <a href='#main-content' className='skip-link'>
-          Saltar al contenido principal
-        </a>
-        <a href='#navigation' className='skip-link'>
-          Saltar a la navegación
-        </a>
-
-        <Router>
+      <Router>
+        <AuthNavigationHandler />
+        <ClinicProvider>
+          {/* Skip links para navegación accesible */}
+          <a href='#main-content' className='skip-link'>
+            Saltar al contenido principal
+          </a>
+          <a href='#navigation' className='skip-link'>
+            Saltar a la navegación
+          </a>
           <Routes>
             {/* Public routes */}
             <Route path='/' element={<LandingPage />} />
             <Route path='/about' element={<AboutPage />} />
             <Route
               path='/auth'
-              element={isAuthenticated || allowAuthBypass ? <Navigate to='/dashboard' /> : <Auth />}
+              element={isAuthenticated ? <Navigate to='/dashboard' /> : <Auth />}
             />
             <Route
               path='/login'
-              element={isAuthenticated || allowAuthBypass ? <Navigate to='/dashboard' /> : <Auth />}
+              element={isAuthenticated ? <Navigate to='/dashboard' /> : <Auth />}
             />
             <Route path='/signup-questionnaire' element={<EnhancedSignupQuestionnaire />} />
             <Route path='/email-verification' element={<EmailVerification />} />
             <Route path='/auth/callback' element={<AuthCallback />} />
             <Route path='/register/patient/:token' element={<PatientPublicRegistration />} />
+            
+            {/* Clinic Search and Registration Routes */}
+            <Route
+              path='/buscar-clinicas'
+              element={isAuthenticated ? <ClinicSearch /> : <Navigate to='/auth' />}
+            />
+            <Route
+              path='/registrar-clinica'
+              element={isAuthenticated ? <ClinicRegistration /> : <Navigate to='/auth' />}
+            />
+            <Route
+              path='/debug-clinicas'
+              element={isAuthenticated ? <DebugClinics /> : <Navigate to='/auth' />}
+            />
+            <Route
+              path='/solicitar-acceso/:clinicId'
+              element={isAuthenticated ? <RequestClinicAccess /> : <Navigate to='/auth' />}
+            />
 
             {/* Patient Portal Routes */}
             <Route path='/portal' element={<PatientPortalLayout />}>
               <Route
                 index
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <PrivacyDashboard />
                   ) : (
                     <Navigate to='/auth' />
@@ -108,7 +152,7 @@ function App() {
               <Route
                 path='privacidad'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <PrivacyDashboard />
                   ) : (
                     <Navigate to='/auth' />
@@ -118,7 +162,7 @@ function App() {
               <Route
                 path='consultas'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <div className='p-6'>
                       <h1 className='text-2xl font-bold'>Mis Consultas</h1>
                       <p className='text-gray-600 mt-2'>Funcionalidad en desarrollo...</p>
@@ -131,7 +175,7 @@ function App() {
               <Route
                 path='citas'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <div className='p-6'>
                       <h1 className='text-2xl font-bold'>Mis Citas</h1>
                       <p className='text-gray-600 mt-2'>Funcionalidad en desarrollo...</p>
@@ -144,7 +188,7 @@ function App() {
               <Route
                 path='estudios'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <div className='p-6'>
                       <h1 className='text-2xl font-bold'>Mis Estudios</h1>
                       <p className='text-gray-600 mt-2'>Funcionalidad en desarrollo...</p>
@@ -161,25 +205,25 @@ function App() {
               <Route
                 path='/dashboard'
                 element={
-                  isAuthenticated || allowAuthBypass ? <Dashboard /> : <Navigate to='/auth' />
+                  isAuthenticated ? <Dashboard /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/profile'
                 element={
-                  isAuthenticated || allowAuthBypass ? <UserProfile /> : <Navigate to='/auth' />
+                  isAuthenticated ? <UserProfile /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/settings'
                 element={
-                  isAuthenticated || allowAuthBypass ? <Settings /> : <Navigate to='/auth' />
+                  isAuthenticated ? <Settings /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/plantillas'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <MedicalTemplates />
                   ) : (
                     <Navigate to='/auth' />
@@ -189,13 +233,13 @@ function App() {
               <Route
                 path='/escalas'
                 element={
-                  isAuthenticated || allowAuthBypass ? <MedicalScales /> : <Navigate to='/auth' />
+                  isAuthenticated ? <MedicalScales /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/escalas/barthel'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <MedicalScaleBarthel />
                   ) : (
                     <Navigate to='/auth' />
@@ -205,7 +249,7 @@ function App() {
               <Route
                 path='/escalas/:id'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <MedicalScaleBoston />
                   ) : (
                     <Navigate to='/auth' />
@@ -215,13 +259,13 @@ function App() {
               <Route
                 path='/expediente/:id'
                 element={
-                  isAuthenticated || allowAuthBypass ? <PatientRecord /> : <Navigate to='/auth' />
+                  isAuthenticated ? <PatientRecord /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/recetas'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <PrescriptionDashboard />
                   ) : (
                     <Navigate to='/auth' />
@@ -231,13 +275,13 @@ function App() {
               <Route
                 path='/patients'
                 element={
-                  isAuthenticated || allowAuthBypass ? <PatientsList /> : <Navigate to='/auth' />
+                  isAuthenticated ? <PatientsList /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/citas'
                 element={
-                  isAuthenticated || allowAuthBypass ? (
+                  isAuthenticated ? (
                     <AppointmentsPage />
                   ) : (
                     <Navigate to='/auth' />
@@ -247,37 +291,37 @@ function App() {
               <Route
                 path='/clinic/admin'
                 element={
-                  isAuthenticated || allowAuthBypass ? <ClinicAdminPage /> : <Navigate to='/auth' />
+                  isAuthenticated ? <ClinicAdminPage /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/clinic-admin'
                 element={
-                  isAuthenticated || allowAuthBypass ? <ClinicAdminPage /> : <Navigate to='/auth' />
+                  isAuthenticated ? <ClinicAdminPage /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/clinic/summary'
                 element={
-                  isAuthenticated || allowAuthBypass ? <ClinicSummary /> : <Navigate to='/auth' />
+                  isAuthenticated ? <ClinicSummary /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/clinic/patients'
                 element={
-                  isAuthenticated || allowAuthBypass ? <ClinicPatients /> : <Navigate to='/auth' />
+                  isAuthenticated ? <ClinicPatients /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/clinic/staff'
                 element={
-                  isAuthenticated || allowAuthBypass ? <ClinicStaff /> : <Navigate to='/auth' />
+                  isAuthenticated ? <ClinicStaff /> : <Navigate to='/auth' />
                 }
               />
               <Route
                 path='/clinic/settings'
                 element={
-                  isAuthenticated || allowAuthBypass ? <ClinicSettings /> : <Navigate to='/auth' />
+                  isAuthenticated ? <ClinicSettings /> : <Navigate to='/auth' />
                 }
               />
             </Route>
@@ -285,8 +329,8 @@ function App() {
             {/* 404 route - must be last */}
             <Route path='*' element={<NotFound />} />
           </Routes>
-        </Router>
-      </ClinicProvider>
+        </ClinicProvider>
+      </Router>
     </ErrorBoundary>
   );
 }

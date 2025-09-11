@@ -18,17 +18,14 @@ export default function Auth() {
   const navigate = useNavigate();
 
   const handleCaptchaVerify = (token: string) => {
-    console.log('✅ hCaptcha solved:', token);
     setHcaptchaToken(token);
   };
 
   const handleCaptchaError = (error: any) => {
-    console.log('❌ hCaptcha error:', error);
     setHcaptchaToken(null);
   };
 
   const handleCaptchaExpire = () => {
-    console.log('⏰ hCaptcha expired');
     setHcaptchaToken(null);
   };
 
@@ -133,18 +130,18 @@ export default function Auth() {
     const password = formData.get('password') as string;
     const confirmPassword = formData.get('confirmPassword') as string;
 
-    console.log(`🔑 Attempting ${isLogin ? 'login' : 'signup'} for:`, email);
+    // Authentication attempt started
 
     try {
       if (isLogin) {
-        console.log('🔐 Logging in...');
+        // Logging in...
         if (!hcaptchaToken) {
           setError('Por favor, completa el captcha para continuar.');
           setLoading(false); // Detener el loading
           return;
         }
 
-        console.log('✅ Captcha token obtained, proceeding with login...');
+        // Captcha token obtained, proceeding with login
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -155,11 +152,11 @@ export default function Auth() {
 
         if (error) throw error;
 
-        console.log('✅ Login successful:', data.user?.email);
+        // Login successful
         // NO navegar inmediatamente - dejar que useAuth maneje la navegación
         // navigate('/dashboard') se manejará automáticamente en App.tsx
       } else {
-        console.log('📝 Starting registration process...');
+        // Starting registration process
         setCheckingEmail(true);
 
         try {
@@ -169,10 +166,10 @@ export default function Auth() {
             return;
           }
 
-          console.log('✅ Captcha token obtained, proceeding with signup...');
+          // Captcha token obtained, proceeding with signup
           
           // NUEVO FLUJO: Validar, crear usuario y enviar email de verificación
-          console.log('🔍 Validando formato de email:', email);
+          // Validating email format
 
           // Validación básica del email
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -194,7 +191,7 @@ export default function Auth() {
           }
 
           // Verificar si el email existe usando múltiples métodos
-          console.log('🔍 Verificando disponibilidad del email...');
+          // Checking email availability
 
           // Método 1: Usar la función RPC segura (si está disponible)
           let emailExists = false;
@@ -208,11 +205,11 @@ export default function Auth() {
             if (!rpcError && availabilityCheck) {
               emailExists = !availabilityCheck.available;
               if (emailExists) {
-                console.log('❌ Email ya registrado (RPC):', availabilityCheck.message);
+                // Email already registered
               }
             } else {
               // Si la función RPC no existe, usar método alternativo
-              console.warn('RPC no disponible, usando método alternativo');
+              // RPC not available, using alternative method
 
               // Método 2: Verificar con un query a profiles
               const { data: existingProfile, error: profileError } = await supabase
@@ -222,7 +219,7 @@ export default function Auth() {
                 .maybeSingle();
 
               if (profileError && profileError.code !== 'PGRST116') {
-                console.error('Error verificando email en profiles:', profileError);
+                // Error log removed for security;
 
                 // Si profiles falla, no podemos verificar en auth.users desde el cliente
                 // Por seguridad, procederemos y dejaremos que Supabase maneje el error
@@ -231,11 +228,11 @@ export default function Auth() {
                 );
               } else if (existingProfile) {
                 emailExists = true;
-                console.log('❌ Email ya registrado (profiles)');
+                // Sensitive log removed for security');
               }
             }
           } catch (checkError) {
-            console.error('Error general verificando email:', checkError);
+            // Error log removed for security;
             setError('Error al verificar el email. Por favor, intenta nuevamente.');
             return;
           }
@@ -248,7 +245,7 @@ export default function Auth() {
             return;
           }
 
-          console.log('📧 Creando usuario y enviando email de verificación...');
+          // Sensitive log removed for security;
 
           // Crear usuario en Supabase Auth y enviar email de verificación
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -268,14 +265,13 @@ export default function Auth() {
             throw signUpError;
           }
 
-          console.log('✅ Usuario creado, email de verificación enviado');
+          // Sensitive log removed for security;
 
-          // Guardar datos temporalmente para el cuestionario
+          // Guardar datos temporalmente para el cuestionario (sin contraseña por seguridad)
           sessionStorage.setItem(
             'pendingRegistration',
             JSON.stringify({
               email: email.toLowerCase().trim(),
-              password: password,
               userId: signUpData.user?.id,
               timestamp: Date.now(),
             })
@@ -294,7 +290,7 @@ export default function Auth() {
         }
       }
     } catch (err: any) {
-      console.error(`❌ ${isLogin ? 'Login' : 'Signup'} error:`, err);
+      // Error log removed for security;
 
       // Manejo de errores mejorado
       if (err.message === 'Invalid login credentials') {

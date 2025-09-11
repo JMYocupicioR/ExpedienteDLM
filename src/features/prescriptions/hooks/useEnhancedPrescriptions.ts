@@ -66,7 +66,7 @@ export function useEnhancedPrescriptions() {
 
       setPrescriptions(data || []);
     } catch (err) {
-      console.error('Error fetching prescriptions:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error al cargar prescripciones');
     } finally {
       setLoading(false);
@@ -90,7 +90,7 @@ export function useEnhancedPrescriptions() {
 
       setPrescriptionTemplate(data);
     } catch (err) {
-      console.error('Error fetching prescription template:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error al cargar plantilla de receta');
     }
   }, [user]);
@@ -110,7 +110,7 @@ export function useEnhancedPrescriptions() {
 
       setMedicationTemplates(data || []);
     } catch (err) {
-      console.error('Error fetching medication templates:', err);
+      // Error log removed for security;
     }
   }, [user]);
 
@@ -158,7 +158,7 @@ export function useEnhancedPrescriptions() {
           }]);
 
         if (relationError) {
-          console.warn('Error creating consultation-prescription relation:', relationError);
+          // Warning log removed for security;
         }
       }
 
@@ -167,7 +167,7 @@ export function useEnhancedPrescriptions() {
 
       return data;
     } catch (err) {
-      console.error('Error creating prescription:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al crear prescripción';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -208,7 +208,7 @@ export function useEnhancedPrescriptions() {
 
       return data;
     } catch (err) {
-      console.error('Error updating prescription:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al actualizar prescripción';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -241,7 +241,7 @@ export function useEnhancedPrescriptions() {
         p.id === id ? { ...p, status: 'cancelled' } : p
       ));
     } catch (err) {
-      console.error('Error cancelling prescription:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al cancelar prescripción';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -297,7 +297,7 @@ export function useEnhancedPrescriptions() {
 
       setPrescriptionTemplate(data);
     } catch (err) {
-      console.error('Error saving prescription template:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al guardar plantilla';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -336,7 +336,7 @@ export function useEnhancedPrescriptions() {
       setMedicationTemplates(prev => [data, ...prev]);
       return data;
     } catch (err) {
-      console.error('Error creating medication template:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al crear plantilla de medicamentos';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -388,7 +388,7 @@ export function useEnhancedPrescriptions() {
 
       return stats;
     } catch (err) {
-      console.error('Error getting prescription stats:', err);
+      // Error log removed for security;
       return null;
     }
   }, [user]);
@@ -408,7 +408,7 @@ export function useEnhancedPrescriptions() {
       if (error) throw error;
       return data || [];
     } catch (err) {
-      console.error('Error fetching prescription history:', err);
+      // Error log removed for security;
       return [];
     }
   }, []);

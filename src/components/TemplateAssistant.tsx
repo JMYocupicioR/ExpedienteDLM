@@ -216,7 +216,7 @@ export default function TemplateAssistant({
       setSuggestedTemplates(categorizedSuggestions);
 
     } catch (error) {
-      console.error('Error searching templates:', error);
+      // Error log removed for security;
       setSuggestedTemplates({ interrogatorio: [], exploracion: [], prescripcion: [] });
     } finally {
       setLoading(false);

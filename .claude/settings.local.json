@@ -20,7 +20,16 @@
       "Bash(netlify deploy:*)",
       "Bash(git push:*)",
       "Bash(netlify env:get:*)",
-      "Bash(netlify env:set:*)"
+      "Bash(netlify env:set:*)",
+      "Bash(supabase login:*)",
+      "Bash(supabase status:*)",
+      "Bash(netlify:*)",
+      "Bash(cat:*)",
+      "Bash(dir:*)",
+      "Bash(iconv:*)",
+      "Bash(find:*)",
+      "Bash(supabase db pull:*)",
+      "Bash(supabase:*)"
     ],
     "deny": [],
     "ask": []

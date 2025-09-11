@@ -70,7 +70,7 @@ export const resetHcaptcha = (): void => {
 // Función para renderizar el widget de hCaptcha
 export const renderHcaptcha = (containerId: string, onVerify?: (token: string) => void): void => {
   if (typeof window.hcaptcha === 'undefined') {
-    console.error('hCaptcha no está cargado');
+    // Error log removed for security;
     return;
   }
 
@@ -85,14 +85,14 @@ export const renderHcaptcha = (containerId: string, onVerify?: (token: string) =
         }
       },
       'expired-callback': () => {
-        console.log('Token de hCaptcha expirado');
+        // Sensitive log removed for security;
       },
       'error-callback': () => {
-        console.error('Error en hCaptcha');
+        // Error log removed for security;
       }
     });
   } catch (error) {
-    console.error('Error renderizando hCaptcha:', error);
+    // Error log removed for security;
   }
 };
 

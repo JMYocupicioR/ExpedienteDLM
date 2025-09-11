@@ -98,7 +98,7 @@ export default function NotificationBell() {
       try {
         await markAsRead(notification.id);
       } catch (error) {
-        console.error('Error marking notification as read:', error);
+        // Error log removed for security;
       }
     }
 
@@ -156,10 +156,10 @@ export default function NotificationBell() {
           break;
           
         default:
-          console.warn('Tipo de acción no reconocido:', action.type);
+          // Warning log removed for security;
       }
     } catch (error) {
-      console.error('Error ejecutando acción sugerida:', error);
+      // Error log removed for security;
     }
   };
 
@@ -167,7 +167,7 @@ export default function NotificationBell() {
     try {
       await markAllAsRead();
     } catch (error) {
-      console.error('Error marking all as read:', error);
+      // Error log removed for security;
     }
   };
 
@@ -177,7 +177,7 @@ export default function NotificationBell() {
     try {
       await deleteNotification(notificationId);
     } catch (error) {
-      console.error('Error deleting notification:', error);
+      // Error log removed for security;
     }
   };
 
@@ -185,7 +185,7 @@ export default function NotificationBell() {
     try {
       await deleteAllRead();
     } catch (error) {
-      console.error('Error deleting read notifications:', error);
+      // Error log removed for security;
     }
   };
 

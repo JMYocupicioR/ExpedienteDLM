@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useClinic } from '@/context/ClinicContext';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { 
   Building2, 
@@ -76,9 +76,9 @@ const ClinicSettings: React.FC = () => {
   const [paymentMethods, setPaymentMethods] = useState<string[]>(['cash', 'card', 'transfer']);
 
   useEffect(() => {
-    console.log('🔍 ClinicSettings useEffect triggered');
-    console.log('🔍 Current activeClinic:', activeClinic);
-    console.log('🔍 Current user:', user);
+    // Sensitive log removed for security;
+    // Sensitive log removed for security;
+    // Sensitive log removed for security;
     
     // Add a small delay to ensure context is fully loaded
     const timer = setTimeout(() => {
@@ -89,29 +89,29 @@ const ClinicSettings: React.FC = () => {
   }, [activeClinic, user]);
 
   const checkPermissionsAndLoadData = async () => {
-    console.log('🔍 Starting checkPermissionsAndLoadData');
+    // Sensitive log removed for security;
     
     // Wait a bit more if context is still loading
     if (!activeClinic || !user) {
-      console.log('⏳ Waiting for context to load...', { activeClinic: !!activeClinic, user: !!user });
+      // Sensitive log removed for security;
       setTimeout(() => {
         if (activeClinic && user) {
           checkPermissionsAndLoadData();
         } else {
-          console.log('❌ Context still not loaded after delay, redirecting to dashboard');
+          // Sensitive log removed for security;
           navigate('/dashboard');
         }
       }, 1000);
       return;
     }
 
-    console.log('✅ Basic checks passed, checking admin permissions...');
-    console.log('🔍 User ID:', user.id);
-    console.log('🔍 Clinic ID:', activeClinic.id);
+    // Sensitive log removed for security;
+    // Sensitive log removed for security;
+    // Sensitive log removed for security;
 
     try {
       // Check if user is admin
-      console.log('🔍 Checking admin permissions for user:', user.id, 'in clinic:', activeClinic.id);
+      // Sensitive log removed for security;
       
       const { data: membership, error: membershipError } = await supabase
         .from('clinic_members')
@@ -120,13 +120,13 @@ const ClinicSettings: React.FC = () => {
         .eq('user_id', user.id)
         .single();
 
-      console.log('🔍 Membership query result:', { membership, membershipError });
+      // Sensitive log removed for security;
 
       if (membershipError) {
-        console.error('❌ Error fetching clinic membership:', membershipError);
+        // Error log removed for security;
         
         // Try alternative approach: check profiles table
-        console.log('🔄 Trying alternative approach: checking profiles table...');
+        // Sensitive log removed for security;
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role, clinic_id')
@@ -134,33 +134,33 @@ const ClinicSettings: React.FC = () => {
           .single();
         
         if (profileError || !profile || profile.clinic_id !== activeClinic.id || profile.role !== 'admin') {
-          console.error('❌ Alternative approach also failed:', profileError);
+          // Error log removed for security;
           alert('Error verificando permisos de administrador');
           navigate('/dashboard');
           return;
         }
         
-        console.log('✅ Alternative approach successful, user is admin via profiles');
+        // Sensitive log removed for security;
         setIsAdmin(true);
         await loadClinicData();
         return;
       }
 
-      console.log('🔍 User role in clinic:', membership?.role);
+      // Sensitive log removed for security;
 
       if (membership?.role !== 'admin') {
-        console.log('❌ User is not admin, role:', membership?.role);
+        // Sensitive log removed for security;
         alert('Solo los administradores pueden acceder a la configuración');
         navigate('/dashboard');
         return;
       }
 
-      console.log('✅ User is admin, loading clinic data...');
+      // Sensitive log removed for security;
       setIsAdmin(true);
       await loadClinicData();
 
     } catch (error) {
-      console.error('💥 Unexpected error in checkPermissionsAndLoadData:', error);
+      // Error log removed for security;
       alert('Error inesperado verificando permisos');
       navigate('/dashboard');
     }
@@ -205,7 +205,7 @@ const ClinicSettings: React.FC = () => {
         setPaymentMethods(clinic.payment_methods || ['cash', 'card', 'transfer']);
       }
     } catch (error) {
-      console.error('Error loading clinic data:', error);
+      // Error log removed for security;
     } finally {
       setLoading(false);
     }
@@ -277,7 +277,7 @@ const ClinicSettings: React.FC = () => {
 
       setFormData(prev => ({ ...prev, logo_url: publicUrl }));
     } catch (error) {
-      console.error('Error uploading logo:', error);
+      // Error log removed for security;
       alert('Error al subir el logo');
     }
   };
@@ -305,7 +305,7 @@ const ClinicSettings: React.FC = () => {
       await refreshUserClinics();
       alert('Configuración guardada exitosamente');
     } catch (error) {
-      console.error('Error saving clinic settings:', error);
+      // Error log removed for security;
       alert('Error al guardar la configuración');
     } finally {
       setSaving(false);

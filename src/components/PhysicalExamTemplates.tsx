@@ -176,7 +176,7 @@ export default function PhysicalExamTemplates({
       setTemplates(data || []);
 
     } catch (err: any) {
-      console.error('Error loading templates:', err);
+      // Error log removed for security;
       setError('Error al cargar las plantillas');
     } finally {
       setLoading(false);
@@ -385,7 +385,7 @@ export default function PhysicalExamTemplates({
       
       return data;
     } catch (err: any) {
-      console.error('Error saving template:', err);
+      // Error log removed for security;
       setError('Error al guardar la plantilla: ' + err.message);
       throw err;
     }
@@ -411,7 +411,7 @@ export default function PhysicalExamTemplates({
       // Limpiar mensaje después de 3 segundos
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
-      console.error('Error deleting template:', err);
+      // Error log removed for security;
       setError('Error al eliminar la plantilla: ' + err.message);
     }
   };
@@ -653,7 +653,7 @@ export default function PhysicalExamTemplates({
                             const templateData = createTemplateFromPredefined(template);
                             await saveTemplateToDatabase(templateData);
                           } catch (error) {
-                            console.error('Error:', error);
+                            // Error log removed for security;
                           }
                         }}
                         className="flex-1 px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded transition-colors"

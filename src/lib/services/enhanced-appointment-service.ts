@@ -44,7 +44,7 @@ class EnhancedAppointmentService {
       );
 
       if (error) {
-        console.error('Error calling schedule-appointment function:', error);
+        // Error log removed for security;
         throw new Error(`Error en la función de agendamiento: ${error.message}`);
       }
 
@@ -58,7 +58,7 @@ class EnhancedAppointmentService {
 
       return response.appointment;
     } catch (error) {
-      console.error('Error creating appointment:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -90,7 +90,7 @@ class EnhancedAppointmentService {
       );
 
       if (error) {
-        console.error('Error calling check-appointment-availability function:', error);
+        // Error log removed for security;
         throw new Error(`Error verificando disponibilidad: ${error.message}`);
       }
 
@@ -99,7 +99,7 @@ class EnhancedAppointmentService {
         conflictDetails: response.conflict_details,
       };
     } catch (error) {
-      console.error('Error checking availability:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -169,13 +169,13 @@ class EnhancedAppointmentService {
       const { data, error } = await query.order('appointment_date', { ascending: true });
 
       if (error) {
-        console.error('Error fetching appointments:', error);
+        // Error log removed for security;
         throw error;
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error in getAppointments:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -216,13 +216,13 @@ class EnhancedAppointmentService {
         .single();
 
       if (error) {
-        console.error('Error updating appointment:', error);
+        // Error log removed for security;
         throw error;
       }
 
       return data;
     } catch (error) {
-      console.error('Error in updateAppointment:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -245,7 +245,7 @@ class EnhancedAppointmentService {
 
       await this.updateAppointmentStatus(id, status);
     } catch (error) {
-      console.error('Error cancelling appointment:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -308,13 +308,13 @@ class EnhancedAppointmentService {
         .limit(limit);
 
       if (error) {
-        console.error('Error fetching upcoming appointments:', error);
+        // Error log removed for security;
         throw error;
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error in getUpcomingAppointments:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -330,11 +330,11 @@ class EnhancedAppointmentService {
         .eq('id', appointmentId);
 
       if (error) {
-        console.error('Error marking reminder as sent:', error);
+        // Error log removed for security;
         throw error;
       }
     } catch (error) {
-      console.error('Error in markReminderSent:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -367,7 +367,7 @@ class EnhancedAppointmentService {
       const { data, error } = await query;
 
       if (error) {
-        console.error('Error fetching appointment stats:', error);
+        // Error log removed for security;
         throw error;
       }
 
@@ -410,7 +410,7 @@ class EnhancedAppointmentService {
 
       return stats;
     } catch (error) {
-      console.error('Error in getAppointmentStats:', error);
+      // Error log removed for security;
       throw error;
     }
   }

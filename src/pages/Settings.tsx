@@ -279,7 +279,7 @@ export default function Settings() {
         const rows = (data || []).map((r: any) => ({ id: r.id, name: r.name }));
         setSpecialties(rows);
       } catch (err) {
-        console.error('Error loading specialties:', err);
+        // Error log removed for security;
       } finally {
         setLoadingSpecialties(false);
       }
@@ -410,7 +410,7 @@ export default function Settings() {
               .single();
               
             if (clinicErr) {
-              console.error('Error creating clinic:', clinicErr);
+              // Error log removed for security;
               throw new Error('Error al crear la clínica: ' + clinicErr.message);
             }
             
@@ -434,7 +434,7 @@ export default function Settings() {
               .eq('id', clinicId);
               
             if (updateErr) {
-              console.error('Error updating clinic:', updateErr);
+              // Error log removed for security;
             }
           }
         }
@@ -527,7 +527,7 @@ export default function Settings() {
       setClinicLogoFile(null);
 
     } catch (error) {
-      console.error('Error updating profile:', error);
+      // Error log removed for security;
       showNotification('error', 'Error al actualizar el perfil');
     } finally {
       setIsSaving(false);

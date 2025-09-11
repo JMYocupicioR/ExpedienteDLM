@@ -7,6 +7,8 @@ import {
   Phone, Mail, MapPin, CheckCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getPatientById, updatePatient } from '@/features/patients/services/patientService';
+import { useSimpleClinic } from '@/hooks/useSimpleClinic';
 import { format, isToday, isTomorrow, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { validateAndSanitizeArray } from '@/lib/validation';
@@ -29,6 +31,11 @@ export default function PatientRecord() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Hook simple para obtener clínica activa
+  const { activeClinic, loading: clinicLoading, error: clinicError } = useSimpleClinic();
+  
+  console.log('PatientRecord - activeClinic:', activeClinic?.name || 'null');
   const [seccionActiva, setSeccionActiva] = useState('paciente');
   const [modoEdicion, setModoEdicion] = useState(false);
   const [showConsultationForm, setShowConsultationForm] = useState(false);
@@ -47,10 +54,10 @@ export default function PatientRecord() {
   const [loadingAppointments, setLoadingAppointments] = useState(true);
 
   useEffect(() => {
-    if (id) {
+    if (id && !clinicLoading) {
       checkSession();
     }
-  }, [id]);
+  }, [id, clinicLoading]);
 
   // Detectar parámetro de query para abrir nueva consulta automáticamente
   useEffect(() => {
@@ -96,7 +103,7 @@ export default function PatientRecord() {
 
       await fetchPatientData();
     } catch (err) {
-      console.error('Session check error:', err);
+      // Error log removed for security;
       navigate('/auth');
     }
   };
@@ -108,14 +115,8 @@ export default function PatientRecord() {
       setLoading(true);
       setError(null);
 
-      // Fetch patient data
-      const { data: patientData, error: patientError } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (patientError) throw patientError;
+      // Fetch patient data using service layer for better security
+      const patientData = await getPatientById(id, activeClinic?.id);
       setPatient(patientData);
 
       // Fetch pathological history using maybeSingle()
@@ -186,7 +187,7 @@ export default function PatientRecord() {
       }
 
     } catch (error: any) {
-      console.error('Error fetching patient data:', error);
+      // Error log removed for security;
       setError(error.message);
     } finally {
       setLoading(false);
@@ -217,7 +218,7 @@ export default function PatientRecord() {
 
       setPatientAppointments(sortedAppointments);
     } catch (error) {
-      console.error('Error loading patient appointments:', error);
+      // Error log removed for security;
     } finally {
       setLoadingAppointments(false);
     }
@@ -292,20 +293,16 @@ export default function PatientRecord() {
       setError(null);
 
       // Update patient info
-      const { error: updateError } = await supabase
-        .from('patients')
-        .update({
-          full_name: patient.full_name,
-          email: patient.email,
-          phone: patient.phone,
-          address: patient.address,
-          city_of_birth: patient.city_of_birth,
-          city_of_residence: patient.city_of_residence,
-          social_security_number: patient.social_security_number
-        })
-        .eq('id', id);
-
-      if (updateError) throw updateError;
+      // Update patient using service layer for better security and validation
+      await updatePatient(id, {
+        full_name: patient.full_name,
+        email: patient.email,
+        phone: patient.phone,
+        address: patient.address,
+        city_of_birth: patient.city_of_birth,
+        city_of_residence: patient.city_of_residence,
+        social_security_number: patient.social_security_number
+      }, activeClinic?.id || '');
 
       // Update pathological history
       if (pathologicalHistory) {
@@ -334,7 +331,7 @@ export default function PatientRecord() {
       setModoEdicion(false);
       await fetchPatientData();
     } catch (error: any) {
-      console.error('Error saving changes:', error);
+      // Error log removed for security;
       setError(error.message);
     } finally {
       setLoading(false);
@@ -355,7 +352,7 @@ export default function PatientRecord() {
       if (error) throw error;
       await fetchPatientData();
     } catch (error: any) {
-      console.error('Error adding hereditary background:', error);
+      // Error log removed for security;
       setError(error.message);
     }
   };
@@ -664,19 +661,26 @@ export default function PatientRecord() {
     return content;
   };
 
-  if (loading) {
+  if (loading || clinicLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <p className="text-gray-400">
+            {clinicLoading ? 'Cargando información de clínica...' : 'Cargando expediente del paciente...'}
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (error || !patient) {
+  if (error || !patient || clinicError || (!clinicLoading && !activeClinic)) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">{error || 'Paciente no encontrado'}</p>
+          <p className="text-red-400 mb-4">
+            {error || clinicError || (!activeClinic ? 'No estás asociado a ninguna clínica' : 'Paciente no encontrado')}
+          </p>
           <button
             onClick={() => navigate('/dashboard')}
             className="text-blue-400 hover:underline"
@@ -1301,7 +1305,7 @@ export default function PatientRecord() {
                     onChange={(e) => {
                       const { sanitizedArray, errors } = validateAndSanitizeArray(e.target.value, 'vaccination_history');
                       if (errors.length > 0) {
-                        console.warn('Validation errors:', errors);
+                        // Warning log removed for security;
                         // Show toast or alert for validation errors
                       }
                       setNonPathologicalHistory(prev => ({
@@ -1341,7 +1345,7 @@ export default function PatientRecord() {
                                     .eq('id', background.id);
                                   await fetchPatientData();
                                 } catch (error) {
-                                  console.error('Error deleting background:', error);
+                                  // Error log removed for security;
                                 }
                               }}
                               className="text-red-400 hover:text-red-300 transition-colors"
@@ -1806,7 +1810,7 @@ export default function PatientRecord() {
                   await fetchPatientData();
                   return data.id as string;
                 } catch (e) {
-                  console.error('Error inserting consultation', e);
+                  // Error log removed for security;
                 }
               }}
             />

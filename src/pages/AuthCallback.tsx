@@ -11,7 +11,7 @@ export default function AuthCallback() {
     const handleAuthSuccess = async (session: any) => {
       if (!session || didNavigate) return;
 
-      console.log('🔐 Auth callback - Usuario autenticado:', session.user.email);
+      // Sensitive log removed for security;
 
       try {
         // Verificar si el usuario tiene un perfil completo
@@ -22,7 +22,7 @@ export default function AuthCallback() {
           .maybeSingle();
 
         if (profileError && profileError.code !== 'PGRST116') {
-          console.error('Error verificando perfil:', profileError);
+          // Error log removed for security;
         }
 
         // Verificar si es un registro OAuth nuevo
@@ -38,20 +38,14 @@ export default function AuthCallback() {
                                   profile.registration_completed === null ||
                                   authMode === 'signup';
 
-        console.log('🔍 Estado del usuario OAuth:', {
-          hasProfile: !!profile,
-          isRegistrationCompleted: profile?.registration_completed,
-          authMode: authMode,
-          provider: session.user.app_metadata?.provider,
-          needsQuestionnaire: needsQuestionnaire,
-          userEmail: session.user.email
-        });
+        // OAuth user state check (sensitive data removed)
+        // User state: hasProfile=${!!profile}, needsQuestionnaire=${needsQuestionnaire}
 
         didNavigate = true;
 
         if (needsQuestionnaire) {
           // Usuario nuevo o registro OAuth - ir al cuestionario
-          console.log('📝 Redirigiendo a cuestionario para completar registro...');
+          // Sensitive log removed for security;
           
           // Guardar datos OAuth para el cuestionario
           sessionStorage.setItem('oauthRegistration', JSON.stringify({
@@ -78,11 +72,11 @@ export default function AuthCallback() {
           });
         } else {
           // Usuario existente - ir al dashboard
-          console.log('✅ Usuario existente, redirigiendo al dashboard...');
+          // Sensitive log removed for security;
           navigate('/dashboard');
         }
       } catch (error) {
-        console.error('Error en AuthCallback:', error);
+        // Error log removed for security;
         didNavigate = true;
         navigate('/auth');
       }
@@ -105,7 +99,7 @@ export default function AuthCallback() {
     // 3) Fallback: si en ~15s no hay navegación, ir a auth
     const fallback = setTimeout(() => {
       if (!didNavigate) {
-        console.warn('AuthCallback timeout - redirigiendo a /auth');
+        // Warning log removed for security;
         navigate('/auth');
       }
     }, 15000);

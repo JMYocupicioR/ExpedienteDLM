@@ -237,7 +237,7 @@ class AppointmentService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching appointments:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -287,7 +287,7 @@ class AppointmentService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error creating appointment:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -335,7 +335,7 @@ class AppointmentService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error updating appointment:', error);
+      // Error log removed for security;
       throw error;
     }
   }
@@ -367,7 +367,7 @@ class AppointmentService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error deleting appointment:', error);
+      // Error log removed for security;
       throw error;
     }
   }

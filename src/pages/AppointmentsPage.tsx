@@ -8,7 +8,7 @@ export default function AppointmentsPage() {
 
   const handleAppointmentSelect = (appointment: Appointment) => {
     // Aquí se puede mostrar un modal con detalles o navegar a una página específica
-    console.log('Selected appointment:', appointment);
+    // Sensitive log removed for security;
   };
 
   const handleNavigateToPatient = (patientId: string) => {

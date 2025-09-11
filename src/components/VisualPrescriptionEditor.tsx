@@ -466,7 +466,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         }
         setLastSaved(new Date(data.timestamp));
       } catch (error) {
-        console.error('Error loading saved data:', error);
+        // Error log removed for security;
       }
     }
   };
@@ -1094,7 +1094,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         updateElement(qrElement.id, { content: qrCodeDataURL });
       }
     } catch (error) {
-      console.error('Error generating QR code:', error);
+      // Error log removed for security;
       setValidationErrors(prev => [...prev, {
         field: 'qr',
         message: 'Error al generar código QR. Verifique los datos.',

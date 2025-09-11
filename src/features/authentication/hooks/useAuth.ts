@@ -2,7 +2,6 @@ import type { Database } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
@@ -11,7 +10,6 @@ export function useAuth() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     // Get initial session
@@ -27,7 +25,7 @@ export function useAuth() {
           await loadProfile(session.user.id);
         }
       } catch (error) {
-        console.error('Error getting initial session:', error);
+        // Error log removed for security;
       } finally {
         setLoading(false);
       }
@@ -49,30 +47,24 @@ export function useAuth() {
       }
       setLoading(false);
 
-      // Navegación basada en eventos de autenticación
-      if (event === 'SIGNED_IN') {
-        navigate('/dashboard');
-      }
-      if (event === 'SIGNED_OUT') {
-        navigate('/auth');
-      }
+      // La navegación se maneja ahora en App.tsx, no en el hook
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, []);
 
   const loadProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
 
       if (error) {
-        console.error('Error loading profile:', error);
+        // Error log removed for security;
         return;
       }
 
       setProfile(data);
     } catch (error) {
-      console.error('Error loading profile:', error);
+      // Error log removed for security;
     }
   };
 
@@ -84,7 +76,7 @@ export function useAuth() {
       setUser(null);
       setProfile(null);
     } catch (error) {
-      console.error('Error signing out:', error);
+      // Error log removed for security;
       throw error;
     }
   };
@@ -105,7 +97,7 @@ export function useAuth() {
       setProfile(data);
       return data;
     } catch (error) {
-      console.error('Error updating profile:', error);
+      // Error log removed for security;
       throw error;
     }
   };

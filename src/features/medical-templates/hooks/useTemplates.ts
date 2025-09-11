@@ -31,7 +31,7 @@ export function useTemplates() {
       if (error) throw error;
       setCategories(data || []);
     } catch (err) {
-      console.error('Error fetching categories:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error desconocido');
     }
   }, []);
@@ -106,7 +106,7 @@ export function useTemplates() {
       return result;
 
     } catch (err) {
-      console.error('Error searching templates:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -134,7 +134,7 @@ export function useTemplates() {
       return data;
 
     } catch (err) {
-      console.error('Error fetching template:', err);
+      // Error log removed for security;
       setError(err instanceof Error ? err.message : 'Error desconocido');
       return null;
     } finally {
@@ -173,7 +173,7 @@ export function useTemplates() {
       return data;
 
     } catch (err) {
-      console.error('Error creating template:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al crear plantilla';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -214,7 +214,7 @@ export function useTemplates() {
       return data;
 
     } catch (err) {
-      console.error('Error updating template:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al actualizar plantilla';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -242,7 +242,7 @@ export function useTemplates() {
       setTemplates(prev => prev.filter(t => t.id !== id));
 
     } catch (err) {
-      console.error('Error deleting template:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al eliminar plantilla';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -277,7 +277,7 @@ export function useTemplates() {
       return await createTemplate(duplicateData);
 
     } catch (err) {
-      console.error('Error duplicating template:', err);
+      // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error al duplicar plantilla';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -302,7 +302,7 @@ export function useTemplates() {
       if (error) throw error;
       setFavorites(data || []);
     } catch (err) {
-      console.error('Error fetching favorites:', err);
+      // Error log removed for security;
     }
   }, [user]);
 
@@ -336,7 +336,7 @@ export function useTemplates() {
         return true;
       }
     } catch (err) {
-      console.error('Error toggling favorite:', err);
+      // Error log removed for security;
       throw err;
     }
   }, [user, favorites]);
@@ -363,7 +363,7 @@ export function useTemplates() {
 
       if (error) throw error;
     } catch (err) {
-      console.error('Error recording template usage:', err);
+      // Error log removed for security;
     }
   }, [user]);
 
@@ -410,7 +410,7 @@ export function useTemplates() {
 
       return stats;
     } catch (err) {
-      console.error('Error fetching template stats:', err);
+      // Error log removed for security;
       return null;
     }
   }, [user]);

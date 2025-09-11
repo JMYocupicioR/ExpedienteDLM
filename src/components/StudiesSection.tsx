@@ -115,7 +115,7 @@ export default function StudiesSection({ patientId, doctorId }: StudiesSectionPr
       if (insertError) throw insertError;
       fetchStudies();
     } catch (e) {
-      console.error('Upload error', e);
+      // Error log removed for security;
     } finally {
       setUploadingId(null);
     }
@@ -354,7 +354,7 @@ function StudyFiles({ studyId, uploading }: { studyId: string; uploading: boolea
       await supabase.from('medical_test_files').delete().eq('id', f.id);
       fetchFiles();
     } catch (e) {
-      console.error('Delete file error', e);
+      // Error log removed for security;
     }
   };
 

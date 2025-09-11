@@ -162,7 +162,7 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
       if (error) throw error;
       navigate('/auth');
     } catch (error) {
-      console.error('Error signing out:', error);
+      // Error log removed for security;
     }
   };
 

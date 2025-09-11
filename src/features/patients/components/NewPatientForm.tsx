@@ -1,7 +1,9 @@
 import { useValidationNotifications } from '@/components/ValidationNotification';
-import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useClinic } from '@/context/ClinicContext';
+import { useSimpleClinic } from '@/hooks/useSimpleClinic';
 import { usePatients } from '@/features/patients/hooks/usePatients';
 import type { Patient, PatientInsert } from '@/features/patients/services/patientService';
+import { searchPatients } from '@/features/patients/services/patientService';
 import { supabase } from '@/lib/supabase';
 import { AlertCircle, Building, Calendar, ExternalLink, Mail, MapPin, Phone, User, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -24,7 +26,16 @@ export default function NewPatientForm({
 }: NewPatientFormProps) {
   const { addError, addSuccess, addWarning } = useValidationNotifications();
   const navigate = useNavigate();
-  const { activeClinic, loading: clinicsLoading, error: clinicError } = useClinic();
+  // Usar hook simple como fallback si ClinicContext falla
+  const { activeClinic: contextClinic, loading: clinicsLoading, error: clinicError } = useClinic();
+  const { activeClinic: simpleClinic, loading: simpleLoading, error: simpleError } = useSimpleClinic();
+  
+  // Usar el contexto si está disponible, sino usar el hook simple
+  const activeClinic = contextClinic || simpleClinic;
+  
+  console.log('NewPatientForm - contextClinic:', contextClinic?.name || 'null');
+  console.log('NewPatientForm - simpleClinic:', simpleClinic?.name || 'null');
+  console.log('NewPatientForm - activeClinic final:', activeClinic?.name || 'null');
   const { createPatientMutation } = usePatients();
 
   // Estados locales para el manejo del formulario y validaciones en tiempo real
@@ -34,7 +45,7 @@ export default function NewPatientForm({
 
   const [formData, setFormData] = useState<Omit<PatientInsert, 'clinic_id' | 'primary_doctor_id'>>({
     full_name: initialName,
-    curp: '',
+    social_security_number: '',
     phone: '',
     email: '',
     birth_date: '',
@@ -56,44 +67,37 @@ export default function NewPatientForm({
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
-    // Clear existing patient alert when CURP changes
-    if (field === 'curp' && existingPatient) {
+    // Clear existing patient alert when social security number changes
+    if (field === 'social_security_number' && existingPatient) {
       setExistingPatient(null);
     }
   };
 
-  const checkCurpExists = async (curp: string) => {
-    if (!curp || curp.length < 18 || !activeClinic) return;
+  const checkSocialSecurityExists = async (ssn: string) => {
+    if (!ssn || ssn.length < 10 || !activeClinic) return;
 
     setCheckingCurp(true);
     try {
-      // Temporalmente usar query directa en lugar de Edge Function
-      const { data, error } = await supabase
-        .from('patients')
-        .select('id, full_name')
-        .eq('clinic_id', activeClinic.id)
-        .eq('curp', curp.toUpperCase())
-        .maybeSingle();
+      // Use service layer instead of direct query for better security
+      const patients = await searchPatients(ssn, activeClinic.id, 1);
+      const existingPatient = patients.find(p => 
+        p.social_security_number?.toUpperCase() === ssn.toUpperCase()
+      );
 
-      if (error) {
-        console.error('Error checking CURP:', error);
-        return;
-      }
-
-      if (data) {
+      if (existingPatient) {
         setExistingPatient({
-          id: data.id,
-          name: data.full_name,
+          id: existingPatient.id,
+          name: existingPatient.full_name,
         });
         addWarning(
           'Paciente existente',
-          `El paciente ${data.full_name} ya está registrado con esta CURP.`
+          `El paciente ${existingPatient.full_name} ya está registrado con este número de seguridad social.`
         );
       } else {
         setExistingPatient(null);
       }
     } catch (error) {
-      console.error('Error checking CURP:', error);
+      // Error log removed for security;
     } finally {
       setCheckingCurp(false);
     }
@@ -106,9 +110,14 @@ export default function NewPatientForm({
       newErrors.full_name = 'El nombre completo es obligatorio';
     }
 
-    // Hacer CURP opcional temporalmente para debug
-    if (formData.curp.trim() && !/^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[0-9A-Z][0-9]$/.test(formData.curp.toUpperCase())) {
-      newErrors.curp = 'La CURP no tiene un formato válido';
+    // Validación de número de seguridad social (formato estricto para sistema médico)
+    if (formData.social_security_number && formData.social_security_number.trim()) {
+      const ssn = formData.social_security_number.trim();
+      if (ssn.length < 10 || ssn.length > 20) {
+        newErrors.social_security_number = 'El número de seguridad social debe tener entre 10 y 20 caracteres';
+      } else if (!/^[A-Z0-9]+$/.test(ssn.toUpperCase())) {
+        newErrors.social_security_number = 'El número de seguridad social solo puede contener letras y números';
+      }
     }
 
     if (!activeClinic) {
@@ -125,7 +134,7 @@ export default function NewPatientForm({
 
     // Prevent submission if patient already exists
     if (existingPatient) {
-      newErrors.curp = 'Este paciente ya existe. Use el enlace para ver su expediente.';
+      newErrors.social_security_number = 'Este paciente ya existe. Use el enlace para ver su expediente.';
     }
 
     setErrors(newErrors);
@@ -146,12 +155,22 @@ export default function NewPatientForm({
 
       // Preparamos el objeto del paciente para la inserción
       const patientData: PatientInsert = {
-        ...formData,
         full_name: formData.full_name.trim(),
+        social_security_number: formData.social_security_number?.trim() || null,
+        email: formData.email?.trim() || null,
+        phone: formData.phone?.trim() || null,
+        birth_date: formData.birth_date || null,
+        gender: formData.gender || '',
+        address: formData.address?.trim() || null,
+        emergency_contact: formData.emergency_contact || null,
+        insurance_info: formData.insurance_info || null,
+        notes: formData.notes?.trim() || null,
         clinic_id: activeClinic.id,
         primary_doctor_id: currentUser.id,
         is_active: true,
       };
+
+      console.log('Creating patient with data:', patientData);
 
       // Usamos la mutación de React Query
       createPatientMutation.mutate(patientData, {
@@ -169,7 +188,7 @@ export default function NewPatientForm({
       });
 
     } catch (error: any) {
-      console.error('Error inesperado en handleSubmit:', error);
+      // Error log removed for security;
       addError('Error inesperado', error.message || 'Ocurrió un error inesperado. Intente nuevamente.');
     }
   };
@@ -177,7 +196,7 @@ export default function NewPatientForm({
   const resetForm = () => {
     setFormData({
       full_name: '',
-      curp: '',
+      social_security_number: '',
       phone: '',
       email: '',
       birth_date: '',
@@ -260,23 +279,22 @@ export default function NewPatientForm({
             </div>
 
             <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>CURP *</label>
+              <label className='block text-sm font-medium text-gray-300 mb-2'>Número de Seguridad Social</label>
               <div className='relative'>
                 <input
                   type='text'
-                  value={formData.curp}
-                  onChange={e => handleInputChange('curp', e.target.value.toUpperCase())}
+                  value={formData.social_security_number}
+                  onChange={e => handleInputChange('social_security_number', e.target.value.toUpperCase())}
                   onBlur={() => {
-                    if (formData.curp.length === 18 && activeClinic) {
-                      checkCurpExists(formData.curp);
+                    if (formData.social_security_number && formData.social_security_number.length >= 10 && activeClinic) {
+                      checkSocialSecurityExists(formData.social_security_number);
                     }
                   }}
                   className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                    errors.curp ? 'border-red-500' : 'border-gray-600'
+                    errors.social_security_number ? 'border-red-500' : 'border-gray-600'
                   }`}
-                  placeholder='AAAA000000HAAAAA00'
-                  maxLength={18}
-                  required
+                  placeholder='123456789012'
+                  maxLength={20}
                 />
                 {checkingCurp && (
                   <div className='absolute right-3 top-1/2 transform -translate-y-1/2'>
@@ -284,7 +302,7 @@ export default function NewPatientForm({
                   </div>
                 )}
               </div>
-              {errors.curp && <p className='text-red-400 text-xs mt-1'>{errors.curp}</p>}
+              {errors.social_security_number && <p className='text-red-400 text-xs mt-1'>{errors.social_security_number}</p>}
               {existingPatient && (
                 <div className='mt-2 p-3 bg-amber-900/20 border border-amber-600 rounded-lg'>
                   <div className='flex items-start space-x-2'>

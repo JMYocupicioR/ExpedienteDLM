@@ -90,7 +90,7 @@ const PrivacyDashboard: React.FC = () => {
       // Cargar logs de acceso
       await loadAccessLogs();
     } catch (err) {
-      console.error('Error loading patient data:', err);
+      // Error log removed for security;
       setError('Error al cargar la información del paciente');
     } finally {
       setLoading(false);
@@ -113,7 +113,7 @@ const PrivacyDashboard: React.FC = () => {
       if (error) throw error;
       setCorrectionRequests(data || []);
     } catch (err) {
-      console.error('Error loading correction requests:', err);
+      // Error log removed for security;
     }
   };
 
@@ -129,7 +129,7 @@ const PrivacyDashboard: React.FC = () => {
       if (error) throw error;
       setAccessLogs(data || []);
     } catch (err) {
-      console.error('Error loading access logs:', err);
+      // Error log removed for security;
     }
   };
 
@@ -161,7 +161,7 @@ const PrivacyDashboard: React.FC = () => {
       // Recargar logs para mostrar la descarga
       await loadAccessLogs();
     } catch (err) {
-      console.error('Error downloading complete record:', err);
+      // Error log removed for security;
       setError('Error al descargar el expediente completo');
     } finally {
       setSubmitting(false);
@@ -204,7 +204,7 @@ const PrivacyDashboard: React.FC = () => {
       // Recargar solicitudes
       await loadCorrectionRequests(patientId);
     } catch (err) {
-      console.error('Error submitting correction request:', err);
+      // Error log removed for security;
       setError('Error al enviar la solicitud');
     } finally {
       setSubmitting(false);

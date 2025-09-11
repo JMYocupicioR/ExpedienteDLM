@@ -17,7 +17,7 @@ const PatientPortalLayout: React.FC = () => {
       await signOut();
       navigate('/auth');
     } catch (error) {
-      console.error('Error signing out:', error);
+      // Error log removed for security;
     }
   };
 

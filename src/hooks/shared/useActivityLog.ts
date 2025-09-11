@@ -33,7 +33,7 @@ export const useActivityLog = () => {
         // Aquí se puede agregar la lógica para guardar en base de datos
         // o enviar a un servicio de logging externo
       } catch (error) {
-        console.error('Error creating activity log:', error);
+        // Error log removed for security;
       }
     },
     []

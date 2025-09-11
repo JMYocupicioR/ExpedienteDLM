@@ -37,7 +37,7 @@ export default function OAuthButtons({ mode, onError }: OAuthButtonsProps) {
       
       // La redirección se maneja automáticamente
     } catch (err: any) {
-      console.error(`Error con ${provider}:`, err);
+      // Error log removed for security;
       const errorMsg = `Error al iniciar sesión con ${provider}. Por favor, intenta nuevamente.`;
       setError(errorMsg);
       if (onError) onError(errorMsg);

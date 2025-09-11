@@ -64,12 +64,12 @@ export function useNotifications(
     } catch (err) {
       // Si la tabla no existe, no es realmente un error para el usuario
       if (err instanceof Error && err.message.includes('relation "notifications" does not exist')) {
-        console.warn('Notifications table not found. Please run the migration.');
+        // Warning log removed for security;
         setNotifications([]);
       } else {
         const errorMessage = err instanceof Error ? err.message : 'Error al cargar las notificaciones';
         setError(errorMessage);
-        console.error('Error loading notifications:', err);
+        // Error log removed for security;
       }
     } finally {
       setLoading(false);
@@ -85,7 +85,7 @@ export function useNotifications(
       setStats(statsData);
     } catch (err) {
       if (err instanceof Error && err.message.includes('relation "notifications" does not exist')) {
-        console.warn('Notifications table not found. Stats will remain empty.');
+        // Warning log removed for security;
         setStats({
           total: 0,
           unread: 0,
@@ -93,7 +93,7 @@ export function useNotifications(
           recent: [],
         });
       } else {
-        console.error('Error loading notification stats:', err);
+        // Error log removed for security;
       }
     }
   }, [user]);

@@ -177,7 +177,7 @@ export default function AppointmentForm({
         addWarning('Conflicto de Horario', `${conflictMsg}. Por favor, seleccione otro horario.`);
       }
     } catch (error) {
-      console.error('Error checking availability:', error);
+      // Error log removed for security;
       addError('Error', 'No se pudo verificar la disponibilidad del horario');
     } finally {
       setCheckingAvailability(false);
@@ -313,7 +313,7 @@ export default function AppointmentForm({
 
       onClose();
     } catch (error) {
-      console.error('Error submitting appointment:', error);
+      // Error log removed for security;
       addError('Error', appointment ? 'No se pudo actualizar la cita' : 'No se pudo crear la cita');
     } finally {
       setLoading(false);

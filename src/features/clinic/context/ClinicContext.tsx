@@ -45,7 +45,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
     const loadUserClinics = async () => {
       try {
         setIsLoading(true);
-        console.log('🔄 Starting to load user clinics...');
+        // Sensitive log removed for security;
 
         // Get current user
         const {
@@ -53,32 +53,33 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
           error: userError,
         } = await supabase.auth.getUser();
         if (userError) {
-          console.error('❌ Error getting user:', userError);
+          // Error log removed for security;
           setUserClinics([]);
           setActiveClinic(null);
           return;
         }
 
         if (!user) {
-          console.log('⚠️ No user found, clearing clinics');
+          // Sensitive log removed for security;
           setUserClinics([]);
           setActiveClinic(null);
           return;
         }
 
-        console.log('👤 User authenticated:', user.id);
+        // Sensitive log removed for security;
 
         // Fetch user's clinic memberships (without nested clinic to avoid RLS recursion)
-        console.log('🔍 Fetching clinic memberships for user:', user.id);
+        // Sensitive log removed for security;
         const { data: memberships, error: membershipsError } = await supabase
-          .from('clinic_members')
-          .select('clinic_id, user_id, role, joined_at')
+          .from('clinic_user_relationships')
+          .select('clinic_id, user_id, role_in_clinic, created_at, status, is_active')
           .eq('user_id', user.id)
-          .order('joined_at', { ascending: false });
+          .eq('status', 'approved')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
 
         if (membershipsError) {
-          console.error('❌ Error loading clinic memberships:', membershipsError);
-          console.error('❌ Error details:', {
+          console.error('❌ Error loading clinic relationships:', {
             message: membershipsError.message,
             details: membershipsError.details,
             hint: membershipsError.hint,
@@ -88,48 +89,50 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
           return;
         }
 
-        console.log('✅ Clinic memberships loaded:', memberships?.length || 0, 'memberships');
+        console.log('✅ Clinic relationships loaded:', memberships?.length || 0);
+
+        // Sensitive log removed for security;
 
         // Fetch clinic details in a separate query
         const clinicIds = (memberships || []).map((m: any) => m.clinic_id);
         let clinicsById: Record<string, Clinic> = {};
 
         if (clinicIds.length > 0) {
-          console.log('🔍 Fetching clinic details for IDs:', clinicIds);
+          // Sensitive log removed for security;
           const { data: clinicsData, error: clinicsError } = await supabase
             .from('clinics')
             .select('id, name, address, created_at, updated_at')
             .in('id', clinicIds);
 
           if (clinicsError) {
-            console.error('❌ Error loading clinics:', clinicsError);
-            console.error('❌ Clinics error details:', {
+            console.error('❌ Error loading clinics data:', {
               message: clinicsError.message,
               details: clinicsError.details,
               hint: clinicsError.hint,
               code: clinicsError.code,
             });
           } else {
-            console.log('✅ Clinics data loaded:', clinicsData?.length || 0, 'clinics');
+            console.log('✅ Clinics data loaded:', clinicsData?.length || 0);
             clinicsById = (clinicsData || []).reduce((acc: Record<string, Clinic>, c: any) => {
               acc[c.id] = c as Clinic;
               return acc;
             }, {});
           }
         } else {
-          console.log('⚠️ No clinic IDs found in memberships');
+          // Sensitive log removed for security;
         }
 
         // Transform data to match our interface
         const transformedMemberships: ClinicMember[] = memberships.map((membership: any) => ({
           clinic_id: membership.clinic_id,
           user_id: membership.user_id,
-          role: membership.role,
-          joined_at: membership.joined_at,
+          role: membership.role_in_clinic === 'admin_staff' ? 'admin' : membership.role_in_clinic,
+          joined_at: membership.created_at,
           clinic: clinicsById[membership.clinic_id],
         }));
 
-        console.log('🔄 Transformed memberships:', transformedMemberships);
+        console.log('✅ Transformed memberships:', transformedMemberships.length);
+        console.log('✅ First membership:', transformedMemberships[0]);
         setUserClinics(transformedMemberships);
 
         // Set active clinic if none is selected or if current one is no longer valid
@@ -137,23 +140,25 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
           if (transformedMemberships.length > 0) {
             const firstClinic = transformedMemberships[0].clinic;
             if (firstClinic) {
-              console.log('🎯 Setting active clinic to first available:', firstClinic.name);
+              console.log('✅ Setting active clinic:', firstClinic.name);
               setActiveClinic(firstClinic);
+              // Store in localStorage for persistence
+              localStorage.setItem('activeClinicId', firstClinic.id);
             } else {
-              console.log('⚠️ First membership has no clinic data');
+              console.warn('⚠️ First membership has no clinic data');
             }
           } else {
-            console.log('⚠️ No memberships available, clearing active clinic');
+            console.warn('⚠️ No memberships found');
             setActiveClinic(null);
           }
         }
       } catch (error) {
-        console.error('💥 Unexpected error in loadUserClinics:', error);
+        // Error log removed for security;
         setUserClinics([]);
         setActiveClinic(null);
       } finally {
         setIsLoading(false);
-        console.log('✅ Finished loading user clinics');
+        // Sensitive log removed for security;
       }
     };
 
@@ -164,31 +169,33 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
   const refreshUserClinics = async () => {
     try {
       setIsLoading(true);
-      console.log('🔄 Refreshing user clinics...');
+      // Sensitive log removed for security;
 
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
       if (userError) {
-        console.error('❌ Error getting user in refresh:', userError);
+        // Error log removed for security;
         return;
       }
 
       if (!user) {
-        console.log('⚠️ No user found in refresh');
+        // Sensitive log removed for security;
         return;
       }
 
-      console.log('🔍 Refreshing clinic memberships for user:', user.id);
+      // Sensitive log removed for security;
       const { data: memberships, error: membershipsError } = await supabase
-        .from('clinic_members')
-        .select('clinic_id, user_id, role, joined_at')
+        .from('clinic_user_relationships')
+        .select('clinic_id, user_id, role_in_clinic, created_at, status, is_active')
         .eq('user_id', user.id)
-        .order('joined_at', { ascending: false });
+        .eq('status', 'approved')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
       if (membershipsError) {
-        console.error('❌ Error refreshing clinic memberships:', membershipsError);
+        // Error log removed for security;
         console.error('❌ Refresh error details:', {
           message: membershipsError.message,
           details: membershipsError.details,
@@ -209,14 +216,14 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       let clinicsById: Record<string, Clinic> = {};
 
       if (clinicIds.length > 0) {
-        console.log('🔍 Refresh: fetching clinic details for IDs:', clinicIds);
+        // Sensitive log removed for security;
         const { data: clinicsData, error: clinicsError } = await supabase
           .from('clinics')
           .select('id, name, address, created_at, updated_at')
           .in('id', clinicIds);
 
         if (clinicsError) {
-          console.error('❌ Error refreshing clinics:', clinicsError);
+          // Error log removed for security;
           console.error('❌ Refresh clinics error details:', {
             message: clinicsError.message,
             details: clinicsError.details,
@@ -224,7 +231,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
             code: clinicsError.code,
           });
         } else {
-          console.log('✅ Refresh: clinics data loaded:', clinicsData?.length || 0, 'clinics');
+          // Sensitive log removed for security;
           clinicsById = (clinicsData || []).reduce((acc: Record<string, Clinic>, c: any) => {
             acc[c.id] = c as Clinic;
             return acc;
@@ -235,18 +242,18 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       const transformedMemberships: ClinicMember[] = memberships.map((membership: any) => ({
         clinic_id: membership.clinic_id,
         user_id: membership.user_id,
-        role: membership.role,
-        joined_at: membership.joined_at,
+        role: membership.role_in_clinic === 'admin_staff' ? 'admin' : membership.role_in_clinic,
+        joined_at: membership.created_at,
         clinic: clinicsById[membership.clinic_id],
       }));
 
-      console.log('🔄 Refresh: transformed memberships:', transformedMemberships);
+      // Sensitive log removed for security;
       setUserClinics(transformedMemberships);
     } catch (error) {
-      console.error('💥 Unexpected error in refreshUserClinics:', error);
+      // Error log removed for security;
     } finally {
       setIsLoading(false);
-      console.log('✅ Finished refreshing user clinics');
+      // Sensitive log removed for security;
     }
   };
 
@@ -261,14 +268,32 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Start a transaction by using RPC function
-      const { data: newClinic, error } = await supabase.rpc('create_clinic_with_member', {
-        clinic_name: clinicData.name,
-        clinic_address: clinicData.address || null,
-        user_role: 'admin',
-      });
+      // Create clinic directly (no RPC needed)
+      const { data: newClinic, error: clinicError } = await supabase
+        .from('clinics')
+        .insert({
+          name: clinicData.name,
+          address: clinicData.address || null,
+          type: 'clinic',
+          is_active: true
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (clinicError) throw clinicError;
+
+      // Create user-clinic relationship
+      const { error: relationError } = await supabase
+        .from('clinic_user_relationships')
+        .insert({
+          clinic_id: newClinic.id,
+          user_id: user.id,
+          role_in_clinic: 'admin_staff',
+          status: 'approved',
+          is_active: true
+        });
+
+      if (relationError) throw relationError;
 
       // Refresh user clinics
       await refreshUserClinics();
@@ -280,7 +305,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
 
       return newClinic;
     } catch (error) {
-      console.error('Error creating clinic:', error);
+      // Error log removed for security;
       return null;
     }
   };
@@ -293,10 +318,12 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      const { error } = await supabase.from('clinic_members').insert({
+      const { error } = await supabase.from('clinic_user_relationships').insert({
         clinic_id: clinicId,
         user_id: user.id,
-        role: 'pending_approval',
+        role_in_clinic: 'doctor',
+        status: 'pending',
+        is_active: false,
       });
 
       if (error) throw error;
@@ -305,7 +332,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       await refreshUserClinics();
       return true;
     } catch (error) {
-      console.error('Error joining clinic:', error);
+      // Error log removed for security;
       return false;
     }
   };
@@ -319,7 +346,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       if (!user) throw new Error('User not authenticated');
 
       const { error } = await supabase
-        .from('clinic_members')
+        .from('clinic_user_relationships')
         .delete()
         .eq('clinic_id', clinicId)
         .eq('user_id', user.id);
@@ -340,7 +367,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       await refreshUserClinics();
       return true;
     } catch (error) {
-      console.error('Error leaving clinic:', error);
+      // Error log removed for security;
       return false;
     }
   };
@@ -362,7 +389,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       }
       setActiveClinic(clinic);
     } catch (err) {
-      console.error('Error updating active clinic in profile:', err);
+      // Error log removed for security;
     }
   };
 
@@ -384,7 +411,14 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
 export const useClinic = (): ClinicContextType => {
   const context = useContext(ClinicContext);
   if (context === undefined) {
+    console.error('❌ useClinic called outside ClinicProvider');
     throw new Error('useClinic must be used within a ClinicProvider');
   }
+  
+  // Debug info
+  console.log('useClinic called - activeClinic:', context.activeClinic?.name || 'null');
+  console.log('useClinic called - userClinics:', context.userClinics?.length || 0);
+  console.log('useClinic called - isLoading:', context.isLoading);
+  
   return context;
 };
