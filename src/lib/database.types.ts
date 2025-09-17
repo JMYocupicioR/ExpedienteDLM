@@ -304,6 +304,8 @@ export interface Database {
           doctor_id: string
           clinic_id: string
           selected_scale_ids: string[] | null
+          allowed_sections: string[]
+          assigned_patient_id: string | null
           expires_at: string
           status: string
           created_at: string
@@ -314,6 +316,8 @@ export interface Database {
           doctor_id: string
           clinic_id: string
           selected_scale_ids?: string[] | null
+          allowed_sections?: string[]
+          assigned_patient_id?: string | null
           expires_at: string
           status?: string
           created_at?: string
@@ -324,6 +328,8 @@ export interface Database {
           doctor_id?: string
           clinic_id?: string
           selected_scale_ids?: string[] | null
+          allowed_sections?: string[]
+          assigned_patient_id?: string | null
           expires_at?: string
           status?: string
           created_at?: string

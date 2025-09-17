@@ -9,6 +9,8 @@ type TokenRow = {
   doctor_id: string;
   clinic_id: string;
   selected_scale_ids: string[] | null;
+  allowed_sections?: string[] | null;
+  assigned_patient_id?: string | null;
   expires_at: string;
   status: string;
   created_at: string;
@@ -44,6 +46,12 @@ type NonPathological = {
   vaccination_history: string[];
 };
 
+type HereditaryItem = {
+  relationship: string;
+  condition: string;
+  notes?: string;
+};
+
 type ScaleDefinition = {
   items?: Array<{ id: string; text: string; type: 'select'; options: Array<{ label: string; value: number | string }> }>
   scoring?: { average?: boolean; ranges?: Array<{ min: number; max: number; severity: string }> }
@@ -59,11 +67,13 @@ export default function PatientPublicRegistration() {
   const [personal, setPersonal] = useState<PersonalInfo>({ full_name: '', birth_date: '', gender: 'unspecified', email: '', phone: '', address: '' });
   const [pathological, setPathological] = useState<Pathological>({ chronic_diseases: [], current_treatments: [], surgeries: [], fractures: [], previous_hospitalizations: [], substance_use: {} });
   const [nonPathological, setNonPathological] = useState<NonPathological>({ handedness: 'right', religion: '', marital_status: '', education_level: '', diet: '', personal_hygiene: '', vaccination_history: [] });
+  const [hereditary, setHereditary] = useState<HereditaryItem[]>([{ relationship: '', condition: '', notes: '' }]);
   const [scaleDefs, setScaleDefs] = useState<Record<string, { name: string; definition: ScaleDefinition }>>({});
   const [scaleAnswers, setScaleAnswers] = useState<Record<string, { answers: Record<string, unknown>; score: number | null; severity: string | null }>>({});
   const [activeScaleId, setActiveScaleId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [allowedSections, setAllowedSections] = useState<string[]>(['personal','pathological','non_pathological','hereditary']);
 
   useEffect(() => {
     (async () => {
@@ -72,7 +82,7 @@ export default function PatientPublicRegistration() {
         setLoading(true);
         const { data, error } = await supabase
           .from('patient_registration_tokens')
-          .select('id, token, doctor_id, clinic_id, selected_scale_ids, expires_at, status, created_at, doctor:profiles(full_name), clinic:clinics(name)')
+          .select('id, token, doctor_id, clinic_id, selected_scale_ids, allowed_sections, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name), clinic:clinics(name)')
           .eq('token', token)
           .single();
         if (error) throw error;
@@ -84,6 +94,10 @@ export default function PatientPublicRegistration() {
           return;
         }
         setTokenRow(data as unknown as TokenRow);
+        const sections = (data.allowed_sections && Array.isArray(data.allowed_sections) && (data.allowed_sections as string[]).length > 0)
+          ? (data.allowed_sections as string[])
+          : ['personal','pathological','non_pathological','hereditary'];
+        setAllowedSections(sections);
 
         const scaleIds = (data.selected_scale_ids || []) as string[];
         if (scaleIds.length > 0) {
@@ -94,10 +108,10 @@ export default function PatientPublicRegistration() {
             .eq('is_active', true);
           if (err2) throw err2;
           const map: Record<string, { name: string; definition: ScaleDefinition }> = {};
-          (defs || []).forEach((row: any) => { map[row.id] = { name: row.name, definition: row.definition as ScaleDefinition }; });
+          (defs || []).forEach((row: { id: string; name: string; definition: unknown }) => { map[row.id] = { name: row.name, definition: row.definition as ScaleDefinition }; });
           setScaleDefs(map);
         }
-      } catch (e: any) {
+      } catch {
         // Error log removed for security;
         setError('No se pudo validar el enlace.');
       } finally {
@@ -128,14 +142,15 @@ export default function PatientPublicRegistration() {
         personal,
         pathological,
         nonPathological,
+        hereditary,
         scales: scaleAnswers,
       };
-      const { data, error } = await supabase.functions.invoke('complete-patient-registration', { body });
+      const { error } = await supabase.functions.invoke('complete-patient-registration', { body });
       if (error) throw new Error(error.message || 'Error al completar registro');
       setSubmitted(true);
-    } catch (e: any) {
+    } catch {
       // Error log removed for security;
-      setError(e?.message || 'Error al enviar');
+      setError('Error al enviar');
     } finally {
       setSubmitting(false);
     }
@@ -179,14 +194,14 @@ export default function PatientPublicRegistration() {
           <p className="text-gray-300 text-sm">{welcome}</p>
         </div>
 
-        {/* Stepper header */}
+        {/* Stepper header (3 pasos) */}
         <div className="flex items-center space-x-2 mb-4">
           {[1,2,3].map(n => (
             <div key={n} className={`px-3 py-1 rounded ${step === n ? 'bg-cyan-700 text-white' : 'bg-gray-700 text-gray-300'}`}>Paso {n}</div>
           ))}
         </div>
 
-        {step === 1 && (
+        {step === 1 && allowedSections.includes('personal') && (
           <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -225,29 +240,91 @@ export default function PatientPublicRegistration() {
         )}
 
         {step === 2 && (
-          <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-4">
+            {allowedSections.includes('pathological') && (
               <div>
-                <label className="text-sm text-gray-300">Enfermedades crónicas</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.chronic_diseases.join(', ')} onChange={e => setPathological(v => ({ ...v, chronic_diseases: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                <div className="text-gray-200 font-medium mb-2">Antecedentes patológicos</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm text-gray-300">Enfermedades crónicas</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.chronic_diseases.join(', ')} onChange={e => setPathological(v => ({ ...v, chronic_diseases: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Tratamientos actuales</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.current_treatments.join(', ')} onChange={e => setPathological(v => ({ ...v, current_treatments: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Cirugías</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.surgeries.join(', ')} onChange={e => setPathological(v => ({ ...v, surgeries: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Fracturas</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.fractures.join(', ')} onChange={e => setPathological(v => ({ ...v, fractures: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-gray-300">Hospitalizaciones previas</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.previous_hospitalizations.join(', ')} onChange={e => setPathological(v => ({ ...v, previous_hospitalizations: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                  </div>
+                </div>
               </div>
+            )}
+
+            {allowedSections.includes('non_pathological') && (
               <div>
-                <label className="text-sm text-gray-300">Tratamientos actuales</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.current_treatments.join(', ')} onChange={e => setPathological(v => ({ ...v, current_treatments: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                <div className="text-gray-200 font-medium mb-2">Antecedentes no patológicos</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm text-gray-300">Lateralidad</label>
+                    <select className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.handedness} onChange={e => setNonPathological(v => ({ ...v, handedness: e.target.value }))}>
+                      <option value="right">Derecha</option>
+                      <option value="left">Izquierda</option>
+                      <option value="ambidextrous">Ambidiestro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Religión</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.religion} onChange={e => setNonPathological(v => ({ ...v, religion: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Estado civil</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.marital_status} onChange={e => setNonPathological(v => ({ ...v, marital_status: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Nivel educativo</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.education_level} onChange={e => setNonPathological(v => ({ ...v, education_level: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Dieta</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.diet} onChange={e => setNonPathological(v => ({ ...v, diet: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Higiene personal</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.personal_hygiene} onChange={e => setNonPathological(v => ({ ...v, personal_hygiene: e.target.value }))} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-gray-300">Vacunas (separar por coma)</label>
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.vaccination_history.join(', ')} onChange={e => setNonPathological(v => ({ ...v, vaccination_history: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                  </div>
+                </div>
               </div>
+            )}
+
+            {allowedSections.includes('hereditary') && (
               <div>
-                <label className="text-sm text-gray-300">Cirugías</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.surgeries.join(', ')} onChange={e => setPathological(v => ({ ...v, surgeries: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                <div className="text-gray-200 font-medium mb-2">Antecedentes heredofamiliares</div>
+                {hereditary.map((item, idx) => (
+                  <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
+                    <input placeholder="Parentesco (madre, padre...)" className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={item.relationship} onChange={e => setHereditary(arr => arr.map((it,i) => i===idx ? { ...it, relationship: e.target.value } : it))} />
+                    <input placeholder="Condición (diabetes, hipertensión...)" className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={item.condition} onChange={e => setHereditary(arr => arr.map((it,i) => i===idx ? { ...it, condition: e.target.value } : it))} />
+                    <input placeholder="Notas (opcional)" className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={item.notes || ''} onChange={e => setHereditary(arr => arr.map((it,i) => i===idx ? { ...it, notes: e.target.value } : it))} />
+                  </div>
+                ))}
+                <div>
+                  <button className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm" onClick={() => setHereditary(arr => [...arr, { relationship: '', condition: '', notes: '' }])}>Agregar familiar</button>
+                </div>
               </div>
-              <div>
-                <label className="text-sm text-gray-300">Fracturas</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.fractures.join(', ')} onChange={e => setPathological(v => ({ ...v, fractures: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-sm text-gray-300">Hospitalizaciones previas</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.previous_hospitalizations.join(', ')} onChange={e => setPathological(v => ({ ...v, previous_hospitalizations: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
-              </div>
-            </div>
+            )}
+
             <div className="flex items-center justify-between">
               <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={() => setStep(1)}>Atrás</button>
               <button className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded" onClick={() => setStep(3)}>Siguiente</button>
@@ -293,7 +370,7 @@ export default function PatientPublicRegistration() {
             )}
 
             <div className="flex items-center justify-between">
-              <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={() => setStep(2)}>Atrás</button>
+              <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={() => setStep(Math.max(1, step-1))}>Atrás</button>
               <button className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded disabled:opacity-50" onClick={handleSubmit} disabled={submitting}>
                 {submitting ? 'Enviando...' : 'Enviar registro'}
               </button>

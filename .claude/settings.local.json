@@ -29,7 +29,10 @@
       "Bash(iconv:*)",
       "Bash(find:*)",
       "Bash(supabase db pull:*)",
-      "Bash(supabase:*)"
+      "Bash(supabase:*)",
+      "Bash(mv:*)",
+      "Bash(tree:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

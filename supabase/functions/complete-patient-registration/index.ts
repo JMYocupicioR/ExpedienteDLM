@@ -9,13 +9,23 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 
 type Json = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
 
+const corsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Content-Type': 'application/json',
+};
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { status: 200, headers: corsHeaders });
+  }
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: corsHeaders });
   }
 
   try {
-    const { token, personal, pathological, nonPathological, scales } = await req.json();
+    const { token, personal, pathological, nonPathological, hereditary, scales } = await req.json();
     if (!token || !personal) {
       return new Response(JSON.stringify({ error: 'Missing fields' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
@@ -23,7 +33,7 @@ serve(async (req) => {
     const url = Deno.env.get('SUPABASE_URL');
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!url || !key) {
-      return new Response(JSON.stringify({ error: 'Missing service configuration' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Missing service configuration' }), { status: 500, headers: corsHeaders });
     }
     const supabase = createClient(url, key, { auth: { persistSession: false } });
 
@@ -34,11 +44,11 @@ serve(async (req) => {
       .eq('token', token)
       .single();
     if (tokenErr || !tokenRow) {
-      return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 400, headers: corsHeaders });
     }
     const expired = new Date(tokenRow.expires_at).getTime() < Date.now();
     if (tokenRow.status !== 'pending' || expired) {
-      return new Response(JSON.stringify({ error: 'Token expirado o usado' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Token expirado o usado' }), { status: 400, headers: corsHeaders });
     }
 
     // 2) Transacción usando RPC (Postgres) porque supabase-js no tiene transacciones multi-requests
@@ -51,29 +61,49 @@ serve(async (req) => {
     `;
     // Nota: Usaremos múltiples operaciones secuenciales y validaremos fallos manualmente.
 
-    // 3) Crear patient
-    const { data: patient, error: patientErr } = await supabase
-      .from('patients')
-      .insert({
-        full_name: personal.full_name,
-        birth_date: personal.birth_date,
-        gender: personal.gender,
-        email: personal.email ?? null,
-        phone: personal.phone ?? null,
-        address: personal.address ?? null,
-        clinic_id: tokenRow.clinic_id,
-        primary_doctor_id: tokenRow.doctor_id,
-        insurance_info: {},
-        emergency_contact: {},
-        created_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-    if (patientErr || !patient) {
-      return new Response(JSON.stringify({ error: 'No se pudo crear paciente' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    // 3) Crear o actualizar patient
+    let patientId: string | null = null;
+    if (tokenRow.assigned_patient_id) {
+      // Actualizar datos básicos del paciente asignado
+      const { error: updPatientErr } = await supabase
+        .from('patients')
+        .update({
+          full_name: personal.full_name,
+          birth_date: personal.birth_date,
+          gender: personal.gender,
+          email: personal.email ?? null,
+          phone: personal.phone ?? null,
+          address: personal.address ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tokenRow.assigned_patient_id);
+      if (updPatientErr) {
+        return new Response(JSON.stringify({ error: 'No se pudo actualizar paciente' }), { status: 400, headers: corsHeaders });
+      }
+      patientId = tokenRow.assigned_patient_id as string;
+    } else {
+      const { data: patient, error: patientErr } = await supabase
+        .from('patients')
+        .insert({
+          full_name: personal.full_name,
+          birth_date: personal.birth_date,
+          gender: personal.gender,
+          email: personal.email ?? null,
+          phone: personal.phone ?? null,
+          address: personal.address ?? null,
+          clinic_id: tokenRow.clinic_id,
+          primary_doctor_id: tokenRow.doctor_id,
+          insurance_info: {},
+          emergency_contact: {},
+          created_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+      if (patientErr || !patient) {
+        return new Response(JSON.stringify({ error: 'No se pudo crear paciente' }), { status: 400, headers: corsHeaders });
+      }
+      patientId = patient.id as string;
     }
-
-    const patientId: string = patient.id;
 
     // 4) Crear antecedentes
     if (pathological) {
@@ -93,7 +123,7 @@ serve(async (req) => {
       if (phErr) {
         // Limpieza básica
         await supabase.from('patients').delete().eq('id', patientId);
-        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes patológicos' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes patológicos' }), { status: 400, headers: corsHeaders });
       }
     }
 
@@ -114,8 +144,34 @@ serve(async (req) => {
         });
       if (nphErr) {
         await supabase.from('pathological_histories').delete().eq('patient_id', patientId);
-        await supabase.from('patients').delete().eq('id', patientId);
-        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes no patológicos' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        if (!tokenRow.assigned_patient_id) {
+          await supabase.from('patients').delete().eq('id', patientId);
+        }
+        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes no patológicos' }), { status: 400, headers: corsHeaders });
+      }
+    }
+
+    // 4b) Heredofamiliares
+    if (hereditary && Array.isArray(hereditary)) {
+      // Insertar múltiples filas
+      const entries = (hereditary as Array<any>).filter(h => h && (h.relationship || h.condition)).map(h => ({
+        patient_id: patientId,
+        relationship: String(h.relationship || ''),
+        condition: String(h.condition || ''),
+        notes: h.notes ? String(h.notes) : null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      if (entries.length > 0) {
+        const { error: hbErr } = await supabase.from('hereditary_backgrounds').insert(entries as any);
+        if (hbErr) {
+          await supabase.from('non_pathological_histories').delete().eq('patient_id', patientId);
+          await supabase.from('pathological_histories').delete().eq('patient_id', patientId);
+          if (!tokenRow.assigned_patient_id) {
+            await supabase.from('patients').delete().eq('id', patientId);
+          }
+          return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes heredofamiliares' }), { status: 400, headers: corsHeaders });
+        }
       }
     }
 
@@ -139,8 +195,10 @@ serve(async (req) => {
         if (saErr) {
           await supabase.from('non_pathological_histories').delete().eq('patient_id', patientId);
           await supabase.from('pathological_histories').delete().eq('patient_id', patientId);
-          await supabase.from('patients').delete().eq('id', patientId);
-          return new Response(JSON.stringify({ error: 'No se pudieron guardar las escalas' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+          if (!tokenRow.assigned_patient_id) {
+            await supabase.from('patients').delete().eq('id', patientId);
+          }
+          return new Response(JSON.stringify({ error: 'No se pudieron guardar las escalas' }), { status: 400, headers: corsHeaders });
         }
       }
     }
@@ -155,10 +213,10 @@ serve(async (req) => {
       console.warn('No se pudo marcar token como completado:', updErr.message);
     }
 
-    return new Response(JSON.stringify({ success: true, patient_id: patientId }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true, patient_id: patientId }), { status: 200, headers: corsHeaders });
   } catch (e: any) {
     console.error('Unhandled error', e);
-    return new Response(JSON.stringify({ error: e?.message || 'Internal error' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: e?.message || 'Internal error' }), { status: 500, headers: corsHeaders });
   }
 });
 

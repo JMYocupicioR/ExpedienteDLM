@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Link as LinkIcon, Copy, ListChecks } from 'lucide-react';
+import { X, Link as LinkIcon, Copy, ListChecks, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
+import PatientSelector from '@/components/PatientSelector';
 
 type ScaleRow = {
   id: string;
@@ -25,6 +26,10 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
   const { user, profile } = useAuth();
   const [scales, setScales] = useState<ScaleRow[]>([]);
   const [selectedScaleIds, setSelectedScaleIds] = useState<string[]>([]);
+  const [assignedPatientId, setAssignedPatientId] = useState<string>('');
+  const [allowedSections, setAllowedSections] = useState<string[]>(['personal','pathological','non_pathological','hereditary']);
+  const [expiryAmount, setExpiryAmount] = useState<number>(72);
+  const [expiryUnit, setExpiryUnit] = useState<'hours' | 'days'>('hours');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultLink, setResultLink] = useState<string | null>(null);
@@ -54,6 +59,10 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
     setSelectedScaleIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  const toggleSection = (id: string) => {
+    setAllowedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
   const canGenerate = useMemo(() => !!user && !!profile?.clinic_id, [user, profile]);
 
   const handleGenerate = async () => {
@@ -65,7 +74,8 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
       setError(null);
       setLoading(true);
       const token = generateSecureToken(64);
-      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+      const ms = (expiryUnit === 'hours' ? expiryAmount * 60 * 60 * 1000 : expiryAmount * 24 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + ms).toISOString();
 
       const { data, error } = await supabase
         .from('patient_registration_tokens')
@@ -74,6 +84,8 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
           doctor_id: user!.id,
           clinic_id: profile!.clinic_id as string,
           selected_scale_ids: selectedScaleIds.length ? selectedScaleIds : null,
+          allowed_sections: allowedSections,
+          assigned_patient_id: assignedPatientId || null,
           expires_at: expiresAt,
           status: 'pending'
         })
@@ -116,6 +128,33 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
           )}
           {error && <div className="text-sm text-red-400">{error}</div>}
           <div>
+            <div className="text-gray-300 text-sm mb-2">Asignar a un paciente existente (opcional):</div>
+            <div className="bg-gray-800/50 border border-gray-700 rounded p-2">
+              <PatientSelector
+                selectedPatientId={assignedPatientId}
+                onPatientSelect={(p) => setAssignedPatientId(p?.id || '')}
+                showRecentPatients={true}
+              />
+            </div>
+            {assignedPatientId && (
+              <div className="text-xs text-gray-400 mt-1">Este enlace actualizará los datos del paciente seleccionado.</div>
+            )}
+          </div>
+          <div>
+            <div className="text-gray-300 text-sm mb-2">Selecciona las secciones del registro a completar:</div>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {[
+                { id: 'personal', label: 'Información personal' },
+                { id: 'pathological', label: 'Antecedentes patológicos' },
+                { id: 'non_pathological', label: 'Antecedentes no patológicos' },
+                { id: 'hereditary', label: 'Antecedentes heredofamiliares' },
+              ].map(s => (
+                <label key={s.id} className="flex items-center space-x-2 bg-gray-800/60 border border-gray-700 rounded p-2">
+                  <input type="checkbox" checked={allowedSections.includes(s.id)} onChange={() => toggleSection(s.id)} />
+                  <span className="text-sm text-gray-200">{s.label}</span>
+                </label>
+              ))}
+            </div>
             <div className="text-gray-300 text-sm mb-2">Selecciona las escalas que el paciente debe completar:</div>
             <div className="max-h-64 overflow-auto space-y-2">
               {loading ? (
@@ -139,6 +178,24 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
                 ))
               )}
             </div>
+          </div>
+          <div className="flex items-center gap-2 pt-2">
+            <span className="text-gray-300 text-sm flex items-center"><Clock className="h-4 w-4 mr-1" /> Vigencia:</span>
+            <input
+              type="number"
+              min={1}
+              value={expiryAmount}
+              onChange={e => setExpiryAmount(Math.max(1, Number(e.target.value) || 1))}
+              className="w-20 bg-gray-800 text-gray-200 border border-gray-700 rounded px-2 py-1"
+            />
+            <select
+              value={expiryUnit}
+              onChange={e => setExpiryUnit(e.target.value as 'hours' | 'days')}
+              className="bg-gray-800 text-gray-200 border border-gray-700 rounded px-2 py-1"
+            >
+              <option value="hours">horas</option>
+              <option value="days">días</option>
+            </select>
           </div>
 
           <div className="flex items-center justify-between pt-2">

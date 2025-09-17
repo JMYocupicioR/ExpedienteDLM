@@ -8,14 +8,22 @@ import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExa
 import { supabase } from '@/lib/supabase';
 import DynamicPhysicalExamForm from '@/components/DynamicPhysicalExamForm';
 import PhysicalExamTemplates from '@/components/PhysicalExamTemplates';
-import MedicalTranscription from '@/components/MedicalTranscription'; // ✅ NUEVO: Importar el componente de transcripción
+import MedicalTranscription from '@/components/MedicalTranscription';
 import ScalePicker from '@/components/ScalePicker';
 import ScaleStepper from '@/components/ScaleStepper';
 import AppointmentQuickScheduler from '@/components/AppointmentQuickScheduler';
 import MedicalScalesPanel from '@/components/MedicalScalesPanel';
-// ===== NUEVAS IMPORTACIONES PARA PLANTILLAS INTELIGENTES =====
+// ===== NUEVAS IMPORTACIONES PARA SISTEMA AVANZADO =====
 import TemplateAssistant from '@/components/TemplateAssistant';
 import TemplateRunnerModal, { TemplateResponses } from '@/components/TemplateRunnerModal';
+import SmartSymptomAnalyzer from '@/components/SmartSymptomAnalyzer';
+import MedicalRecommendationsEngine from '@/components/MedicalRecommendationsEngine';
+import MedicalWidgets from '@/components/MedicalWidgets';
+import AdvancedPrescriptionSystem from '@/components/AdvancedPrescriptionSystem';
+import MedicalSafetyValidator from '@/components/MedicalSafetyValidator';
+import CIE10Integration from '@/components/CIE10Integration';
+import DeepSeekMedicalAssistant from '@/components/DeepSeekMedicalAssistant';
+import RealTimeMedicalGuidance from '@/components/RealTimeMedicalGuidance';
 import type { 
   Database,
   MedicalTemplate
@@ -77,6 +85,12 @@ interface ConsultationFormData {
   diagnosis: string;
   prognosis: string;
   treatment: string;
+  medications?: any[];
+  cie10_code?: string;
+  cie10_description?: string;
+  recommendations?: any;
+  validation_score?: number;
+  quality_metrics?: any;
 }
 
 interface ConsultationDraft extends ConsultationFormData {
@@ -151,9 +165,58 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   const [treatmentTemplates, setTreatmentTemplates] = useState<MedicalTemplate[]>([]);
   const [showTreatmentTemplates, setShowTreatmentTemplates] = useState(false);
 
+  // ===== NUEVOS ESTADOS PARA SISTEMA AVANZADO =====
+  const [showSmartAnalyzer, setShowSmartAnalyzer] = useState(true);
+  const [showRecommendations, setShowRecommendations] = useState(true);
+  const [showMedicalWidgets, setShowMedicalWidgets] = useState(true);
+  const [showAdvancedPrescription, setShowAdvancedPrescription] = useState(false);
+  const [showSafetyValidator, setShowSafetyValidator] = useState(true);
+  const [showCIE10Integration, setShowCIE10Integration] = useState(true);
+  const [symptomAnalysis, setSymptomAnalysis] = useState<any>(null);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<any[]>([]);
+  const [medicalRecommendations, setMedicalRecommendations] = useState<any>(null);
+  const [validationResult, setValidationResult] = useState<any>(null);
+  const [selectedCIE10Code, setSelectedCIE10Code] = useState<any>(null);
+  const [prescriptionMedications, setPrescriptionMedications] = useState<any[]>([]);
+  const [patientData, setPatientData] = useState<any>(null);
+  const [showMedicalAssistant, setShowMedicalAssistant] = useState(true);
+  const [assistantSuggestions, setAssistantSuggestions] = useState<any[]>([]);
+  const [showRealTimeGuidance, setShowRealTimeGuidance] = useState(true);
+  const [guidanceActions, setGuidanceActions] = useState<any[]>([]);
+
   // ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
   const { validateCompleteForm, validateVitalSignsField, validateMedicationsField } = useValidation();
   const { listActiveScales, saveScaleAssessment } = usePhysicalExam({ patientId, doctorId });
+
+  // ===== CARGAR DATOS DEL PACIENTE =====
+  useEffect(() => {
+    const loadPatientData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('full_name, birth_date, gender, allergies, chronic_conditions')
+          .eq('id', patientId)
+          .single();
+
+        if (error) throw error;
+
+        const age = data.birth_date ? new Date().getFullYear() - new Date(data.birth_date).getFullYear() : undefined;
+
+        setPatientData({
+          ...data,
+          age,
+          allergies: data.allergies || [],
+          conditions: data.chronic_conditions || []
+        });
+      } catch (error) {
+        console.error('Error loading patient data:', error);
+      }
+    };
+
+    if (patientId) {
+      loadPatientData();
+    }
+  }, [patientId]);
 
   const { register, handleSubmit, setValue, watch, formState: { errors }, reset } = useForm<ConsultationFormData>({
     defaultValues: {
@@ -170,7 +233,13 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       physical_examination: {},
       diagnosis: '',
       prognosis: '',
-      treatment: ''
+      treatment: '',
+      medications: [],
+      cie10_code: '',
+      cie10_description: '',
+      recommendations: null,
+      validation_score: 0,
+      quality_metrics: null
     }
   });
 
@@ -843,6 +912,87 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
     }
   };
 
+  // ===== FUNCIONES DEL ASISTENTE MÉDICO =====
+  const handleAssistantSuggestion = (suggestion: any) => {
+    setAssistantSuggestions(prev => [...prev, suggestion]);
+
+    // Apply suggestion based on type
+    if (suggestion.type === 'diagnosis' && suggestion.content) {
+      setValue('diagnosis', suggestion.content, { shouldValidate: true });
+      setHasUnsavedChanges(true);
+    } else if (suggestion.type === 'treatment' && suggestion.content) {
+      setValue('treatment', suggestion.content, { shouldValidate: true });
+      setHasUnsavedChanges(true);
+    } else if (suggestion.type === 'text' && suggestion.content) {
+      // Generic text suggestion can be applied to current focus or clipboard
+      navigator.clipboard?.writeText(suggestion.content);
+    }
+  };
+
+  const handleDiagnosisFromAssistant = (diagnosis: string) => {
+    const currentDiagnosis = watchedData.diagnosis || '';
+    const newDiagnosis = currentDiagnosis.trim()
+      ? `${currentDiagnosis.trim()}\n\n${diagnosis.trim()}`
+      : diagnosis.trim();
+
+    setValue('diagnosis', newDiagnosis, { shouldValidate: true });
+    setHasUnsavedChanges(true);
+  };
+
+  const handleTreatmentFromAssistant = (treatment: string) => {
+    const currentTreatment = watchedData.treatment || '';
+    const newTreatment = currentTreatment.trim()
+      ? `${currentTreatment.trim()}\n\n${treatment.trim()}`
+      : treatment.trim();
+
+    setValue('treatment', newTreatment, { shouldValidate: true });
+    setHasUnsavedChanges(true);
+  };
+
+  // Generate medical context for the assistant
+  const getMedicalContext = () => {
+    return {
+      patientAge: patientData?.age,
+      patientGender: patientData?.gender,
+      currentCondition: watchedData.current_condition || '',
+      vitalSigns: watchedData.vital_signs || {},
+      diagnosis: watchedData.diagnosis || '',
+      treatment: watchedData.treatment || '',
+      allergies: patientData?.allergies || [],
+      medications: prescriptionMedications || [],
+      physicalExam: physicalExamData || {}
+    };
+  };
+
+  // ===== FUNCIONES DE GUÍAS MÉDICAS EN TIEMPO REAL =====
+  const handleGuidanceAction = (action: string, data: any) => {
+    setGuidanceActions(prev => [...prev, { action, data, timestamp: new Date() }]);
+
+    // Apply guidance action based on type
+    if (action.includes('ECG')) {
+      // Suggest adding ECG to studies
+      setAttachedFiles(prev => {
+        const current = prev.find(p => p.category === 'gabinete');
+        if (current) {
+          return prev;
+        }
+        return [...prev, { category: 'gabinete' as any, files: [] }];
+      });
+    } else if (action.includes('medicación') || action.includes('Antipiréticos')) {
+      // Open prescription system
+      setShowAdvancedPrescription(true);
+    } else if (action.includes('diagnóstico')) {
+      // Focus on diagnosis field
+      const diagnosisField = document.querySelector('textarea[name="diagnosis"]') as HTMLTextAreaElement;
+      if (diagnosisField) {
+        diagnosisField.focus();
+      }
+    }
+
+    // Log action for audit trail
+    console.log('Guidance action executed:', { action, data });
+  };
+
   // ✅ NUEVO: Render save status
   const renderSaveStatus = () => {
     switch (saveState) {
@@ -1006,6 +1156,38 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
                 {watchedData.current_condition?.length || 0}/1000 caracteres
               </p>
             </div>
+
+            {/* ===== NUEVO: SMART SYMPTOM ANALYZER ===== */}
+            <SmartSymptomAnalyzer
+              currentCondition={watchedData.current_condition || ''}
+              onAnalysisUpdate={setSymptomAnalysis}
+              onSuggestedQuestionsUpdate={setSuggestedQuestions}
+              isVisible={showSmartAnalyzer && !!watchedData.current_condition}
+            />
+
+            {/* ===== NUEVO: REAL-TIME MEDICAL GUIDANCE ===== */}
+            <RealTimeMedicalGuidance
+              medicalContext={getMedicalContext()}
+              onGuidanceAction={handleGuidanceAction}
+              isVisible={showRealTimeGuidance}
+              enableAI={true}
+              className="mb-4"
+            />
+
+            {/* ===== NUEVO: MEDICAL WIDGETS ===== */}
+            <MedicalWidgets
+              vitalSigns={{
+                ...watchedData.vital_signs,
+                age: patientData?.age,
+                weight: watchedData.vital_signs?.weight
+              }}
+              currentCondition={watchedData.current_condition || ''}
+              diagnosis={watchedData.diagnosis || ''}
+              onWidgetResult={(widget, result) => {
+                console.log('Widget result:', widget, result);
+              }}
+              isVisible={showMedicalWidgets && (!!watchedData.current_condition || !!watchedData.diagnosis)}
+            />
 
             {/* ✅ MEJORADO: Exploración Física */}
             <div>
@@ -1414,20 +1596,30 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
               )}
             </div>
 
-            {/* ✅ MEJORADO: Diagnóstico con validación */}
+            {/* ===== NUEVO: DIAGNÓSTICO CON CIE-10 ===== */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Diagnóstico *
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Diagnóstico *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowCIE10Integration(!showCIE10Integration)}
+                  className="flex items-center px-3 py-1 text-xs font-medium text-purple-300 bg-purple-900/50 rounded-md hover:bg-purple-800/70 transition-colors"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  CIE-10 {showCIE10Integration ? '✅' : '❌'}
+                </button>
+              </div>
               <textarea
-                {...register('diagnosis', { 
+                {...register('diagnosis', {
                   required: 'El diagnóstico es requerido',
                   minLength: { value: 5, message: 'Mínimo 5 caracteres' },
                   maxLength: { value: 500, message: 'Máximo 500 caracteres' }
                 })}
                 rows={3}
                 className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                placeholder="Diagnóstico principal y diferenciales..."
+                placeholder="Diagnóstico principal..."
               />
               {errors.diagnosis && (
                 <p className="mt-1 text-sm text-red-400">{errors.diagnosis.message}</p>
@@ -1435,7 +1627,49 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
               <p className="mt-1 text-xs text-gray-400">
                 {watchedData.diagnosis?.length || 0}/500 caracteres
               </p>
+
+              {/* Mostrar código CIE-10 seleccionado */}
+              {selectedCIE10Code && (
+                <div className="mt-2 p-2 bg-green-900/30 border border-green-600/50 rounded">
+                  <span className="text-sm text-green-300">
+                    CIE-10: {selectedCIE10Code.code} - {selectedCIE10Code.description}
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* ===== NUEVO: CIE-10 INTEGRATION ===== */}
+            <CIE10Integration
+              diagnosis={watchedData.diagnosis || ''}
+              currentCondition={watchedData.current_condition || ''}
+              patientAge={patientData?.age}
+              patientGender={patientData?.gender}
+              onCodeSelect={(code) => {
+                setSelectedCIE10Code(code);
+                setValue('cie10_code', code.code);
+                setValue('cie10_description', code.description);
+              }}
+              onCodeSuggestions={(suggestions) => {
+                console.log('CIE-10 suggestions:', suggestions);
+              }}
+              isVisible={showCIE10Integration}
+              doctorId={doctorId}
+            />
+
+            {/* ===== NUEVO: MEDICAL RECOMMENDATIONS ENGINE ===== */}
+            <MedicalRecommendationsEngine
+              currentCondition={watchedData.current_condition || ''}
+              diagnosis={watchedData.diagnosis || ''}
+              vitalSigns={watchedData.vital_signs}
+              patientAge={patientData?.age}
+              patientGender={patientData?.gender}
+              allergies={patientData?.allergies}
+              currentMedications={prescriptionMedications.map(m => m.name || '')}
+              patientId={patientId}
+              doctorId={doctorId}
+              onRecommendationsUpdate={setMedicalRecommendations}
+              isVisible={showRecommendations && (!!watchedData.current_condition || !!watchedData.diagnosis)}
+            />
 
             {/* ✅ NUEVO: Escalas médicas integradas */}
             {savedConsultationId && (
@@ -1551,6 +1785,61 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
               )}
             </div>
           </div>
+
+          {/* ===== NUEVO: ADVANCED PRESCRIPTION SYSTEM ===== */}
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-white">Sistema de Prescripción</h3>
+              <button
+                type="button"
+                onClick={() => setShowAdvancedPrescription(!showAdvancedPrescription)}
+                className="flex items-center px-3 py-2 text-sm font-medium text-green-300 bg-green-900/50 rounded-md hover:bg-green-800/70 transition-colors"
+              >
+                <Pill className="h-4 w-4 mr-2" />
+                {showAdvancedPrescription ? 'Ocultar' : 'Mostrar'} Prescripción Avanzada
+              </button>
+            </div>
+
+            <AdvancedPrescriptionSystem
+              diagnosis={watchedData.diagnosis || ''}
+              patientAge={patientData?.age}
+              patientWeight={parseFloat(watchedData.vital_signs?.weight || '70')}
+              patientAllergies={patientData?.allergies}
+              currentMedications={prescriptionMedications.map(m => m.name)}
+              patientConditions={patientData?.conditions}
+              onPrescriptionUpdate={(medications) => {
+                setPrescriptionMedications(medications);
+                setValue('medications', medications);
+              }}
+              onTemplateSelect={(template) => {
+                console.log('Prescription template selected:', template);
+              }}
+              isVisible={showAdvancedPrescription}
+            />
+          </div>
+
+          {/* ===== NUEVO: MEDICAL SAFETY VALIDATOR ===== */}
+          <MedicalSafetyValidator
+            consultationData={{
+              current_condition: watchedData.current_condition || '',
+              vital_signs: watchedData.vital_signs,
+              physical_examination: watchedData.physical_examination,
+              diagnosis: watchedData.diagnosis || '',
+              prognosis: watchedData.prognosis || '',
+              treatment: watchedData.treatment || '',
+              medications: prescriptionMedications,
+              patient_age: patientData?.age,
+              patient_allergies: patientData?.allergies,
+              patient_conditions: patientData?.conditions
+            }}
+            onValidationUpdate={(result) => {
+              setValidationResult(result);
+              setValue('validation_score', result.score);
+              setValue('quality_metrics', result);
+            }}
+            realTimeValidation={true}
+            isVisible={showSafetyValidator}
+          />
 
           {/* ✅ NUEVO: Adjuntar estudios desde la consulta */}
           <div className="mt-6">
@@ -1828,6 +2117,18 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
           }}
         />
       )}
+
+      {/* ===== ASISTENTE MÉDICO DEEPSEEK R1 ===== */}
+      <DeepSeekMedicalAssistant
+        medicalContext={getMedicalContext()}
+        patientId={patientId}
+        doctorId={doctorId}
+        consultationId={savedConsultationId}
+        onSuggestionApply={handleAssistantSuggestion}
+        onDiagnosisUpdate={handleDiagnosisFromAssistant}
+        onTreatmentUpdate={handleTreatmentFromAssistant}
+        isVisible={showMedicalAssistant}
+      />
     </>
   );
 }
