@@ -2,365 +2,222 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-interface ScheduleAppointmentRequest {
+type ConflictDetails = {
+  conflicting_appointment_id: string;
+  conflicting_time_range: {
+    start: string;
+    end: string;
+  };
+};
+
+type ScheduleAppointmentRequest = {
   doctor_id: string;
   patient_id: string;
-  clinic_id: string;
+  clinic_id?: string | null;
   title: string;
-  description?: string;
+  description?: string | null;
   appointment_date: string;
   appointment_time: string;
   duration?: number;
-  type: 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency';
-  location?: string;
-  notes?: string;
+  type: string;
+  location?: string | null;
+  notes?: string | null;
+};
+
+type SupabaseUser = {
+  id: string;
+};
+
+function jsonResponse(status: number, body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
-interface ScheduleAppointmentResponse {
-  success: boolean;
-  appointment?: any;
-  error?: {
-    code: string;
-    message: string;
-    details?: any;
-  };
+function getSupabaseClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!url || !serviceKey) {
+    throw new Error("Supabase environment variables are not configured");
+  }
+
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  });
+}
+
+async function authenticate(req: Request, supabaseClient: ReturnType<typeof getSupabaseClient>): Promise<SupabaseUser> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    throw Object.assign(new Error("Missing authorization header"), { status: 401 });
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabaseClient.auth.getUser(token);
+
+  if (error || !data?.user) {
+    throw Object.assign(new Error("Unauthorized"), { status: 401 });
+  }
+
+  return { id: data.user.id };
+}
+
+function validatePayload(payload: Partial<ScheduleAppointmentRequest>) {
+  const requiredFields: Array<keyof ScheduleAppointmentRequest> = [
+    "doctor_id",
+    "patient_id",
+    "title",
+    "appointment_date",
+    "appointment_time",
+    "type",
+  ];
+
+  for (const field of requiredFields) {
+    if (!payload[field]) {
+      throw Object.assign(new Error(`Missing required field: ${field}`), { status: 400 });
+    }
+  }
+}
+
+function getDateIso(date: string, time: string, duration: number) {
+  const start = new Date(`${date}T${time}`);
+  const end = new Date(start.getTime() + duration * 60000);
+  return { start: start.toISOString(), end: end.toISOString() };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return jsonResponse(405, { success: false, error: { code: "method_not_allowed", message: "Only POST is supported" } });
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
+    const supabaseClient = getSupabaseClient();
+    await authenticate(req, supabaseClient);
+
+    const payload = await req.json() as ScheduleAppointmentRequest;
+    validatePayload(payload);
+
+    const duration = payload.duration ?? 30;
+
+    const { data: conflictResult, error: conflictError } = await supabaseClient.rpc('check_appointment_conflicts', {
+      p_doctor_id: payload.doctor_id,
+      p_appointment_date: payload.appointment_date,
+      p_appointment_time: payload.appointment_time,
+      p_duration: duration,
+      p_exclude_appointment_id: null,
+    });
+
+    if (conflictError) {
+      throw conflictError;
+    }
+
+    const conflictEntry = Array.isArray(conflictResult) ? conflictResult[0] : null;
+
+    if (conflictEntry?.has_conflict) {
+      let conflictDetails: ConflictDetails | undefined;
+
+      if (conflictEntry.conflicting_appointments && conflictEntry.conflicting_appointments.length > 0) {
+        const { data: conflictingAppointments } = await supabaseClient
+          .from('appointments')
+          .select('id, appointment_date, appointment_time, duration')
+          .in('id', conflictEntry.conflicting_appointments)
+          .limit(1);
+
+        const conflicting = conflictingAppointments?.[0];
+        if (conflicting) {
+          const range = getDateIso(conflicting.appointment_date, conflicting.appointment_time, conflicting.duration);
+          conflictDetails = {
+            conflicting_appointment_id: conflicting.id,
+            conflicting_time_range: range,
+          };
+        }
       }
-    );
 
-    // Verificar autenticación
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseClient.auth.getUser();
-
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Usuario no autenticado',
-          },
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return jsonResponse(409, {
+        success: false,
+        error: {
+          code: 'conflict',
+          message: 'El horario seleccionado ya est� ocupado.',
+          details: conflictDetails,
+        },
+      });
     }
 
-    // Verificar método HTTP
-    if (req.method !== 'POST') {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'METHOD_NOT_ALLOWED',
-            message: 'Solo se permite el método POST',
-          },
-        }),
-        {
-          status: 405,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Parsear request body
-    const requestData: ScheduleAppointmentRequest = await req.json();
-
-    // Validar datos requeridos
-    const requiredFields = ['doctor_id', 'patient_id', 'clinic_id', 'title', 'appointment_date', 'appointment_time', 'type'];
-    const missingFields = requiredFields.filter(field => !requestData[field as keyof ScheduleAppointmentRequest]);
-
-    if (missingFields.length > 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: `Campos requeridos faltantes: ${missingFields.join(', ')}`,
-            details: { missingFields },
-          },
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Verificar permisos del usuario para la clínica
-    const { data: userPermissions, error: permissionsError } = await supabaseClient
-      .from('clinic_user_relationships')
-      .select('role_in_clinic, status, is_active')
-      .eq('user_id', user.id)
-      .eq('clinic_id', requestData.clinic_id)
-      .single();
-
-    if (permissionsError || !userPermissions) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'ACCESS_DENIED',
-            message: 'No tiene permisos para crear citas en esta clínica',
-          },
-        }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    if (userPermissions.status !== 'approved' || !userPermissions.is_active) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'ACCESS_DENIED',
-            message: 'Su acceso a esta clínica no está aprobado o está inactivo',
-          },
-        }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    if (!['doctor', 'admin_staff'].includes(userPermissions.role_in_clinic)) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: 'Solo médicos y personal administrativo pueden crear citas',
-          },
-        }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Verificar si el médico existe y pertenece a la clínica
-    const { data: doctorData, error: doctorError } = await supabaseClient
-      .from('clinic_user_relationships')
+    const { data: appointment, error: insertError } = await supabaseClient
+      .from('appointments')
+      .insert({
+        doctor_id: payload.doctor_id,
+        patient_id: payload.patient_id,
+        clinic_id: payload.clinic_id ?? null,
+        title: payload.title,
+        description: payload.description ?? null,
+        appointment_date: payload.appointment_date,
+        appointment_time: payload.appointment_time,
+        duration,
+        status: 'scheduled',
+        type: payload.type,
+        location: payload.location ?? null,
+        notes: payload.notes ?? null,
+        confirmation_required: true,
+      })
       .select(`
         *,
-        profiles:user_id (
+        patient:patients(
+          id,
+          full_name,
+          phone,
+          email,
+          birth_date
+        ),
+        doctor:profiles!appointments_doctor_id_fkey(
           id,
           full_name,
           specialty,
           phone
+        ),
+        clinic:clinics(
+          id,
+          name,
+          address
         )
       `)
-      .eq('user_id', requestData.doctor_id)
-      .eq('clinic_id', requestData.clinic_id)
-      .eq('role_in_clinic', 'doctor')
-      .eq('status', 'approved')
-      .eq('is_active', true)
       .single();
 
-    if (doctorError || !doctorData) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'DOCTOR_NOT_FOUND',
-            message: 'El médico especificado no existe o no pertenece a esta clínica',
-          },
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Verificar si el paciente existe y pertenece a la clínica
-    const { data: patientData, error: patientError } = await supabaseClient
-      .from('patients')
-      .select('id, full_name, phone, email, birth_date')
-      .eq('id', requestData.patient_id)
-      .eq('clinic_id', requestData.clinic_id)
-      .single();
-
-    if (patientError || !patientData) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'PATIENT_NOT_FOUND',
-            message: 'El paciente especificado no existe o no pertenece a esta clínica',
-          },
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Verificar conflictos de horario usando la función de la base de datos
-    const { data: conflictCheck, error: conflictError } = await supabaseClient
-      .rpc('check_appointment_conflict', {
-        p_doctor_id: requestData.doctor_id,
-        p_appointment_date: requestData.appointment_date,
-        p_appointment_time: requestData.appointment_time,
-        p_duration: requestData.duration || 30,
-      });
-
-    if (conflictError) {
-      console.error('Error checking appointment conflict:', conflictError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'CONFLICT_CHECK_ERROR',
-            message: 'Error al verificar conflictos de horario',
-            details: conflictError,
-          },
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    if (conflictCheck === true) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'APPOINTMENT_CONFLICT',
-            message: 'Ya existe una cita programada para el médico en este horario',
-          },
-        }),
-        {
-          status: 409,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Crear la cita de forma transaccional
-    const appointmentData = {
-      doctor_id: requestData.doctor_id,
-      patient_id: requestData.patient_id,
-      clinic_id: requestData.clinic_id,
-      title: requestData.title,
-      description: requestData.description || null,
-      appointment_date: requestData.appointment_date,
-      appointment_time: requestData.appointment_time,
-      duration: requestData.duration || 30,
-      type: requestData.type,
-      location: requestData.location || null,
-      notes: requestData.notes || null,
-      status: 'scheduled' as const,
-      reminder_sent: false,
-      created_by: user.id,
-      updated_by: user.id,
-    };
-
-    const { data: newAppointment, error: createError } = await supabaseClient
-      .from('appointments')
-      .insert(appointmentData)
-      .select(`
-        *,
-        patient:patients(id, full_name, phone, email, birth_date),
-        doctor:profiles(id, full_name, specialty, phone),
-        clinic:clinics(id, name, address)
-      `)
-      .single();
-
-    if (createError) {
-      console.error('Error creating appointment:', createError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'CREATION_ERROR',
-            message: 'Error al crear la cita',
-            details: createError,
-          },
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Crear notificaciones usando la función de la base de datos
-    const { error: notificationError } = await supabaseClient
-      .rpc('create_appointment_notifications', {
-        p_appointment_id: newAppointment.id,
-        p_doctor_id: requestData.doctor_id,
-        p_patient_id: requestData.patient_id,
-        p_clinic_id: requestData.clinic_id,
-        p_patient_name: patientData.full_name,
-        p_doctor_name: doctorData.profiles.full_name,
-        p_appointment_date: requestData.appointment_date,
-        p_appointment_time: requestData.appointment_time,
-        p_action_type: 'created',
-      });
-
-    if (notificationError) {
-      console.error('Error creating notifications:', notificationError);
-      // No fallar la operación por error en notificaciones, solo loguear
-    }
-
-    // Respuesta exitosa
-    const response: ScheduleAppointmentResponse = {
-      success: true,
-      appointment: newAppointment,
-    };
-
-    return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
-  } catch (error) {
-    console.error('Unexpected error in schedule-appointment:', error);
-    
-    return new Response(
-      JSON.stringify({
+    if (insertError) {
+      return jsonResponse(400, {
         success: false,
         error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Error interno del servidor',
-          details: error instanceof Error ? error.message : 'Unknown error',
+          code: 'insert_failed',
+          message: insertError.message ?? 'No se pudo crear la cita',
+          details: insertError,
         },
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+      });
+    }
+
+    return jsonResponse(200, {
+      success: true,
+      appointment,
+    });
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return jsonResponse(status, {
+      success: false,
+      error: {
+        code: status === 401 ? 'unauthorized' : 'internal_error',
+        message,
+      },
+    });
   }
 });

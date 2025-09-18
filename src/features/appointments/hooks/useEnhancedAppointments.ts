@@ -67,16 +67,21 @@ export function useEnhancedAppointments(
 
   // Load appointments
   const loadAppointments = useCallback(async (filters?: AppointmentFilters) => {
-    if (!user) return;
-    
+    if (!user?.id) return;
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      const filtersToUse = filters || currentFilters;
+      const filtersToUse = filters ?? currentFilters ?? initialFilters;
       const data = await enhancedAppointmentService.getAppointments(filtersToUse);
       setAppointments(data);
-      setCurrentFilters(filtersToUse);
+
+      if (filters) {
+        setCurrentFilters(filters);
+      } else if (!currentFilters && filtersToUse) {
+        setCurrentFilters(filtersToUse);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar las citas';
       setError(errorMessage);
@@ -84,7 +89,7 @@ export function useEnhancedAppointments(
     } finally {
       setLoading(false);
     }
-  }, [user, currentFilters]);
+  }, [user?.id, currentFilters, initialFilters]);
 
   // Refresh appointments with current filters
   const refreshAppointments = useCallback(() => {
@@ -248,9 +253,9 @@ export function useEnhancedAppointments(
   // Auto-load on mount
   useEffect(() => {
     if (autoLoad && user) {
-      loadAppointments();
+      loadAppointments(initialFilters);
     }
-  }, [autoLoad, user, loadAppointments]);
+  }, [autoLoad, user, initialFilters, loadAppointments]);
 
   return {
     appointments,

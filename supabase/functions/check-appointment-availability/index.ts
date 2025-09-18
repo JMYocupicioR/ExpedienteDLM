@@ -2,190 +2,158 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-interface AvailabilityRequest {
+type AvailabilityRequest = {
   doctor_id: string;
   appointment_date: string;
   appointment_time: string;
-  duration: number;
+  duration?: number;
   exclude_appointment_id?: string;
+};
+
+type SupabaseUser = {
+  id: string;
+};
+
+function jsonResponse(status: number, body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
-interface AvailabilityResponse {
-  available: boolean;
-  conflict_details?: {
-    conflicting_appointment_id: string;
-    conflicting_time_range: {
-      start: string;
-      end: string;
-    };
+function getSupabaseClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!url || !serviceKey) {
+    throw new Error("Supabase environment variables are not configured");
+  }
+
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  });
+}
+
+async function authenticate(req: Request, supabaseClient: ReturnType<typeof getSupabaseClient>): Promise<SupabaseUser> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    throw Object.assign(new Error("Missing authorization header"), { status: 401 });
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabaseClient.auth.getUser(token);
+
+  if (error || !data?.user) {
+    throw Object.assign(new Error("Unauthorized"), { status: 401 });
+  }
+
+  return { id: data.user.id };
+}
+
+function getTimeRange(date: string, time: string, duration: number) {
+  const start = new Date(`${date}T${time}`);
+  const end = new Date(start.getTime() + duration * 60000);
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
   };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return jsonResponse(405, { success: false, error: { code: "method_not_allowed", message: "Only POST is supported" } });
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
+    const supabaseClient = getSupabaseClient();
+    await authenticate(req, supabaseClient);
+
+    const payload = await req.json() as AvailabilityRequest;
+    const duration = payload.duration ?? 30;
+
+    if (!payload.doctor_id || !payload.appointment_date || !payload.appointment_time) {
+      return jsonResponse(400, {
+        success: false,
+        error: {
+          code: 'invalid_request',
+          message: 'doctor_id, appointment_date y appointment_time son obligatorios',
         },
-      }
-    );
-
-    // Verificar autenticación
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseClient.auth.getUser();
-
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({
-          available: false,
-          error: 'Usuario no autenticado',
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Verificar método HTTP
-    if (req.method !== 'POST') {
-      return new Response(
-        JSON.stringify({
-          available: false,
-          error: 'Solo se permite el método POST',
-        }),
-        {
-          status: 405,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Parsear request body
-    const requestData: AvailabilityRequest = await req.json();
-
-    // Validar datos requeridos
-    const requiredFields = ['doctor_id', 'appointment_date', 'appointment_time', 'duration'];
-    const missingFields = requiredFields.filter(field => !requestData[field as keyof AvailabilityRequest]);
-
-    if (missingFields.length > 0) {
-      return new Response(
-        JSON.stringify({
-          available: false,
-          error: `Campos requeridos faltantes: ${missingFields.join(', ')}`,
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Verificar conflictos usando la función de la base de datos
-    const { data: hasConflict, error: conflictError } = await supabaseClient
-      .rpc('check_appointment_conflict', {
-        p_doctor_id: requestData.doctor_id,
-        p_appointment_date: requestData.appointment_date,
-        p_appointment_time: requestData.appointment_time,
-        p_duration: requestData.duration,
-        p_exclude_appointment_id: requestData.exclude_appointment_id || null,
       });
+    }
+
+    const { data: conflictResult, error: conflictError } = await supabaseClient.rpc('check_appointment_conflicts', {
+      p_doctor_id: payload.doctor_id,
+      p_appointment_date: payload.appointment_date,
+      p_appointment_time: payload.appointment_time,
+      p_duration: duration,
+      p_exclude_appointment_id: payload.exclude_appointment_id ?? null,
+    });
 
     if (conflictError) {
-      console.error('Error checking appointment conflict:', conflictError);
-      return new Response(
-        JSON.stringify({
-          available: false,
-          error: 'Error al verificar disponibilidad',
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      throw conflictError;
     }
 
-    // Si hay conflicto, obtener detalles de la cita conflictiva
-    let conflictDetails = undefined;
-    if (hasConflict) {
-      const appointmentStart = new Date(`${requestData.appointment_date}T${requestData.appointment_time}`);
-      const appointmentEnd = new Date(appointmentStart.getTime() + requestData.duration * 60000);
+    const conflictEntry = Array.isArray(conflictResult) ? conflictResult[0] : null;
 
-      const { data: conflictingAppointments, error: conflictDetailsError } = await supabaseClient
+    if (!conflictEntry || !conflictEntry.has_conflict) {
+      return jsonResponse(200, {
+        success: true,
+        available: true,
+      });
+    }
+
+    let conflictDetails: Record<string, unknown> | undefined;
+
+    if (conflictEntry.conflicting_appointments && conflictEntry.conflicting_appointments.length > 0) {
+      const { data: conflictingAppointments } = await supabaseClient
         .from('appointments')
         .select(`
           id,
           appointment_date,
           appointment_time,
           duration,
-          title,
-          patient:patients(full_name)
+          patient:patients(
+            id,
+            full_name
+          )
         `)
-        .eq('doctor_id', requestData.doctor_id)
-        .eq('appointment_date', requestData.appointment_date)
-        .not('status', 'in', '(cancelled_by_clinic,cancelled_by_patient,no_show)')
-        .neq('id', requestData.exclude_appointment_id || '');
+        .in('id', conflictEntry.conflicting_appointments)
+        .limit(1);
 
-      if (!conflictDetailsError && conflictingAppointments.length > 0) {
-        // Encontrar la cita que realmente causa conflicto
-        for (const apt of conflictingAppointments) {
-          const aptStart = new Date(`${apt.appointment_date}T${apt.appointment_time}`);
-          const aptEnd = new Date(aptStart.getTime() + apt.duration * 60000);
-
-          // Verificar si hay solapamiento
-          if (
-            (appointmentStart >= aptStart && appointmentStart < aptEnd) ||
-            (appointmentEnd > aptStart && appointmentEnd <= aptEnd) ||
-            (appointmentStart <= aptStart && appointmentEnd >= aptEnd)
-          ) {
-            conflictDetails = {
-              conflicting_appointment_id: apt.id,
-              conflicting_time_range: {
-                start: apt.appointment_time,
-                end: new Date(aptEnd).toTimeString().slice(0, 5),
-              },
-            };
-            break;
-          }
-        }
+      const conflicting = conflictingAppointments?.[0];
+      if (conflicting) {
+        conflictDetails = {
+          conflicting_appointment_id: conflicting.id,
+          conflicting_time_range: getTimeRange(conflicting.appointment_date, conflicting.appointment_time, conflicting.duration),
+          patient: conflicting.patient,
+        };
       }
     }
 
-    const response: AvailabilityResponse = {
-      available: !hasConflict,
+    return jsonResponse(200, {
+      success: true,
+      available: false,
       conflict_details: conflictDetails,
-    };
-
-    return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-
   } catch (error) {
-    console.error('Unexpected error in check-appointment-availability:', error);
-    
-    return new Response(
-      JSON.stringify({
-        available: false,
-        error: 'Error interno del servidor',
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    const status = (error as { status?: number }).status ?? 500;
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return jsonResponse(status, {
+      success: false,
+      available: false,
+      error: {
+        code: status === 401 ? 'unauthorized' : 'internal_error',
+        message,
+      },
+    });
   }
 });
