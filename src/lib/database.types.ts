@@ -981,6 +981,9 @@ export interface Database {
           updated_at?: string
         }
       }
+      prescription_layouts_unified: PrescriptionLayoutsUnified
+      patient_prescription_history: PatientPrescriptionHistory
+      prescription_layout_versions: PrescriptionLayoutVersions
     }
   }
 }
@@ -1051,6 +1054,147 @@ export interface ConsultationPrescription {
   consultation_id: string
   prescription_id: string
   created_at: string
+}
+
+// ===== SISTEMA UNIFICADO DE RECETAS =====
+
+export interface PrescriptionLayoutsUnified {
+  Row: {
+    id: string
+    doctor_id: string
+    name: string
+    description: string | null
+    orientation: 'portrait' | 'landscape'
+    page_size: 'A4' | 'Letter' | 'Legal'
+    template_elements: Json
+    canvas_settings: Json
+    print_settings: Json
+    is_horizontal: boolean
+    is_default: boolean
+    is_public: boolean
+    is_predefined: boolean
+    usage_count: number
+    last_used_at: string
+    category: string
+    created_at: string
+    updated_at: string
+  }
+  Insert: {
+    id?: string
+    doctor_id: string
+    name: string
+    description?: string | null
+    orientation?: 'portrait' | 'landscape'
+    page_size?: 'A4' | 'Letter' | 'Legal'
+    template_elements?: Json
+    canvas_settings?: Json
+    print_settings?: Json
+    is_default?: boolean
+    is_public?: boolean
+    is_predefined?: boolean
+    usage_count?: number
+    last_used_at?: string
+    category?: string
+    created_at?: string
+    updated_at?: string
+  }
+  Update: {
+    id?: string
+    doctor_id?: string
+    name?: string
+    description?: string | null
+    orientation?: 'portrait' | 'landscape'
+    page_size?: 'A4' | 'Letter' | 'Legal'
+    template_elements?: Json
+    canvas_settings?: Json
+    print_settings?: Json
+    is_default?: boolean
+    is_public?: boolean
+    is_predefined?: boolean
+    usage_count?: number
+    last_used_at?: string
+    category?: string
+    created_at?: string
+    updated_at?: string
+  }
+}
+
+export interface PatientPrescriptionHistory {
+  Row: {
+    id: string
+    patient_id: string
+    prescription_id: string
+    layout_id: string | null
+    layout_snapshot: Json | null
+    medications_snapshot: Json
+    visual_preview_url: string | null
+    prescribed_at: string
+    expires_at: string | null
+    status: 'active' | 'completed' | 'cancelled' | 'expired'
+    created_at: string
+    updated_at: string
+  }
+  Insert: {
+    id?: string
+    patient_id: string
+    prescription_id: string
+    layout_id?: string | null
+    layout_snapshot?: Json | null
+    medications_snapshot: Json
+    visual_preview_url?: string | null
+    prescribed_at?: string
+    expires_at?: string | null
+    status?: 'active' | 'completed' | 'cancelled' | 'expired'
+    created_at?: string
+    updated_at?: string
+  }
+  Update: {
+    id?: string
+    patient_id?: string
+    prescription_id?: string
+    layout_id?: string | null
+    layout_snapshot?: Json | null
+    medications_snapshot?: Json
+    visual_preview_url?: string | null
+    prescribed_at?: string
+    expires_at?: string | null
+    status?: 'active' | 'completed' | 'cancelled' | 'expired'
+    created_at?: string
+    updated_at?: string
+  }
+}
+
+export interface PrescriptionLayoutVersions {
+  Row: {
+    id: string
+    layout_id: string
+    version_number: number
+    changes_summary: string | null
+    template_elements: Json
+    canvas_settings: Json
+    created_by: string
+    created_at: string
+  }
+  Insert: {
+    id?: string
+    layout_id: string
+    version_number: number
+    changes_summary?: string | null
+    template_elements: Json
+    canvas_settings: Json
+    created_by: string
+    created_at?: string
+  }
+  Update: {
+    id?: string
+    layout_id?: string
+    version_number?: number
+    changes_summary?: string | null
+    template_elements?: Json
+    canvas_settings?: Json
+    created_by?: string
+    created_at?: string
+  }
 }
 
 export interface MedicationTemplate {
@@ -1395,7 +1539,7 @@ export interface TemplateStats {
 // =====================================================
 
 export type AppointmentStatus = 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show';
-export type AppointmentType = 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency';
+export type AppointmentType = 'consultation' | 'teleconsultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency';
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export interface EnhancedAppointment {
@@ -1723,3 +1867,51 @@ export interface NotificationWithSuggestedAction extends Notification {
     };
   };
 }
+
+// =====================================================
+// CONFIGURACIÓN DE PRÁCTICA MÉDICA
+// =====================================================
+
+export interface MedicalPracticeSettings {
+  id: string;
+  user_id: string;
+  clinic_id?: string;
+  weekday_start_time: string;
+  weekday_end_time: string;
+  saturday_start_time?: string;
+  saturday_end_time?: string;
+  sunday_enabled: boolean;
+  sunday_start_time?: string;
+  sunday_end_time?: string;
+  default_consultation_duration: number;
+  available_durations: number[];
+  enable_presential: boolean;
+  enable_teleconsultation: boolean;
+  enable_emergency: boolean;
+  languages: string[];
+  buffer_time_between_appointments: number;
+  max_advance_booking_days: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateMedicalPracticeSettings {
+  clinic_id?: string;
+  weekday_start_time?: string;
+  weekday_end_time?: string;
+  saturday_start_time?: string;
+  saturday_end_time?: string;
+  sunday_enabled?: boolean;
+  sunday_start_time?: string;
+  sunday_end_time?: string;
+  default_consultation_duration?: number;
+  available_durations?: number[];
+  enable_presential?: boolean;
+  enable_teleconsultation?: boolean;
+  enable_emergency?: boolean;
+  languages?: string[];
+  buffer_time_between_appointments?: number;
+  max_advance_booking_days?: number;
+}
+
+export interface UpdateMedicalPracticeSettings extends Partial<CreateMedicalPracticeSettings> {}

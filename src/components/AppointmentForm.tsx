@@ -2,6 +2,7 @@ import PatientSelector, { Patient } from '@/components/PatientSelector';
 import { useValidationNotifications } from '@/components/ValidationNotification';
 import { Button } from '@/components/ui/button';
 import { useActivityLog } from '@/hooks/shared/useActivityLog';
+import { useAppointmentSettings } from '@/hooks/useMedicalPracticeSettings';
 import {
   AppointmentType,
   CreateAppointmentPayload,
@@ -49,22 +50,38 @@ interface FormData {
   notes: string;
 }
 
-const appointmentTypes: Array<{ value: AppointmentType; label: string; description: string }> = [
-  { value: 'consultation', label: 'Consulta', description: 'Consulta médica general' },
-  { value: 'follow_up', label: 'Seguimiento', description: 'Cita de seguimiento' },
-  { value: 'check_up', label: 'Chequeo', description: 'Examen médico preventivo' },
-  { value: 'procedure', label: 'Procedimiento', description: 'Procedimiento médico' },
-  { value: 'emergency', label: 'Emergencia', description: 'Atención de emergencia' },
-];
+const getAppointmentTypes = (medicalSettings: any): Array<{ value: AppointmentType; label: string; description: string }> => {
+  const baseTypes = [
+    { value: 'consultation' as AppointmentType, label: 'Consulta', description: 'Consulta médica general', enabled: medicalSettings?.enable_presential },
+    { value: 'follow_up' as AppointmentType, label: 'Seguimiento', description: 'Cita de seguimiento', enabled: true },
+    { value: 'check_up' as AppointmentType, label: 'Chequeo', description: 'Examen médico preventivo', enabled: true },
+    { value: 'procedure' as AppointmentType, label: 'Procedimiento', description: 'Procedimiento médico', enabled: true },
+    { value: 'emergency' as AppointmentType, label: 'Emergencia', description: 'Atención de emergencia', enabled: medicalSettings?.enable_emergency },
+  ];
 
-const durationOptions = [
-  { value: 15, label: '15 minutos' },
-  { value: 30, label: '30 minutos' },
-  { value: 45, label: '45 minutos' },
-  { value: 60, label: '1 hora' },
-  { value: 90, label: '1.5 horas' },
-  { value: 120, label: '2 horas' },
-];
+  // Si teleconsultas están habilitadas, agregar tipo específico
+  if (medicalSettings?.enable_teleconsultation) {
+    baseTypes.splice(1, 0, {
+      value: 'teleconsultation' as AppointmentType,
+      label: 'Teleconsulta',
+      description: 'Consulta virtual',
+      enabled: true
+    });
+  }
+
+  return baseTypes.filter(type => type.enabled !== false);
+};
+
+const getDurationOptions = (medicalSettings: any) => {
+  const availableDurations = medicalSettings?.available_durations || [15, 30, 45, 60, 90, 120];
+
+  return availableDurations.map((duration: number) => ({
+    value: duration,
+    label: duration >= 60
+      ? `${Math.floor(duration / 60)}${duration % 60 === 0 ? '' : '.5'} hora${duration >= 120 ? 's' : ''}`
+      : `${duration} minutos`
+  }));
+};
 
 export default function AppointmentForm({
   isOpen,
@@ -78,6 +95,7 @@ export default function AppointmentForm({
   patients = [],
   preSelectedPatient,
 }: AppointmentFormProps) {
+  const { settings: medicalSettings, getAvailableTimeSlots } = useAppointmentSettings(doctorId, clinicId);
   const { messages, addError, addSuccess, addWarning, removeMessage } =
     useValidationNotifications();
   const [loading, setLoading] = useState(false);
@@ -90,7 +108,7 @@ export default function AppointmentForm({
     description: '',
     appointment_date: selectedDate || format(startOfToday(), 'yyyy-MM-dd'),
     appointment_time: selectedTime || '09:00',
-    duration: 30,
+    duration: medicalSettings?.default_consultation_duration || 30,
     type: 'consultation',
     location: '',
     notes: '',
@@ -303,7 +321,7 @@ export default function AppointmentForm({
           description: '',
           appointment_date: selectedDate || format(startOfToday(), 'yyyy-MM-dd'),
           appointment_time: selectedTime || '09:00',
-          duration: 30,
+          duration: medicalSettings?.default_consultation_duration || 30,
           type: 'consultation',
           location: '',
           notes: '',
@@ -321,14 +339,17 @@ export default function AppointmentForm({
   };
 
   const generateTimeOptions = () => {
-    const options = [];
-    for (let hour = 7; hour <= 20; hour++) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        options.push(time);
-      }
-    }
-    return options;
+    if (!formData.appointment_date) return [];
+
+    const appointmentDate = new Date(formData.appointment_date);
+    const timeSlots = getAvailableTimeSlots(appointmentDate);
+
+    return timeSlots.length > 0 ? timeSlots : [
+      // Fallback si no hay configuración
+      '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+      '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+      '16:00', '16:30', '17:00', '17:30'
+    ];
   };
 
   if (!isOpen) return null;
@@ -410,7 +431,7 @@ export default function AppointmentForm({
               className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
               required
             >
-              {appointmentTypes.map(type => (
+              {getAppointmentTypes(medicalSettings).map(type => (
                 <option key={type.value} value={type.value}>
                   {type.label} - {type.description}
                 </option>
@@ -476,7 +497,7 @@ export default function AppointmentForm({
                 onChange={e => handleInputChange('duration', Number(e.target.value))}
                 className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
               >
-                {durationOptions.map(option => (
+                {getDurationOptions(medicalSettings).map(option => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

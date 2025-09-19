@@ -70,6 +70,7 @@ const statusLabels = {
 
 const typeLabels = {
   consultation: 'Consulta',
+  teleconsultation: 'Teleconsulta',
   follow_up: 'Seguimiento',
   check_up: 'Chequeo',
   procedure: 'Procedimiento',
@@ -119,7 +120,7 @@ export default function AppointmentsCalendar({
     if (user?.id && profile?.clinic_id) {
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
-      
+
       loadAppointments({
         doctor_id: user.id,
         clinic_id: profile.clinic_id,
@@ -127,7 +128,7 @@ export default function AppointmentsCalendar({
         date_to: format(monthEnd, 'yyyy-MM-dd'),
       });
     }
-  }, [currentDate, user?.id, profile?.clinic_id, loadAppointments]);
+  }, [currentDate, user?.id, profile?.clinic_id]);
 
   const handleCreateAppointment = async (data: CreateAppointmentPayload) => {
     try {
@@ -212,7 +213,7 @@ export default function AppointmentsCalendar({
     end: calendarEnd
   });
 
-  const getAppointmentsForDay = (date: Date): Appointment[] => {
+  const getAppointmentsForDay = (date: Date): EnhancedAppointment[] => {
     return appointments.filter(apt => isSameDay(new Date(apt.appointment_date), date));
   };
 

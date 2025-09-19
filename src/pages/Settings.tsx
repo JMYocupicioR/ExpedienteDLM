@@ -10,6 +10,7 @@ import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/useTheme';
 import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
+import { useMedicalPracticeSettings } from '@/hooks/useMedicalPracticeSettings';
 
 interface SettingSection {
   id: string;
@@ -160,6 +161,7 @@ export default function Settings() {
   const { user, profile } = useAuth();
   const { theme, setTheme, fontScale, setFontScale, accentPrimary, accentSecondary, setAccentColors, contrastMode, setContrastMode } = useTheme();
   const { uploadClinicLogo } = useProfilePhotos();
+  const { settings: medicalSettings, updateSettings: updateMedicalSettings, loading: medicalLoading } = useMedicalPracticeSettings(user?.id);
   const [activeSection, setActiveSection] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [notification, setNotification] = useState<NotificationState>({ type: 'info', message: '', show: false });
@@ -850,101 +852,225 @@ export default function Settings() {
                 <Activity className="h-5 w-5 mr-2 text-cyan-400" />
                 Configuración de Práctica
               </h4>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Horario de Consultas
-                    </label>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-300">Lunes a Viernes</span>
-                        <div className="flex space-x-2">
-                          <input
-                            type="time"
-                            defaultValue="09:00"
-                            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                          />
-                          <span className="text-gray-400">-</span>
-                          <input
-                            type="time"
-                            defaultValue="18:00"
-                            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                          />
+
+              {medicalLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-cyan-400 mr-2" />
+                  <span className="text-gray-300">Cargando configuración...</span>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Horario de Consultas
+                      </label>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">Lunes a Viernes</span>
+                          <div className="flex space-x-2">
+                            <input
+                              type="time"
+                              value={medicalSettings?.weekday_start_time?.slice(0, 5) || '09:00'}
+                              onChange={(e) => updateMedicalSettings({ weekday_start_time: e.target.value + ':00' })}
+                              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                            />
+                            <span className="text-gray-400">-</span>
+                            <input
+                              type="time"
+                              value={medicalSettings?.weekday_end_time?.slice(0, 5) || '18:00'}
+                              onChange={(e) => updateMedicalSettings({ weekday_end_time: e.target.value + ':00' })}
+                              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">Sábados</span>
+                          <div className="flex space-x-2">
+                            <input
+                              type="time"
+                              value={medicalSettings?.saturday_start_time?.slice(0, 5) || '09:00'}
+                              onChange={(e) => updateMedicalSettings({ saturday_start_time: e.target.value + ':00' })}
+                              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                            />
+                            <span className="text-gray-400">-</span>
+                            <input
+                              type="time"
+                              value={medicalSettings?.saturday_end_time?.slice(0, 5) || '14:00'}
+                              onChange={(e) => updateMedicalSettings({ saturday_end_time: e.target.value + ':00' })}
+                              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">Domingos</span>
+                          <div className="flex space-x-2">
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={medicalSettings?.sunday_enabled || false}
+                                onChange={(e) => updateMedicalSettings({
+                                  sunday_enabled: e.target.checked,
+                                  sunday_start_time: e.target.checked ? '09:00:00' : null,
+                                  sunday_end_time: e.target.checked ? '14:00:00' : null
+                                })}
+                                className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+                              />
+                              <span className="ml-2 text-gray-300 text-sm">Habilitar</span>
+                            </label>
+                            {medicalSettings?.sunday_enabled && (
+                              <>
+                                <input
+                                  type="time"
+                                  value={medicalSettings?.sunday_start_time?.slice(0, 5) || '09:00'}
+                                  onChange={(e) => updateMedicalSettings({ sunday_start_time: e.target.value + ':00' })}
+                                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                />
+                                <span className="text-gray-400">-</span>
+                                <input
+                                  type="time"
+                                  value={medicalSettings?.sunday_end_time?.slice(0, 5) || '14:00'}
+                                  onChange={(e) => updateMedicalSettings({ sunday_end_time: e.target.value + ':00' })}
+                                  className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                />
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-300">Sábados</span>
-                        <div className="flex space-x-2">
-                          <input
-                            type="time"
-                            defaultValue="09:00"
-                            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                          />
-                          <span className="text-gray-400">-</span>
-                          <input
-                            type="time"
-                            defaultValue="14:00"
-                            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                          />
-                        </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Duración de Consulta (minutos)
+                      </label>
+                      <select
+                        className="form-input"
+                        value={medicalSettings?.default_consultation_duration || 30}
+                        onChange={(e) => updateMedicalSettings({ default_consultation_duration: Number(e.target.value) })}
+                      >
+                        <option value="15">15 minutos</option>
+                        <option value="20">20 minutos</option>
+                        <option value="30">30 minutos</option>
+                        <option value="45">45 minutos</option>
+                        <option value="60">60 minutos</option>
+                        <option value="90">90 minutos</option>
+                      </select>
+
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Tiempo de buffer entre citas (minutos)
+                        </label>
+                        <select
+                          className="form-input"
+                          value={medicalSettings?.buffer_time_between_appointments || 0}
+                          onChange={(e) => updateMedicalSettings({ buffer_time_between_appointments: Number(e.target.value) })}
+                        >
+                          <option value="0">Sin buffer</option>
+                          <option value="5">5 minutos</option>
+                          <option value="10">10 minutos</option>
+                          <option value="15">15 minutos</option>
+                        </select>
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Duración de Consulta (minutos)
-                    </label>
-                    <select className="form-input">
-                      <option value="15">15 minutos</option>
-                      <option value="20">20 minutos</option>
-                      <option value="30">30 minutos</option>
-                      <option value="45">45 minutos</option>
-                      <option value="60">60 minutos</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Tipo de Consultas
-                    </label>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500" />
-                        <span className="ml-2 text-gray-300">Consultas presenciales</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Tipo de Consultas
                       </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500" />
-                        <span className="ml-2 text-gray-300">Teleconsultas</span>
+                      <div className="space-y-3">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={medicalSettings?.enable_presential || true}
+                            onChange={(e) => updateMedicalSettings({ enable_presential: e.target.checked })}
+                            className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <span className="ml-2 text-gray-300">Consultas presenciales</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={medicalSettings?.enable_teleconsultation || false}
+                            onChange={(e) => updateMedicalSettings({ enable_teleconsultation: e.target.checked })}
+                            className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <span className="ml-2 text-gray-300">Teleconsultas</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={medicalSettings?.enable_emergency || false}
+                            onChange={(e) => updateMedicalSettings({ enable_emergency: e.target.checked })}
+                            className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <span className="ml-2 text-gray-300">Consultas de urgencia</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Idiomas de Atención
                       </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500" />
-                        <span className="ml-2 text-gray-300">Consultas de urgencia</span>
-                      </label>
+                      <div className="space-y-3">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={medicalSettings?.languages?.includes('es') || true}
+                            onChange={(e) => {
+                              const currentLangs = medicalSettings?.languages || ['es'];
+                              const newLangs = e.target.checked
+                                ? [...currentLangs.filter(l => l !== 'es'), 'es']
+                                : currentLangs.filter(l => l !== 'es');
+                              updateMedicalSettings({ languages: newLangs });
+                            }}
+                            className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <span className="ml-2 text-gray-300">Español</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={medicalSettings?.languages?.includes('en') || false}
+                            onChange={(e) => {
+                              const currentLangs = medicalSettings?.languages || ['es'];
+                              const newLangs = e.target.checked
+                                ? [...currentLangs.filter(l => l !== 'en'), 'en']
+                                : currentLangs.filter(l => l !== 'en');
+                              updateMedicalSettings({ languages: newLangs });
+                            }}
+                            className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <span className="ml-2 text-gray-300">Inglés</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={medicalSettings?.languages?.includes('fr') || false}
+                            onChange={(e) => {
+                              const currentLangs = medicalSettings?.languages || ['es'];
+                              const newLangs = e.target.checked
+                                ? [...currentLangs.filter(l => l !== 'fr'), 'fr']
+                                : currentLangs.filter(l => l !== 'fr');
+                              updateMedicalSettings({ languages: newLangs });
+                            }}
+                            className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <span className="ml-2 text-gray-300">Francés</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Idiomas de Atención
-                    </label>
-                    <div className="space-y-3">
-                      <label className="flex items-center">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500" />
-                        <span className="ml-2 text-gray-300">Español</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500" />
-                        <span className="ml-2 text-gray-300">Inglés</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input type="checkbox" className="rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500" />
-                        <span className="ml-2 text-gray-300">Francés</span>
-                      </label>
+
+                  {/* Indicador de estado guardado */}
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+                    <div className="flex items-center text-sm text-gray-400">
+                      <CheckCircle className="h-4 w-4 mr-2 text-green-400" />
+                      Los cambios se guardan automáticamente
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Prescription Settings */}

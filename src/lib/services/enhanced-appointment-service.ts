@@ -22,6 +22,17 @@ class EnhancedAppointmentService {
    */
   async createAppointment(data: CreateAppointmentPayload): Promise<EnhancedAppointment> {
     try {
+      // Validaciones básicas en el frontend
+      if (!data.doctor_id || !data.patient_id || !data.appointment_date || !data.appointment_time) {
+        throw new Error('Faltan datos obligatorios para crear la cita');
+      }
+
+      // Validar que la fecha no sea en el pasado
+      const appointmentDateTime = new Date(`${data.appointment_date}T${data.appointment_time}`);
+      if (appointmentDateTime < new Date()) {
+        throw new Error('No se pueden programar citas en el pasado');
+      }
+
       const requestPayload: ScheduleAppointmentRequest = {
         doctor_id: data.doctor_id,
         patient_id: data.patient_id,
@@ -44,12 +55,25 @@ class EnhancedAppointmentService {
       );
 
       if (error) {
-        // Error log removed for security;
-        throw new Error(`Error en la función de agendamiento: ${error.message}`);
+        // Manejar errores específicos de la Edge Function
+        if (error.message?.includes('unauthorized')) {
+          throw new Error('No tienes permisos para crear esta cita');
+        }
+        if (error.message?.includes('conflict')) {
+          throw new Error('El horario seleccionado ya está ocupado');
+        }
+        throw new Error(`Error en el servicio de citas: ${error.message}`);
       }
 
-      if (!response.success) {
-        throw new Error(response.error?.message || 'Error desconocido al crear la cita');
+      if (!response?.success) {
+        // Manejar errores específicos del response
+        if (response?.error?.code === 'conflict') {
+          throw new Error('El horario seleccionado ya está ocupado. Por favor, elige otro horario.');
+        }
+        if (response?.error?.code === 'validation_failed') {
+          throw new Error('Los datos de la cita no son válidos');
+        }
+        throw new Error(response?.error?.message || 'Error desconocido al crear la cita');
       }
 
       if (!response.appointment) {
@@ -59,7 +83,14 @@ class EnhancedAppointmentService {
       return response.appointment;
     } catch (error) {
       // Error log removed for security;
-      throw error;
+
+      // Re-lanzar errores conocidos
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      // Manejar errores desconocidos
+      throw new Error('Error inesperado al crear la cita');
     }
   }
 
@@ -74,6 +105,35 @@ class EnhancedAppointmentService {
     excludeAppointmentId?: string
   ): Promise<{ available: boolean; conflictDetails?: any }> {
     try {
+      // Validaciones básicas
+      if (!doctorId || !appointmentDate || !appointmentTime) {
+        throw new Error('Faltan parámetros obligatorios para verificar disponibilidad');
+      }
+
+      // Validar formato de fecha y hora
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const timeRegex = /^\d{2}:\d{2}$/;
+
+      if (!dateRegex.test(appointmentDate)) {
+        throw new Error('Formato de fecha inválido. Use YYYY-MM-DD');
+      }
+
+      if (!timeRegex.test(appointmentTime)) {
+        throw new Error('Formato de hora inválido. Use HH:MM');
+      }
+
+      // Validar que la fecha no sea en el pasado
+      const appointmentDateTime = new Date(`${appointmentDate}T${appointmentTime}`);
+      if (appointmentDateTime < new Date()) {
+        return {
+          available: false,
+          conflictDetails: {
+            reason: 'past_date',
+            message: 'No se pueden programar citas en el pasado'
+          }
+        };
+      }
+
       const requestPayload: AppointmentAvailabilityRequest = {
         doctor_id: doctorId,
         appointment_date: appointmentDate,
@@ -90,17 +150,31 @@ class EnhancedAppointmentService {
       );
 
       if (error) {
-        // Error log removed for security;
+        // Manejar errores específicos de la Edge Function
+        if (error.message?.includes('unauthorized')) {
+          throw new Error('No tienes permisos para verificar esta disponibilidad');
+        }
         throw new Error(`Error verificando disponibilidad: ${error.message}`);
       }
 
+      if (!response) {
+        throw new Error('No se recibió respuesta del servicio de disponibilidad');
+      }
+
       return {
-        available: response.available,
+        available: response.available || false,
         conflictDetails: response.conflict_details,
       };
     } catch (error) {
       // Error log removed for security;
-      throw error;
+
+      // Re-lanzar errores conocidos
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      // Fallback para errores desconocidos
+      throw new Error('Error inesperado al verificar disponibilidad');
     }
   }
 
