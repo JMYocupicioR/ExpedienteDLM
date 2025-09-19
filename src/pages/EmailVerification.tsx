@@ -38,16 +38,8 @@ const EmailVerification: React.FC<EmailVerificationProps> = () => {
         if (event === 'SIGNED_IN' && session) {
           setVerificationStatus('verified');
           setTimeout(() => {
-            // Redirigir al cuestionario con datos del usuario
-            navigate('/signup-questionnaire', {
-              state: {
-                email: session.user.email,
-                fromRegistration: true,
-                emailVerified: true,
-                user: session.user
-              },
-              replace: true
-            });
+            // Redirigir al dashboard - el usuario ya está autenticado
+            navigate('/dashboard', { replace: true });
           }, 2000);
         }
       });
@@ -139,7 +131,7 @@ const EmailVerification: React.FC<EmailVerificationProps> = () => {
       case 'verified':
         return {
           title: '¡Verificación exitosa!',
-          description: 'Tu email ha sido verificado. Serás redirigido al formulario de registro en unos momentos.'
+          description: 'Tu email ha sido verificado. Serás redirigido al dashboard en unos momentos.'
         };
       case 'expired':
         return {

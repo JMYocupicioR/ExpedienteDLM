@@ -65,9 +65,12 @@ export function useEnhancedAppointments(
   const [error, setError] = useState<string | null>(null);
   const [currentFilters, setCurrentFilters] = useState<AppointmentFilters | undefined>(initialFilters);
 
-  // Load appointments
+  // Load appointments with stable reference
   const loadAppointments = useCallback(async (filters?: AppointmentFilters) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -85,11 +88,15 @@ export function useEnhancedAppointments(
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar las citas';
       setError(errorMessage);
-      // Error log removed for security;
+      
+      // Fallback: Set empty appointments array to prevent infinite loading
+      setAppointments([]);
+      
+      console.warn('Error loading appointments, using fallback:', errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [user?.id, currentFilters, initialFilters]);
+  }, [user?.id]); // Removed problematic dependencies
 
   // Refresh appointments with current filters
   const refreshAppointments = useCallback(() => {
@@ -250,12 +257,12 @@ export function useEnhancedAppointments(
     return stats;
   }, [appointments]);
 
-  // Auto-load on mount
+  // Auto-load on mount with stable dependencies
   useEffect(() => {
     if (autoLoad && user) {
       loadAppointments(initialFilters);
     }
-  }, [autoLoad, user, initialFilters, loadAppointments]);
+  }, [autoLoad, user?.id]); // Stable dependencies only
 
   return {
     appointments,

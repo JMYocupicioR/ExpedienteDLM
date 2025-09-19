@@ -95,7 +95,7 @@ client_id = ""
 secret = ""
 
 [auth.external.facebook]
-enabled = true
+enabled = false
 client_id = "env(FACEBOOK_CLIENT_ID)"
 secret = "env(FACEBOOK_CLIENT_SECRET)"
 redirect_uri = "https://expediente-dlm.com/auth/callback"

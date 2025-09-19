@@ -210,6 +210,7 @@ export default function AppointmentForm({
 
     // Auto-generar título si está vacío
     if (field === 'type' && !formData.title.trim()) {
+      const appointmentTypes = getAppointmentTypes(medicalSettings);
       const selectedType = appointmentTypes.find(t => t.value === value);
       if (selectedType) {
         setFormData(prev => ({

@@ -11,7 +11,7 @@ export default function OAuthButtons({ mode, onError }: OAuthButtonsProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleOAuthLogin = async (provider: 'google' | 'facebook') => {
+  const handleOAuthLogin = async (provider: 'google' /* | 'facebook' */) => {
     try {
       setLoading(provider);
       setError(null);
@@ -59,12 +59,12 @@ export default function OAuthButtons({ mode, onError }: OAuthButtonsProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="flex justify-center">
         <button
           type="button"
           onClick={() => handleOAuthLogin('google')}
           disabled={loading !== null}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full max-w-xs flex items-center justify-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading === 'google' ? (
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -92,12 +92,16 @@ export default function OAuthButtons({ mode, onError }: OAuthButtonsProps) {
             </>
           )}
         </button>
+      </div>
 
+      {/* Facebook OAuth - Temporalmente deshabilitado */}
+      {/* 
+      <div className="flex justify-center">
         <button
           type="button"
           onClick={() => handleOAuthLogin('facebook')}
           disabled={loading !== null}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full max-w-xs flex items-center justify-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading === 'facebook' ? (
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -111,6 +115,7 @@ export default function OAuthButtons({ mode, onError }: OAuthButtonsProps) {
           )}
         </button>
       </div>
+      */}
 
       {error && (
         <div className="mt-2 p-3 bg-red-900/20 border border-red-500/50 rounded-md">

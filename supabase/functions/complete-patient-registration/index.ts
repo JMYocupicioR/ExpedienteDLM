@@ -9,19 +9,25 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 
 type Json = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
 
-const corsHeaders: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
+const buildCorsHeaders = (req: Request): Record<string, string> => {
+  const origin = req.headers.get('origin') || '*';
+  const reqHeaders = req.headers.get('access-control-request-headers') || 'authorization, x-client-info, apikey, content-type';
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Headers': reqHeaders,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true',
+    'Vary': 'Origin',
+    'Content-Type': 'application/json',
+  };
 };
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { status: 200, headers: corsHeaders });
+    return new Response('ok', { status: 200, headers: buildCorsHeaders(req) });
   }
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -33,7 +39,7 @@ serve(async (req) => {
     const url = Deno.env.get('SUPABASE_URL');
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!url || !key) {
-      return new Response(JSON.stringify({ error: 'Missing service configuration' }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Missing service configuration' }), { status: 500, headers: buildCorsHeaders(req) });
     }
     const supabase = createClient(url, key, { auth: { persistSession: false } });
 
@@ -44,11 +50,11 @@ serve(async (req) => {
       .eq('token', token)
       .single();
     if (tokenErr || !tokenRow) {
-      return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 400, headers: buildCorsHeaders(req) });
     }
     const expired = new Date(tokenRow.expires_at).getTime() < Date.now();
     if (tokenRow.status !== 'pending' || expired) {
-      return new Response(JSON.stringify({ error: 'Token expirado o usado' }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Token expirado o usado' }), { status: 400, headers: buildCorsHeaders(req) });
     }
 
     // 2) Transacción usando RPC (Postgres) porque supabase-js no tiene transacciones multi-requests
@@ -78,7 +84,7 @@ serve(async (req) => {
         })
         .eq('id', tokenRow.assigned_patient_id);
       if (updPatientErr) {
-        return new Response(JSON.stringify({ error: 'No se pudo actualizar paciente' }), { status: 400, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: 'No se pudo actualizar paciente' }), { status: 400, headers: buildCorsHeaders(req) });
       }
       patientId = tokenRow.assigned_patient_id as string;
     } else {
@@ -100,7 +106,7 @@ serve(async (req) => {
         .select('id')
         .single();
       if (patientErr || !patient) {
-        return new Response(JSON.stringify({ error: 'No se pudo crear paciente' }), { status: 400, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: 'No se pudo crear paciente' }), { status: 400, headers: buildCorsHeaders(req) });
       }
       patientId = patient.id as string;
     }
@@ -123,7 +129,7 @@ serve(async (req) => {
       if (phErr) {
         // Limpieza básica
         await supabase.from('patients').delete().eq('id', patientId);
-        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes patológicos' }), { status: 400, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes patológicos' }), { status: 400, headers: buildCorsHeaders(req) });
       }
     }
 
@@ -147,7 +153,7 @@ serve(async (req) => {
         if (!tokenRow.assigned_patient_id) {
           await supabase.from('patients').delete().eq('id', patientId);
         }
-        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes no patológicos' }), { status: 400, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes no patológicos' }), { status: 400, headers: buildCorsHeaders(req) });
       }
     }
 
@@ -170,7 +176,7 @@ serve(async (req) => {
           if (!tokenRow.assigned_patient_id) {
             await supabase.from('patients').delete().eq('id', patientId);
           }
-          return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes heredofamiliares' }), { status: 400, headers: corsHeaders });
+          return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes heredofamiliares' }), { status: 400, headers: buildCorsHeaders(req) });
         }
       }
     }
@@ -198,7 +204,7 @@ serve(async (req) => {
           if (!tokenRow.assigned_patient_id) {
             await supabase.from('patients').delete().eq('id', patientId);
           }
-          return new Response(JSON.stringify({ error: 'No se pudieron guardar las escalas' }), { status: 400, headers: corsHeaders });
+          return new Response(JSON.stringify({ error: 'No se pudieron guardar las escalas' }), { status: 400, headers: buildCorsHeaders(req) });
         }
       }
     }
@@ -213,10 +219,10 @@ serve(async (req) => {
       console.warn('No se pudo marcar token como completado:', updErr.message);
     }
 
-    return new Response(JSON.stringify({ success: true, patient_id: patientId }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ success: true, patient_id: patientId }), { status: 200, headers: buildCorsHeaders(req) });
   } catch (e: any) {
     console.error('Unhandled error', e);
-    return new Response(JSON.stringify({ error: e?.message || 'Internal error' }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: e?.message || 'Internal error' }), { status: 500, headers: buildCorsHeaders(req) });
   }
 });
 

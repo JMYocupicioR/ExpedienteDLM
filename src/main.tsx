@@ -6,6 +6,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 
+// Simple console filter to reduce log spam
+import './utils/simpleConsoleFilter';
+
 const queryClient = new QueryClient();
 
 createRoot(document.getElementById('root')!).render(

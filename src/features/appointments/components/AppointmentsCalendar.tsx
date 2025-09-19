@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -14,7 +14,8 @@ import {
   FileText,
   AlertCircle,
   CheckCircle,
-  Eye
+  Eye,
+  Plus as PlusIcon
 } from 'lucide-react';
 import { 
   format, 
@@ -39,9 +40,8 @@ import {
   EnhancedAppointment, 
   CreateAppointmentPayload, 
   UpdateAppointmentPayload,
-  AppointmentStatus,
-  enhancedAppointmentService 
-} from '@/lib/services/enhanced-appointment-service';
+  AppointmentStatus
+} from '@/lib/database.types';
 import useEnhancedAppointments from '@/features/appointments/hooks/useEnhancedAppointments';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 
@@ -92,6 +92,10 @@ export default function AppointmentsCalendar({
   const [editingAppointment, setEditingAppointment] = useState<EnhancedAppointment | null>(null);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   
+  // Anti-loop protection
+  const loadCountRef = useRef(0);
+  const lastLoadTimeRef = useRef(0);
+  
   // Usar el hook personalizado para manejar citas
   const {
     appointments,
@@ -115,18 +119,102 @@ export default function AppointmentsCalendar({
   const todayAppointments = getAppointmentsByDate(format(selectedDate, 'yyyy-MM-dd'))
     .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time));
 
-  // Recargar cuando cambia el mes
+  // Loading state component
+  const LoadingState = () => (
+    <div className="flex items-center justify-center p-8">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <span className="ml-3 text-gray-600">Cargando agenda...</span>
+    </div>
+  );
+
+  // Empty state component
+  const EmptyState = () => (
+    <div className="text-center py-12">
+      <div className="mx-auto h-12 w-12 text-gray-400">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <h3 className="mt-2 text-sm font-medium text-gray-900">No hay citas programadas</h3>
+      <p className="mt-1 text-sm text-gray-500">Comienza creando tu primera cita médica.</p>
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={() => setShowAppointmentForm(true)}
+          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          <PlusIcon className="h-5 w-5 mr-2" />
+          Nueva Cita
+        </button>
+      </div>
+    </div>
+  );
+
+  // Error state component
+  const ErrorState = () => (
+    <div className="text-center py-12">
+      <div className="mx-auto h-12 w-12 text-red-400">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+      </div>
+      <h3 className="mt-2 text-sm font-medium text-gray-900">Error al cargar la agenda</h3>
+      <p className="mt-1 text-sm text-gray-500">{error}</p>
+      <div className="mt-6 space-x-3">
+        <button
+          type="button"
+          onClick={() => loadAppointments()}
+          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+        >
+          Reintentar
+        </button>
+        <button
+          type="button"
+          onClick={() => window.open('/diagnostico-citas', '_blank')}
+          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          <AlertCircle className="h-4 w-4 mr-2" />
+          Diagnóstico del Sistema
+        </button>
+      </div>
+      <div className="mt-4 text-xs text-gray-400">
+        Si el problema persiste, use el diagnóstico para identificar la causa
+      </div>
+    </div>
+  );
+
+  // Recargar cuando cambia el mes - con protección anti-bucle
   useEffect(() => {
     if (user?.id && profile?.clinic_id) {
+      const now = Date.now();
+      
+      // Prevenir bucles infinitos
+      if (now - lastLoadTimeRef.current < 1000) {
+        loadCountRef.current++;
+        if (loadCountRef.current > 3) {
+          console.error('Infinite loop detected in appointments loading, stopping');
+          return;
+        }
+      } else {
+        loadCountRef.current = 0;
+      }
+      
+      lastLoadTimeRef.current = now;
+
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
 
-      loadAppointments({
-        doctor_id: user.id,
-        clinic_id: profile.clinic_id,
-        date_from: format(monthStart, 'yyyy-MM-dd'),
-        date_to: format(monthEnd, 'yyyy-MM-dd'),
-      });
+      // Debounce para evitar múltiples llamadas
+      const timeoutId = setTimeout(() => {
+        loadAppointments({
+          doctor_id: user.id,
+          clinic_id: profile.clinic_id,
+          date_from: format(monthStart, 'yyyy-MM-dd'),
+          date_to: format(monthEnd, 'yyyy-MM-dd'),
+        });
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
     }
   }, [currentDate, user?.id, profile?.clinic_id]);
 
@@ -186,10 +274,34 @@ export default function AppointmentsCalendar({
   };
 
   const handleNewAppointment = (date?: Date, time?: string) => {
+    console.log('🔧 Nueva Cita clicked:', {
+      user: user?.id,
+      profile: profile?.clinic_id,
+      showAppointmentForm,
+      date: date || selectedDate,
+      time: time || ''
+    });
+
+    if (!user?.id) {
+      addError('Error', 'Usuario no autenticado. Por favor, inicie sesión nuevamente.');
+      return;
+    }
+
+    if (!profile?.clinic_id) {
+      addError('Error', 'Perfil incompleto. Por favor, complete su perfil y asocie una clínica.');
+      return;
+    }
+
     setEditingAppointment(null);
     setSelectedDate(date || selectedDate);
     setSelectedTimeSlot(time || '');
     setShowAppointmentForm(true);
+    
+    console.log('✅ AppointmentForm should show:', {
+      showAppointmentForm: true,
+      hasUser: !!user?.id,
+      hasClinic: !!profile?.clinic_id
+    });
   };
 
   const handleDateClick = (date: Date) => {
@@ -232,13 +344,33 @@ export default function AppointmentsCalendar({
     return '';
   };
 
+  // Handle different states
   if (loading) {
     return (
-      <div className="min-h-[600px] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400"></div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <div className="container mx-auto px-4 py-8">
+          <div className="bg-white rounded-lg shadow-lg">
+            <LoadingState />
+          </div>
+        </div>
       </div>
     );
   }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <div className="container mx-auto px-4 py-8">
+          <div className="bg-white rounded-lg shadow-lg">
+            <ErrorState />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't show EmptyState immediately - show calendar even with no appointments
+  // EmptyState will be shown in the sidebar when no appointments for selected date
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
@@ -264,6 +396,14 @@ export default function AppointmentsCalendar({
                   <p className="text-gray-400 text-sm mt-1">
                     {format(currentDate, "MMMM 'de' yyyy", { locale: es })}
                   </p>
+                  {/* Debug Info */}
+                  {import.meta.env.DEV && (
+                    <div className="text-xs text-yellow-400 mt-1">
+                      User: {user?.id ? '✅' : '❌'} | 
+                      Clinic: {profile?.clinic_id ? '✅' : '❌'} | 
+                      Modal: {showAppointmentForm ? '✅' : '❌'}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
@@ -290,7 +430,10 @@ export default function AppointmentsCalendar({
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                   <Button
-                    onClick={() => handleNewAppointment()}
+                    onClick={() => {
+                      console.log('🔧 Button clicked - Nueva Cita');
+                      handleNewAppointment();
+                    }}
                     className="ml-4"
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -539,21 +682,56 @@ export default function AppointmentsCalendar({
       </div>
 
       {/* Modal de Formulario de Cita */}
-      {showAppointmentForm && user?.id && profile?.clinic_id && (
-        <AppointmentForm
-          isOpen={showAppointmentForm}
-          onClose={() => {
-            setShowAppointmentForm(false);
-            setEditingAppointment(null);
-            setSelectedTimeSlot('');
-          }}
-          onSubmit={editingAppointment ? handleUpdateAppointment : handleCreateAppointment}
-          appointment={editingAppointment}
-          doctorId={user.id}
-          clinicId={profile.clinic_id}
-          selectedDate={format(selectedDate, 'yyyy-MM-dd')}
-          selectedTime={selectedTimeSlot}
-        />
+      {showAppointmentForm && (
+        <>
+          {user?.id && profile?.clinic_id ? (
+            <AppointmentForm
+              isOpen={showAppointmentForm}
+              onClose={() => {
+                console.log('🔧 Closing AppointmentForm');
+                setShowAppointmentForm(false);
+                setEditingAppointment(null);
+                setSelectedTimeSlot('');
+              }}
+              onSubmit={editingAppointment ? handleUpdateAppointment : handleCreateAppointment}
+              appointment={editingAppointment}
+              doctorId={user.id}
+              clinicId={profile.clinic_id}
+              selectedDate={format(selectedDate, 'yyyy-MM-dd')}
+              selectedTime={selectedTimeSlot}
+            />
+          ) : (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  No se puede abrir el formulario
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  {!user?.id ? 'Usuario no autenticado.' : 'Perfil incompleto o sin clínica asociada.'}
+                </p>
+                <div className="text-xs text-gray-500 mb-4 font-mono">
+                  Debug: user={user?.id || 'null'}, clinic={profile?.clinic_id || 'null'}
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowAppointmentForm(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                  >
+                    Cerrar
+                  </button>
+                  {!user?.id && (
+                    <button
+                      onClick={() => window.location.href = '/auth'}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                    >
+                      Iniciar Sesión
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

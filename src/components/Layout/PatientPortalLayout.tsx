@@ -15,9 +15,10 @@ const PatientPortalLayout: React.FC = () => {
   const handleSignOut = async () => {
     try {
       await signOut();
-      navigate('/auth');
+      // La navegación se maneja automáticamente por AuthNavigationHandler
     } catch (error) {
       // Error log removed for security;
+      console.error('Error al cerrar sesión:', error);
     }
   };
 

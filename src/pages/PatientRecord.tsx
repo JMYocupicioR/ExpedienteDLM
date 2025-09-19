@@ -4,7 +4,7 @@ import {
   User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
   ArrowLeft, Clock, Heart, Brain, Dna, Trash2, Eye, ChevronDown, ChevronUp,
   Search, Filter, RefreshCw, FileDown, Printer, FileText as FileTextIcon,
-  Phone, Mail, MapPin, CheckCircle
+  Phone, Mail, MapPin, CheckCircle, Pill
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getPatientById, updatePatient } from '@/features/patients/services/patientService';
@@ -19,6 +19,7 @@ import AppointmentQuickScheduler from '@/components/AppointmentQuickScheduler';
 import StudiesSection from '@/components/StudiesSection';
 import AuditTrailViewer from '@/components/AuditTrailViewer';
 import { appointmentService, Appointment } from '@/lib/services/appointment-service';
+import PatientPrescriptionHistory from '@/components/PatientPrescriptionHistory';
 import type { Database } from '@/lib/database.types';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
@@ -795,6 +796,19 @@ export default function PatientRecord() {
                 </span>
               </button>
             </li>
+            <li>
+              <button 
+                onClick={() => setSeccionActiva('recetas')}
+                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
+                  seccionActiva === 'recetas' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                <Pill className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span className="text-left leading-snug">Historial de Recetas</span>
+              </button>
+            </li>
             
             <li>
               <button 
@@ -1442,6 +1456,18 @@ export default function PatientRecord() {
                   <p className="text-xs text-gray-400 mt-2">* Campos obligatorios</p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {seccionActiva === 'recetas' && patient && (
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+              <PatientPrescriptionHistory
+                patientId={patient.id}
+                patientName={patient.full_name}
+                className="text-white"
+                showActions={true}
+                compact={false}
+              />
             </div>
           )}
 

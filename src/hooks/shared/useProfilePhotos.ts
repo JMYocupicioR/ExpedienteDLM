@@ -261,19 +261,29 @@ export const useProfilePhotos = () => {
     if (!targetUserId) return null;
 
     try {
+      // Verificar si el bucket existe primero
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      if (bucketsError || !buckets?.some(bucket => bucket.name === 'prescription-icons')) {
+        // Si el bucket no existe, no intentar verificar archivos
+        return null;
+      }
+
       // Intentar diferentes extensiones
       const extensions = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
-      
+
       for (const ext of extensions) {
         const filePath = `${targetUserId}/icon.${ext}`;
-        const { data } = supabase.storage
-          .from('prescription-icons')
-          .getPublicUrl(filePath);
 
-        // Verificar si el icono existe
         try {
-          const response = await fetch(data.publicUrl, { method: 'HEAD' });
-          if (response.ok) {
+          // Verificar si el archivo existe en el bucket
+          const { data: fileExists, error: fileError } = await supabase.storage
+            .from('prescription-icons')
+            .list(targetUserId);
+
+          if (!fileError && fileExists?.some(file => file.name === `icon.${ext}`)) {
+            const { data } = supabase.storage
+              .from('prescription-icons')
+              .getPublicUrl(filePath);
             return data.publicUrl;
           }
         } catch {

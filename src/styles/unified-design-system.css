@@ -394,6 +394,38 @@
   }
 }
 
+/* Print utilities */
+.print-only {
+  display: none;
+}
+
+@media print {
+  .print-only {
+    display: block !important;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+}
+
+/* Print preview styles */
+.print-preview {
+  background: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 20px auto;
+  max-width: 210mm;
+  min-height: 297mm;
+  padding: 0;
+  position: relative;
+}
+
+.print-preview .prescription-canvas {
+  background: white !important;
+  width: 210mm !important;
+  height: 297mm !important;
+}
+
 /* Utilidades de espaciado */
 .mt-0 { margin-top: var(--space-0); }
 .mt-1 { margin-top: var(--space-1); }
@@ -468,9 +500,91 @@
   .no-print {
     display: none !important;
   }
-  
+
   body {
     background: white !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Prescription-specific print styles */
+  .prescription-canvas {
+    position: relative !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .prescription-canvas.print-mode {
+    width: 210mm !important; /* A4 width */
+    height: 297mm !important; /* A4 height */
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  .print-element {
+    position: absolute !important;
+    page-break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure fonts render correctly */
+  .print-element {
+    font-family: "Arial", "Helvetica", sans-serif !important;
+  }
+
+  /* QR codes and images */
+  .print-element img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Tables in print */
+  .print-element table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  .print-element table td,
+  .print-element table th {
+    border: 1px solid #000 !important;
+    padding: 4px !important;
+    font-size: inherit !important;
+  }
+
+  /* Hide editor controls */
+  .prescription-editor-controls,
+  .prescription-toolbar,
+  .prescription-sidebar {
+    display: none !important;
+  }
+
+  /* Ensure proper page breaks */
+  .prescription-page {
+    page-break-after: always;
+  }
+
+  .prescription-page:last-child {
+    page-break-after: avoid;
+  }
+
+  /* Print dialog optimizations */
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  /* Remove shadows and effects that don't print well */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
   }
 }

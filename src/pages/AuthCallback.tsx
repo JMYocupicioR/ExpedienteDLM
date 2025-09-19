@@ -33,10 +33,17 @@ export default function AuthCallback() {
         // 1. No tiene perfil en absoluto, O
         // 2. Su perfil no está marcado como registration_completed, O  
         // 3. El auth_mode es 'signup'
-        const needsQuestionnaire = !profile || 
-                                  profile.registration_completed === false || 
-                                  profile.registration_completed === null ||
-                                  authMode === 'signup';
+        // 
+        // EXCEPCIÓN: Para usuarios que vienen de verificación de email (registro tradicional),
+        // los enviamos directamente al dashboard sin cuestionario
+        const isEmailVerification = session.user.email_confirmed_at && 
+                                   !session.user.app_metadata?.provider;
+        
+        const needsQuestionnaire = !isEmailVerification && 
+                                  (!profile || 
+                                   profile.registration_completed === false || 
+                                   profile.registration_completed === null ||
+                                   authMode === 'signup');
 
         // OAuth user state check (sensitive data removed)
         // User state: hasProfile=${!!profile}, needsQuestionnaire=${needsQuestionnaire}

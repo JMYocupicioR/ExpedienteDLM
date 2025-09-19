@@ -32,7 +32,8 @@
       "Bash(supabase:*)",
       "Bash(mv:*)",
       "Bash(tree:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

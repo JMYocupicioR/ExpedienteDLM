@@ -253,7 +253,7 @@ export default function Auth() {
             password: password,
             options: {
               captchaToken: hcaptchaToken,
-              emailRedirectTo: `${window.location.origin}/signup-questionnaire`,
+              emailRedirectTo: `${window.location.origin}/auth/callback`,
               data: {
                 email_confirmed: false,
                 registration_step: 'email_verification'

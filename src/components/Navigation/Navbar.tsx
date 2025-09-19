@@ -26,7 +26,7 @@ interface NavbarProps {
 }
 
 export default function Navbar({ onNewPatientClick }: NavbarProps) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -158,11 +158,11 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
 
   const handleSignOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      navigate('/auth');
+      await signOut();
+      // La navegación se maneja automáticamente por AuthNavigationHandler
     } catch (error) {
       // Error log removed for security;
+      console.error('Error al cerrar sesión:', error);
     }
   };
 
