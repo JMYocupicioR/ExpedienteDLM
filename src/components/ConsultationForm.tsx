@@ -194,7 +194,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       try {
         const { data, error } = await supabase
           .from('patients')
-          .select('full_name, birth_date, gender, allergies, chronic_conditions')
+          .select('full_name, birth_date, gender')
           .eq('id', patientId)
           .single();
 
@@ -205,8 +205,8 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
         setPatientData({
           ...data,
           age,
-          allergies: data.allergies || [],
-          conditions: data.chronic_conditions || []
+          allergies: [], // Las alergias se obtienen de pathological_histories
+          conditions: [] // Las condiciones se obtienen de pathological_histories
         });
       } catch (error) {
         console.error('Error loading patient data:', error);

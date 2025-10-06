@@ -1,6 +1,8 @@
 import ErrorBoundary from '@/components/ErrorBoundary';
 import AppLayout from '@/components/Layout/AppLayout';
 import PatientPortalLayout from '@/components/Layout/PatientPortalLayout';
+import AdminClinicConfigPanel from '@/components/clinic-config/AdminClinicConfigPanel';
+import DoctorClinicPreferences from '@/components/clinic-config/DoctorClinicPreferences';
 import { ClinicProvider } from '@/context/ClinicContext';
 import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/lib/supabase';
@@ -218,6 +220,18 @@ function App() {
                 path='/settings'
                 element={
                   isAuthenticated ? <Settings /> : <Navigate to='/auth' />
+                }
+              />
+              <Route
+                path='/clinic/config'
+                element={
+                  isAuthenticated ? <AdminClinicConfigPanel /> : <Navigate to='/auth' />
+                }
+              />
+              <Route
+                path='/my/preferences'
+                element={
+                  isAuthenticated ? <DoctorClinicPreferences /> : <Navigate to='/auth' />
                 }
               />
               <Route

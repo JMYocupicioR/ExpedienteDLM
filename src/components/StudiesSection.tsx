@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
-import { Plus, Upload, FileText, Trash2, Image as ImageIcon, Video as VideoIcon, Loader2, FlaskConical, Microscope, X, ExternalLink } from 'lucide-react';
+import { Plus, Upload, FileText, Trash2, Image as ImageIcon, Video as VideoIcon, Loader2, FlaskConical, Microscope, X, ExternalLink, Beaker, Eye, CheckCircle2, AlertTriangle } from 'lucide-react';
 import UploadDropzone from '@/components/UploadDropzone';
+import LabResultsForm from '@/components/studies/LabResultsForm';
+import { MedicalFileStorage } from '@/lib/services/medical-file-storage';
 import type { Database } from '@/lib/database.types';
 
 type MedicalTest = Database['public']['Tables']['medical_tests']['Row'];
@@ -38,6 +40,7 @@ export default function StudiesSection({ patientId, doctorId }: StudiesSectionPr
   });
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [showLabResults, setShowLabResults] = useState<MedicalTest | null>(null);
 
   const fetchStudies = async () => {
     setLoading(true);
@@ -96,26 +99,30 @@ export default function StudiesSection({ patientId, doctorId }: StudiesSectionPr
       setUploadingId(study.id);
       const clinicId = (profile as any)?.clinic_id as string | undefined;
       if (!clinicId) throw new Error('No hay clínica asociada en el perfil.');
-      const path = `${clinicId}/${patientId}/${study.id}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('patient-documents')
-        .upload(path, file);
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from('patient-documents').getPublicUrl(path);
+
+      // Usar el nuevo servicio de storage con validaciones
+      const uploadResult = await MedicalFileStorage.upload(file, {
+        clinicId,
+        patientId,
+        studyId: study.id,
+        uploadedBy: (profile as any)?.id
+      });
+
       const { data: userData } = await supabase.auth.getUser();
       const { error: insertError } = await supabase.from('medical_test_files').insert({
         medical_test_id: study.id,
         file_name: file.name,
-        file_path: path,
-        file_url: urlData.publicUrl,
-        file_type: file.type,
-        file_size: file.size,
+        file_path: uploadResult.path,
+        file_url: uploadResult.url,
+        file_type: uploadResult.type,
+        file_size: uploadResult.size,
+        file_hash: uploadResult.hash,
         uploaded_by: userData?.user?.id || doctorId || null,
       });
       if (insertError) throw insertError;
       fetchStudies();
-    } catch (e) {
-      // Error log removed for security;
+    } catch (e: any) {
+      alert(e.message || 'Error al subir archivo');
     } finally {
       setUploadingId(null);
     }
@@ -313,6 +320,15 @@ export default function StudiesSection({ patientId, doctorId }: StudiesSectionPr
                   {study.notes && <p className="text-xs text-gray-400">{study.notes}</p>}
                 </div>
                 <div className="flex items-center gap-2">
+                  {study.category === 'laboratorio' && (
+                    <button
+                      onClick={() => setShowLabResults(study)}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm inline-flex items-center"
+                      title="Capturar resultados"
+                    >
+                      <Beaker className="h-4 w-4 mr-1" /> Resultados
+                    </button>
+                  )}
                   <label className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm inline-flex items-center cursor-pointer">
                     <Upload className="h-4 w-4 mr-1" /> Subir archivo
                     <input type="file" accept="application/pdf,image/*,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadFile(study, f); }} />
@@ -327,6 +343,19 @@ export default function StudiesSection({ patientId, doctorId }: StudiesSectionPr
           ))
         )}
       </div>
+
+      {/* Modal de resultados de laboratorio */}
+      {showLabResults && (
+        <LabResultsForm
+          medicalTestId={showLabResults.id}
+          testName={showLabResults.test_name}
+          onClose={() => setShowLabResults(null)}
+          onSaved={() => {
+            fetchStudies();
+            setShowLabResults(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -348,13 +377,14 @@ function StudyFiles({ studyId, uploading }: { studyId: string; uploading: boolea
 
   const handleDeleteFile = async (f: MedicalTestFile) => {
     try {
+      // Usar el servicio unificado para eliminar del storage correcto
       if (f.file_path) {
-        await supabase.storage.from('medical-files').remove([f.file_path]);
+        await MedicalFileStorage.delete(f.file_path);
       }
       await supabase.from('medical_test_files').delete().eq('id', f.id);
       fetchFiles();
-    } catch (e) {
-      // Error log removed for security;
+    } catch (e: any) {
+      alert(e.message || 'Error al eliminar archivo');
     }
   };
 

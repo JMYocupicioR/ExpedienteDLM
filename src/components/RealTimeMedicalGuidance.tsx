@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, CheckCircle, Info, Lightbulb, Stethoscope, Clock, Target, Zap } from 'lucide-react';
-import OpenAI from 'openai';
+import { geminiAI } from '@/lib/services/gemini-ai-service';
 
 interface GuidanceAlert {
   id: string;
@@ -43,22 +43,6 @@ export default function RealTimeMedicalGuidance({
 }: RealTimeMedicalGuidanceProps) {
   const [alerts, setAlerts] = useState<GuidanceAlert[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [openai, setOpenai] = useState<OpenAI | null>(null);
-
-  // Initialize OpenAI client
-  useEffect(() => {
-    if (enableAI) {
-      const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
-      if (apiKey) {
-        const client = new OpenAI({
-          apiKey,
-          baseURL: 'https://api.deepseek.com',
-          dangerouslyAllowBrowser: true
-        });
-        setOpenai(client);
-      }
-    }
-  }, [enableAI]);
 
   // Analyze medical context for guidance
   useEffect(() => {
@@ -74,8 +58,8 @@ export default function RealTimeMedicalGuidance({
     // Rule-based checks
     newAlerts.push(...performRuleBasedChecks());
 
-    // AI-based analysis
-    if (openai && enableAI) {
+    // AI-based analysis with Gemini
+    if (geminiAI && enableAI) {
       const aiAlerts = await performAIAnalysis();
       newAlerts.push(...aiAlerts);
     }
@@ -220,83 +204,35 @@ export default function RealTimeMedicalGuidance({
   };
 
   const performAIAnalysis = async (): Promise<GuidanceAlert[]> => {
-    if (!openai) return [];
+    if (!geminiAI) return [];
 
     try {
-      const contextString = Object.entries(medicalContext)
-        .filter(([_, value]) => value !== undefined && value !== '' && value !== null)
-        .map(([key, value]) => {
-          if (Array.isArray(value)) {
-            return `${key}: ${value.join(', ')}`;
-          }
-          if (typeof value === 'object') {
-            return `${key}: ${JSON.stringify(value)}`;
-          }
-          return `${key}: ${value}`;
-        })
-        .join('\n');
-
-      const prompt = `Analiza el siguiente contexto médico y proporciona alertas/sugerencias críticas:
-
-CONTEXTO MÉDICO:
-${contextString}
-
-Identifica:
-1. Signos de alarma o red flags
-2. Inconsistencias entre síntomas, signos vitales y diagnóstico
-3. Estudios complementarios necesarios
-4. Consideraciones de seguridad del paciente
-5. Oportunidades de mejora en eficiencia
-
-Responde SOLO en formato JSON con este esquema:
-{
-  "alerts": [
-    {
-      "type": "critical|warning|info|suggestion",
-      "title": "título corto",
-      "message": "descripción clara",
-      "action": "acción recomendada",
-      "confidence": 0-100,
-      "category": "safety|diagnosis|treatment|efficiency"
-    }
-  ]
-}`;
-
-      const response = await openai.chat.completions.create({
-        model: 'deepseek-reasoner',
-        messages: [
-          {
-            role: 'system',
-            content: 'Eres un asistente médico experto en identificar alertas clínicas y sugerencias de mejora.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 1000,
-        temperature: 0.2
+      // Usar Gemini AI para análisis médico
+      const aiResult = await geminiAI.analyzeMedicalContext({
+        patientAge: medicalContext.patientAge,
+        patientGender: medicalContext.patientGender,
+        currentCondition: medicalContext.currentCondition,
+        vitalSigns: medicalContext.vitalSigns,
+        diagnoses: medicalContext.diagnosis ? [medicalContext.diagnosis] : [],
+        medications: medicalContext.medications?.map(m => typeof m === 'string' ? m : m.name || '') || [],
+        allergies: medicalContext.allergies || []
       });
 
-      const responseText = response.choices[0]?.message?.content || '';
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-
-      if (jsonMatch) {
-        const aiResponse = JSON.parse(jsonMatch[0]);
-        return aiResponse.alerts?.map((alert: any, index: number) => ({
+      if (aiResult.alerts && aiResult.alerts.length > 0) {
+        return aiResult.alerts.map((alert, index) => ({
           id: `ai_${index}`,
-          type: alert.type,
+          type: alert.type as 'critical' | 'warning' | 'info' | 'success',
           title: alert.title,
           message: alert.message,
           action: alert.action,
-          confidence: alert.confidence,
+          confidence: alert.confidence || 80,
           timestamp: new Date(),
           source: 'ai' as const,
-          category: alert.category
-        })) || [];
+          category: alert.category || 'diagnosis'
+        }));
       }
     } catch (error) {
-      console.error('AI analysis error:', error);
+      console.error('Gemini AI analysis error:', error);
     }
 
     return [];

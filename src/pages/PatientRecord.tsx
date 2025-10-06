@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  User, Calendar, Activity, FileText, Settings, ChevronRight, Plus, Edit, Save,
-  ArrowLeft, Clock, Heart, Brain, Dna, Trash2, Eye, ChevronDown, ChevronUp,
-  Search, Filter, RefreshCw, FileDown, Printer, FileText as FileTextIcon,
-  Phone, Mail, MapPin, CheckCircle, Pill
+import {
+  User, Calendar, Activity, FileText, Settings, Plus, Edit, Save,
+  Clock, Heart, Brain, Dna, Trash2, Eye, RefreshCw, MapPin, CheckCircle, Pill
 } from 'lucide-react';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { supabase } from '@/lib/supabase';
 import { getPatientById, updatePatient } from '@/features/patients/services/patientService';
 import { useSimpleClinic } from '@/hooks/useSimpleClinic';
@@ -18,6 +17,11 @@ import ConsultationModal from '@/components/ConsultationModal';
 import AppointmentQuickScheduler from '@/components/AppointmentQuickScheduler';
 import StudiesSection from '@/components/StudiesSection';
 import AuditTrailViewer from '@/components/AuditTrailViewer';
+import PatientRecordSidebar from '@/components/PatientRecordSidebar';
+import PatientRecordHeader from '@/components/PatientRecordHeader';
+import ConsultationListEnhanced from '@/components/ConsultationListEnhanced';
+import ConsultationTimeline from '@/components/ConsultationTimeline';
+import VitalSignsChart from '@/components/VitalSignsChart';
 import { appointmentService, Appointment } from '@/lib/services/appointment-service';
 import PatientPrescriptionHistory from '@/components/PatientPrescriptionHistory';
 import type { Database } from '@/lib/database.types';
@@ -40,6 +44,7 @@ export default function PatientRecord() {
   const [seccionActiva, setSeccionActiva] = useState('paciente');
   const [modoEdicion, setModoEdicion] = useState(false);
   const [showConsultationForm, setShowConsultationForm] = useState(false);
+  const [consultationViewMode, setConsultationViewMode] = useState<'list' | 'timeline' | 'trends'>('list');
   const [patient, setPatient] = useState<Patient | null>(null);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [pathologicalHistory, setPathologicalHistory] = useState<PathologicalHistory | null>(null);
@@ -48,11 +53,27 @@ export default function PatientRecord() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [consultationSearch, setConsultationSearch] = useState('');
-  const [expandedConsultation, setExpandedConsultation] = useState<string | null>(null);
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
+
+  // Configurar atajos de teclado específicos del expediente
+  useKeyboardShortcuts({
+    onNewConsultation: () => {
+      if (patient && !showConsultationForm) {
+        setShowConsultationForm(true);
+      }
+    },
+    onSave: async () => {
+      if (modoEdicion && patient) {
+        await handleSavePatient();
+      }
+    },
+    onCloseModal: () => {
+      if (showConsultationForm) {
+        setShowConsultationForm(false);
+      }
+    },
+  });
 
   useEffect(() => {
     if (id && !clinicLoading) {
@@ -69,19 +90,6 @@ export default function PatientRecord() {
     }
   }, [searchParams, patient, setSearchParams]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('.export-menu')) {
-        setShowExportMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
 
   const checkSession = async () => {
     try {
@@ -111,24 +119,55 @@ export default function PatientRecord() {
 
   const fetchPatientData = async () => {
     if (!id) return;
-    
+
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch patient data using service layer for better security
-      const patientData = await getPatientById(id, activeClinic?.id);
+      // Ejecutar todas las consultas en paralelo para mejor rendimiento
+      const [
+        patientData,
+        pathologicalResult,
+        nonPathologicalResult,
+        hereditaryResult,
+        consultationsResult
+      ] = await Promise.all([
+        // Fetch patient data
+        getPatientById(id, activeClinic?.id),
+
+        // Fetch pathological history
+        supabase
+          .from('pathological_histories')
+          .select('*')
+          .eq('patient_id', id)
+          .maybeSingle(),
+
+        // Fetch non-pathological history
+        supabase
+          .from('non_pathological_histories')
+          .select('*')
+          .eq('patient_id', id)
+          .maybeSingle(),
+
+        // Fetch hereditary backgrounds
+        supabase
+          .from('hereditary_backgrounds')
+          .select('*')
+          .eq('patient_id', id),
+
+        // Fetch consultations
+        supabase
+          .from('consultations')
+          .select('*')
+          .eq('patient_id', id)
+          .order('created_at', { ascending: false })
+      ]);
+
+      // Procesar resultados
       setPatient(patientData);
 
-      // Fetch pathological history using maybeSingle()
-      const { data: pathologicalData, error: pathologicalError } = await supabase
-        .from('pathological_histories')
-        .select('*')
-        .eq('patient_id', id)
-        .maybeSingle();
-
-      if (pathologicalError) throw pathologicalError;
-      setPathologicalHistory(pathologicalData || {
+      if (pathologicalResult.error) throw pathologicalResult.error;
+      setPathologicalHistory(pathologicalResult.data || {
         id: undefined,
         patient_id: id,
         chronic_diseases: [],
@@ -141,15 +180,8 @@ export default function PatientRecord() {
         updated_at: null
       });
 
-      // Fetch non-pathological history using maybeSingle()
-      const { data: nonPathologicalData, error: nonPathologicalError } = await supabase
-        .from('non_pathological_histories')
-        .select('*')
-        .eq('patient_id', id)
-        .maybeSingle();
-
-      if (nonPathologicalError) throw nonPathologicalError;
-      setNonPathologicalHistory(nonPathologicalData || {
+      if (nonPathologicalResult.error) throw nonPathologicalResult.error;
+      setNonPathologicalHistory(nonPathologicalResult.data || {
         id: undefined,
         patient_id: id,
         handedness: null,
@@ -163,24 +195,11 @@ export default function PatientRecord() {
         updated_at: null
       });
 
-      // Fetch hereditary backgrounds
-      const { data: hereditaryData, error: hereditaryError } = await supabase
-        .from('hereditary_backgrounds')
-        .select('*')
-        .eq('patient_id', id);
+      if (hereditaryResult.error) throw hereditaryResult.error;
+      setHereditaryBackgrounds(hereditaryResult.data || []);
 
-      if (hereditaryError) throw hereditaryError;
-      setHereditaryBackgrounds(hereditaryData || []);
-
-      // Fetch consultations
-      const { data: consultationsData, error: consultationsError } = await supabase
-        .from('consultations')
-        .select('*')
-        .eq('patient_id', id)
-        .order('created_at', { ascending: false });
-
-      if (consultationsError) throw consultationsError;
-      setConsultations(consultationsData || []);
+      if (consultationsResult.error) throw consultationsResult.error;
+      setConsultations(consultationsResult.data || []);
 
       // Cargar citas del paciente si tenemos userProfile
       if (userProfile?.id) {
@@ -358,14 +377,6 @@ export default function PatientRecord() {
     }
   };
 
-  const filteredConsultations = consultations.filter(consultation =>
-    consultation.diagnosis?.toLowerCase().includes(consultationSearch.toLowerCase()) ||
-    consultation.current_condition?.toLowerCase().includes(consultationSearch.toLowerCase())
-  );
-
-  const handleExportMenuToggle = () => {
-    setShowExportMenu(!showExportMenu);
-  };
 
   const calculateAge = (birthDate: string): number => {
     const today = new Date();
@@ -695,250 +706,30 @@ export default function PatientRecord() {
 
   return (
     <div className="flex h-screen" style={{ background: 'var(--app-bg-solid)', color: 'var(--text-primary)' }}>
-      {/* Sidebar */}
-      <div className="w-64 border-r border-gray-700 flex flex-col" style={{ background: 'var(--bg-secondary)' }}>
-        <div className="p-4 border-b border-gray-700">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center text-gray-300 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5 mr-2" />
-            <span>Volver</span>
-          </button>
-        </div>
-        
-        <nav className="flex-1 overflow-y-auto p-4">
-          <div className="mb-6">
-            <h2 className="text-base font-semibold text-white leading-tight">{patient.full_name}</h2>
-            <p className="text-xs text-gray-400">Expediente #{patient.id.slice(0, 8)}</p>
-          </div>
-
-          <div className="text-xs uppercase tracking-wide text-gray-400 mb-2">Secciones</div>
-          <ul className="space-y-2">
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('paciente')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'paciente' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <User className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Información Personal</span>
-              </button>
-            </li>
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('patologicos')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'patologicos' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <Heart className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Antecedentes Patológicos</span>
-              </button>
-            </li>
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('no-patologicos')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'no-patologicos' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <Brain className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Antecedentes No Patológicos</span>
-              </button>
-            </li>
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('heredofamiliares')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'heredofamiliares' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <Dna className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Antecedentes Heredofamiliares</span>
-              </button>
-            </li>
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('estudios')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'estudios' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <FileText className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Estudios</span>
-              </button>
-            </li>
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('consultas')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'consultas' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <Clock className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Consultas</span>
-                <span className="ml-auto bg-gray-600 text-gray-200 text-xs rounded-full px-2 py-1">
-                  {consultations.length}
-                </span>
-              </button>
-            </li>
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('recetas')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'recetas' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <Pill className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Historial de Recetas</span>
-              </button>
-            </li>
-            
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('citas')}
-                className={`flex items-center w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'citas' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <Calendar className="h-5 w-5 mr-3" />
-                <span>Citas Médicas</span>
-                {patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length > 0 && (
-                  <span className="ml-auto bg-cyan-500 text-white text-xs rounded-full px-2 py-1">
-                    {patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length}
-                  </span>
-                )}
-              </button>
-            </li>
-            
-            <li>
-              <button 
-                onClick={() => setSeccionActiva('auditoria')}
-                className={`flex items-start gap-3 w-full p-3 rounded-lg transition-colors ${
-                  seccionActiva === 'auditoria' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <Settings className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <span className="text-left leading-snug">Auditoría</span>
-                <span className="ml-auto bg-orange-500 text-white text-xs rounded-full px-2 py-1">
-                  NOM-024
-                </span>
-              </button>
-            </li>
-          </ul>
-        </nav>
-      </div>
+      {/* Sidebar - Componente modularizado */}
+      <PatientRecordSidebar
+        patient={patient}
+        seccionActiva={seccionActiva}
+        onSeccionChange={setSeccionActiva}
+        consultationsCount={consultations.length}
+        upcomingAppointmentsCount={patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length}
+      />
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto">
-        <header className="p-4 border-b border-gray-700 flex justify-between items-center" style={{ background: 'var(--bg-secondary)' }}>
-          <div>
-            <h1 className="text-2xl font-bold text-white">
-              Expediente Médico
-            </h1>
-            <p className="text-gray-400">
-              Última actualización: {format(new Date(patient.updated_at || patient.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            {/* Botón de Exportación - siempre visible */}
-            <div className="relative">
-              <button
-                onClick={handleExportMenuToggle}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
-                title="Exportar expediente completo"
-              >
-                <FileDown className="h-4 w-4 mr-2" />
-                Exportar
-              </button>
-              
-              {showExportMenu && (
-                <div className="export-menu absolute right-0 mt-2 w-56 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-20">
-                  <div className="py-1">
-                    <button
-                      onClick={handlePrintRecord}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                    >
-                      <Printer className="h-4 w-4 mr-3" />
-                      Imprimir Expediente Completo
-                    </button>
-                    <button
-                      onClick={handleExportRecordPDF}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                    >
-                      <FileDown className="h-4 w-4 mr-3" />
-                      Exportar como PDF
-                    </button>
-                    <button
-                      onClick={handleExportRecordTXT}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                    >
-                      <FileTextIcon className="h-4 w-4 mr-3" />
-                      Exportar como TXT
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {seccionActiva === 'consultas' ? (
-              <button
-                onClick={() => setShowConsultationForm(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors shadow-lg"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Nueva Consulta
-              </button>
-            ) : modoEdicion ? (
-              <>
-                <button
-                  onClick={() => setModoEdicion(false)}
-                  className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
-                  disabled={loading}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSave}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center hover:bg-green-700 transition-colors disabled:opacity-50"
-                  disabled={loading}
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  {loading ? 'Guardando...' : 'Guardar Cambios'}
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setModoEdicion(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors"
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Editar
-              </button>
-            )}
-          </div>
-        </header>
+        {/* Header - Componente modularizado */}
+        <PatientRecordHeader
+          patient={patient}
+          seccionActiva={seccionActiva}
+          modoEdicion={modoEdicion}
+          loading={loading}
+          onToggleEdit={() => setModoEdicion(!modoEdicion)}
+          onSave={handleSave}
+          onNewConsultation={() => setShowConsultationForm(true)}
+          onPrintRecord={handlePrintRecord}
+          onExportPDF={handleExportRecordPDF}
+          onExportTXT={handleExportRecordTXT}
+        />
 
         <main className="p-6 max-w-7xl mx-auto">
           {seccionActiva === 'paciente' && (
@@ -1473,116 +1264,85 @@ export default function PatientRecord() {
 
           {seccionActiva === 'consultas' && (
             <div className="space-y-6">
-              {/* Header with search and filters */}
-              <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold text-white">Historial de Consultas</h2>
-                  <div className="flex items-center space-x-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <input
-                        type="text"
-                        placeholder="Buscar por diagnóstico..."
-                        value={consultationSearch}
-                        onChange={(e) => setConsultationSearch(e.target.value)}
-                        className="pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
+              {/* Selector de vista */}
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-white">Vista de Consultas</h3>
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => fetchPatientData()}
-                      className="p-2 text-gray-400 hover:text-white transition-colors"
-                      title="Actualizar"
+                      onClick={() => setConsultationViewMode('list')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        consultationViewMode === 'list'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
                     >
-                      <RefreshCw className="h-4 w-4" />
+                      📋 Lista
+                    </button>
+                    <button
+                      onClick={() => setConsultationViewMode('timeline')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        consultationViewMode === 'timeline'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      📅 Timeline
+                    </button>
+                    <button
+                      onClick={() => setConsultationViewMode('trends')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        consultationViewMode === 'trends'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      📊 Tendencias
                     </button>
                   </div>
                 </div>
-
-                {/* Consultas Table */}
-                {filteredConsultations.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-600">
-                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Fecha</th>
-                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Hora</th>
-                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Diagnóstico</th>
-                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Estado</th>
-                          <th className="text-center py-3 px-4 text-gray-300 font-medium">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredConsultations.map((consultation) => (
-                          <React.Fragment key={consultation.id}>
-                            <tr className="border-b border-gray-700 hover:bg-gray-700 transition-colors">
-                              <td className="py-3 px-4 text-white">
-                                {format(new Date(consultation.created_at), "dd/MM/yyyy", { locale: es })}
-                              </td>
-                              <td className="py-3 px-4 text-gray-300">
-                                {format(new Date(consultation.created_at), "HH:mm", { locale: es })}
-                              </td>
-                              <td className="py-3 px-4 text-white">
-                                <div className="max-w-xs truncate">
-                                  {consultation.diagnosis}
-                                </div>
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  Completada
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                <button
-                                  onClick={() => setExpandedConsultation(
-                                    expandedConsultation === consultation.id ? null : consultation.id
-                                  )}
-                                  className="p-1 text-gray-400 hover:text-white transition-colors"
-                                  title="Ver detalles"
-                                >
-                                  {expandedConsultation === consultation.id ? (
-                                    <ChevronUp className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronDown className="h-4 w-4" />
-                                  )}
-                                </button>
-                              </td>
-                            </tr>
-                            {expandedConsultation === consultation.id && (
-                              <tr>
-                                <td colSpan={5} className="px-4 py-6 bg-gray-700">
-                                  <ConsultationDetails consultation={consultation} />
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <Clock className="mx-auto h-12 w-12 text-gray-500" />
-                    <h3 className="mt-2 text-sm font-medium text-white">No hay consultas</h3>
-                    <p className="mt-1 text-sm text-gray-400">
-                      {consultationSearch ? 
-                        'No se encontraron consultas que coincidan con tu búsqueda.' :
-                        'Comienza creando una nueva consulta para este paciente.'
-                      }
-                    </p>
-                    {!consultationSearch && (
-                      <div className="mt-6">
-                        <button
-                          onClick={() => setShowConsultationForm(true)}
-                          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Nueva Consulta
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
+
+              {/* Vista de Lista */}
+              {consultationViewMode === 'list' && (
+                <ConsultationListEnhanced
+                  consultations={consultations}
+                  onRefresh={fetchPatientData}
+                  onNewConsultation={() => setShowConsultationForm(true)}
+                  loading={loading}
+                />
+              )}
+
+              {/* Vista de Timeline */}
+              {consultationViewMode === 'timeline' && (
+                <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                  <ConsultationTimeline
+                    consultations={consultations}
+                    onConsultationClick={(consultation) => {
+                      // Cambiar a vista de lista y expandir la consulta
+                      setConsultationViewMode('list');
+                      // Aquí podrías implementar scroll automático a la consulta
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Vista de Tendencias */}
+              {consultationViewMode === 'trends' && (
+                <div className="space-y-6">
+                  <VitalSignsChart consultations={consultations} />
+
+                  {/* Botón para volver a lista */}
+                  <div className="text-center">
+                    <button
+                      onClick={() => setConsultationViewMode('list')}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Ver Lista de Consultas
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {seccionActiva === 'estudios' && patient && (

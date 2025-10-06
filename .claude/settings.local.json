@@ -33,7 +33,8 @@
       "Bash(mv:*)",
       "Bash(tree:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

@@ -20,19 +20,24 @@ import {
   Phone,
   Pill,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   TrendingUp,
   User,
   UserCheck,
   Users,
+  MapPin,
+  Eye,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import KeyboardShortcutsHelp from '@/components/KeyboardShortcutsHelp';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { activeClinic, userClinics, isLoading: isClinicLoading } = useClinic();
+  const { activeClinic, userClinics, isLoading: isClinicLoading, clinics, setActiveClinic } = useClinic();
   const [user, setUser] = useState<{ email?: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -64,6 +69,22 @@ const Dashboard = () => {
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showQuickStartModal, setShowQuickStartModal] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showClinicSwitcher, setShowClinicSwitcher] = useState(false);
+  const [clinicSearchTerm, setClinicSearchTerm] = useState('');
+
+  // Configurar atajos de teclado
+  const { shortcuts } = useKeyboardShortcuts({
+    onNewPatient: () => setShowNewPatientForm(true),
+    onSearchPatient: () => {
+      const searchInput = document.querySelector('input[placeholder*="Búsqueda rápida"]') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+      }
+    },
+    onShowHelp: () => setShowShortcutsHelp(prev => !prev),
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -305,6 +326,28 @@ const Dashboard = () => {
     // Opcional: Navegar al expediente del nuevo paciente
     navigate(`/expediente/${newPatient.id}`);
   };
+
+  const handleClinicSwitch = async (clinic: any) => {
+    setActiveClinic(clinic);
+    setShowClinicSwitcher(false);
+    setClinicSearchTerm('');
+
+    // Recargar datos del dashboard con la nueva clínica
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user && clinic) {
+      await loadDashboardData(clinic.id);
+      await loadUpcomingAppointments(user.id, clinic.id);
+    }
+  };
+
+  // Filtrar clínicas por búsqueda
+  const filteredClinics = clinics.filter(clinic =>
+    clinic.name.toLowerCase().includes(clinicSearchTerm.toLowerCase()) ||
+    clinic.address?.toLowerCase().includes(clinicSearchTerm.toLowerCase())
+  );
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -655,6 +698,16 @@ const Dashboard = () => {
                   <Plus className='h-4 w-4 mr-2' />
                   Nuevo Paciente
                 </Button>
+                {clinics.length > 1 && (
+                  <Button
+                    onClick={() => setShowClinicSwitcher(prev => !prev)}
+                    variant='outline'
+                    className='border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-gray-900 col-span-2 relative'
+                  >
+                    <RefreshCw className='h-4 w-4 mr-2' />
+                    Cambiar de Clínica
+                  </Button>
+                )}
                 <Button
                   asChild
                   variant='outline'
@@ -716,6 +769,108 @@ const Dashboard = () => {
                   </Button>
                 )}
               </div>
+
+              {/* Dropdown de selección de clínicas */}
+              {showClinicSwitcher && (
+                <div className='mt-4 p-4 bg-gray-700 rounded-lg border border-yellow-400'>
+                  <div className='flex items-center justify-between mb-3'>
+                    <h3 className='text-white text-sm font-medium'>Mis Clínicas</h3>
+                    {activeClinic && (
+                      <button
+                        onClick={() => navigate('/clinic-admin')}
+                        className='text-cyan-400 hover:text-cyan-300 transition-colors'
+                        title='Configurar clínica actual'
+                      >
+                        <Settings className='h-4 w-4' />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Buscador de clínicas */}
+                  {clinics.length > 3 && (
+                    <div className='relative mb-3'>
+                      <Search className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4' />
+                      <input
+                        type='text'
+                        placeholder='Buscar clínica...'
+                        value={clinicSearchTerm}
+                        onChange={e => setClinicSearchTerm(e.target.value)}
+                        className='w-full pl-9 pr-3 py-2 bg-gray-600 text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400'
+                      />
+                    </div>
+                  )}
+
+                  {/* Lista de clínicas */}
+                  <div className='space-y-2 max-h-64 overflow-y-auto'>
+                    {filteredClinics.length > 0 ? (
+                      filteredClinics.map((clinic) => (
+                        <div
+                          key={clinic.id}
+                          className={`group p-3 rounded-lg transition-colors ${
+                            activeClinic?.id === clinic.id
+                              ? 'bg-yellow-500 text-gray-900'
+                              : 'bg-gray-600 text-white hover:bg-gray-500'
+                          }`}
+                        >
+                          <div className='flex items-center justify-between'>
+                            <button
+                              onClick={() => handleClinicSwitch(clinic)}
+                              className='flex-1 text-left'
+                            >
+                              <div className='flex items-start gap-2'>
+                                <Building2 className='h-4 w-4 mt-0.5 flex-shrink-0' />
+                                <div className='flex-1 min-w-0'>
+                                  <p className='font-medium truncate'>{clinic.name}</p>
+                                  {clinic.address && (
+                                    <div className='flex items-start gap-1 mt-1'>
+                                      <MapPin className='h-3 w-3 mt-0.5 flex-shrink-0 opacity-75' />
+                                      <p className='text-xs opacity-75 line-clamp-1'>{clinic.address}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+
+                            <div className='flex items-center gap-2 ml-2'>
+                              {activeClinic?.id === clinic.id && (
+                                <div className='w-2 h-2 bg-gray-900 rounded-full'></div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className='text-center py-4'>
+                        <p className='text-gray-400 text-sm'>No se encontraron clínicas</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Botones de acción */}
+                  <div className='mt-3 pt-3 border-t border-gray-600 space-y-2'>
+                    <button
+                      onClick={() => {
+                        setShowClinicSwitcher(false);
+                        navigate('/clinic-admin');
+                      }}
+                      className='w-full p-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2'
+                    >
+                      <Eye className='h-4 w-4' />
+                      Ver Todas las Clínicas
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowClinicSwitcher(false);
+                        navigate('/clinic-admin?action=new');
+                      }}
+                      className='w-full p-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2'
+                    >
+                      <Plus className='h-4 w-4' />
+                      Crear Nueva Clínica
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className='card'>
@@ -939,6 +1094,13 @@ const Dashboard = () => {
       <GenerateInvitationLinkModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
+      />
+
+      {/* Modal de Ayuda de Atajos de Teclado */}
+      <KeyboardShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
+        shortcuts={shortcuts}
       />
     </>
   );

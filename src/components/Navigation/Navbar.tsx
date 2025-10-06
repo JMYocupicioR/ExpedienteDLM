@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Menu, X, Stethoscope, User, Users, FileText, Calendar, 
   Settings, LogOut, Bell, Search, Home, Activity, Building,
-  ChevronRight, ChevronLeft
+  ChevronRight, ChevronLeft, Sliders
 } from 'lucide-react';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -93,6 +93,12 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
             { id: 'templates-exploracion', label: 'Exploración Física', icon: FileText, href: '/plantillas?tab=exploracion' },
             { id: 'templates-prescripciones', label: 'Prescripciones', icon: FileText, href: '/plantillas?tab=prescripciones' }
           ]
+        },
+        {
+          id: 'preferences',
+          label: 'Mis Preferencias',
+          icon: Sliders,
+          href: '/my/preferences'
         }
       );
     }
@@ -127,7 +133,8 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
             { id: 'clinic-overview', label: 'Resumen', icon: Activity, href: '/clinic/summary' },
             { id: 'clinic-patients', label: 'Pacientes', icon: Users, href: '/clinic/patients' },
             { id: 'clinic-staff', label: 'Personal', icon: Users, href: '/clinic/staff' },
-            { id: 'clinic-settings', label: 'Configuración', icon: Settings, href: '/clinic/settings' }
+            { id: 'clinic-config', label: 'Configuración Clínica', icon: Sliders, href: '/clinic/config' },
+            { id: 'clinic-settings', label: 'Ajustes', icon: Settings, href: '/clinic/settings' }
           ]
         }
       );
