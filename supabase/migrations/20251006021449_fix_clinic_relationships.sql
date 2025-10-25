@@ -11,7 +11,7 @@ SELECT DISTINCT
   COALESCE(
     p.additional_info->>'clinic_name',
     p.full_name || '''s Clinic',
-    'Clínica Médica'
+    'Clinica Medica'
   ),
   CASE
     WHEN p.additional_info->'clinic_address' IS NOT NULL THEN

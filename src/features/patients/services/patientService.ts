@@ -16,10 +16,13 @@ export async function getPatientsByClinic(clinicId: string): Promise<Patient[]> 
     .order('full_name');
 
   if (error) throw new Error(error.message);
-  
-  // Temporarily skip decryption for debugging
-  console.log('Patients loaded:', data?.length || 0);
-  return (data || []) as Patient[];
+
+  // Decrypt PHI data for each patient
+  const decryptedPatients = await Promise.all(
+    (data || []).map(patient => decryptPatientPHI(patient))
+  );
+
+  return decryptedPatients as Patient[];
 }
 
 export async function getPatientById(patientId: string, clinicId?: string): Promise<Patient> {
@@ -27,10 +30,10 @@ export async function getPatientById(patientId: string, clinicId?: string): Prom
   if (clinicId) query = query.eq('clinic_id', clinicId);
   const { data, error } = await query.single();
   if (error) throw new Error(error.message);
-  
-  // Temporarily skip decryption for debugging
-  console.log('Patient loaded by ID:', data.id);
-  return data as Patient;
+
+  // Decrypt PHI data before returning
+  const decryptedPatient = await decryptPatientPHI(data);
+  return decryptedPatient as Patient;
 }
 
 /**
@@ -45,7 +48,7 @@ export async function createPatient(
   patientData: PatientInsert,
   clinicId: string
 ): Promise<Patient> {
-  // 1. Limpieza y preparación de datos - VERSION SIMPLIFICADA PARA DEBUG
+  // 1. Limpieza y preparación de datos
   const cleanedData = {
     full_name: patientData.full_name,
     social_security_number: patientData.social_security_number ? patientData.social_security_number.toUpperCase().trim() : null,
@@ -63,25 +66,18 @@ export async function createPatient(
     notes: patientData.notes || null
   };
 
-  // 2. Temporarily skip encryption for debugging
-  console.log('Inserting patient data:', cleanedData);
-  
+  // 2. Encrypt PHI data before insertion
+  const encryptedData = await encryptPatientPHI(cleanedData);
+
   // 3. Inserción en la base de datos y devolución del registro completo
   const { data, error } = await supabase
     .from('patients')
-    .insert(cleanedData)
+    .insert(encryptedData)
     .select()
     .single();
 
   // 4. Manejo de errores
   if (error) {
-    console.error('Patient creation error details:');
-    console.error('Code:', error.code);
-    console.error('Message:', error.message);
-    console.error('Details:', error.details);
-    console.error('Hint:', error.hint);
-    console.error('Full error object:', error);
-    
     // Error de duplicado de CURP (código 23505 para unique_violation)
     if (error.code === '23505' && error.message.includes('unique_clinic_social_security')) {
       throw new Error('Ya existe un paciente con este número de seguridad social en la clínica.');
@@ -89,9 +85,9 @@ export async function createPatient(
     throw new Error(`Error al crear el paciente: ${error.message} (Código: ${error.code})`);
   }
 
-  // 5. Return patient data (temporarily without decryption for debugging)
-  console.log('Patient created successfully:', data);
-  return data as Patient;
+  // 5. Decrypt and return patient data
+  const decryptedPatient = await decryptPatientPHI(data);
+  return decryptedPatient as Patient;
 }
 
 export async function updatePatient(
@@ -145,10 +141,13 @@ export async function searchPatients(
     .order('full_name')
     .limit(limit);
   if (error) throw new Error(error.message);
-  
-  // Temporarily skip decryption for debugging
-  console.log('Search results:', data?.length || 0);
-  return (data || []) as Patient[];
+
+  // Decrypt PHI data for each patient
+  const decryptedPatients = await Promise.all(
+    (data || []).map(patient => decryptPatientPHI(patient))
+  );
+
+  return decryptedPatients as Patient[];
 }
 
 export async function getPatientStats(clinicId: string): Promise<{

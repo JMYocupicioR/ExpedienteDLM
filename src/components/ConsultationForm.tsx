@@ -24,9 +24,14 @@ import MedicalSafetyValidator from '@/components/MedicalSafetyValidator';
 import CIE10Integration from '@/components/CIE10Integration';
 import DeepSeekMedicalAssistant from '@/components/DeepSeekMedicalAssistant';
 import RealTimeMedicalGuidance from '@/components/RealTimeMedicalGuidance';
-import type { 
+// ===== NUEVOS COMPONENTES DE PESTAÑAS =====
+import InterrogatorioTabsPanel from '@/components/InterrogatorioTabsPanel';
+import ExploracionTabsPanel from '@/components/ExploracionTabsPanel';
+import type {
   Database,
-  MedicalTemplate
+  MedicalTemplate,
+  InterrogatorioStructuredData,
+  PhysicalExaminationData
 } from '@/lib/database.types';
 import { calculatePrescriptionExpiry } from '@/lib/medicalConfig';
 
@@ -183,6 +188,10 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   const [assistantSuggestions, setAssistantSuggestions] = useState<any[]>([]);
   const [showRealTimeGuidance, setShowRealTimeGuidance] = useState(true);
   const [guidanceActions, setGuidanceActions] = useState<any[]>([]);
+
+  // ===== NUEVOS ESTADOS PARA PESTAÑAS DE INTERROGATORIO Y EXPLORACIÓN =====
+  const [interrogatorioStructured, setInterrogatorioStructured] = useState<InterrogatorioStructuredData | null>(null);
+  const [exploracionFreeText, setExploracionFreeText] = useState<string>('');
 
   // ===== USAR HOOK DE VALIDACIÓN CENTRALIZADO =====
   const { validateCompleteForm, validateVitalSignsField, validateMedicationsField } = useValidation();
@@ -520,6 +529,8 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
         patient_id: patientId,
         doctor_id: doctorId,
         current_condition: data.current_condition,
+        // ✅ NUEVO: Guardar datos estructurados de interrogatorio
+        interrogatorio_structured: interrogatorioStructured || null,
         vital_signs: data.vital_signs || null,
         physical_examination: data.physical_examination || null,
         diagnosis: data.diagnosis,
@@ -1112,49 +1123,30 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
           )}
 
           <div className="space-y-6">
-            {/* ✅ MEJORADO: Padecimiento Actual con validación y botones de asistencia */}
+            {/* ✅ NUEVO: Interrogatorio con Pestañas (Plantillas vs Estilo Libre) */}
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-300">
-                  Padecimiento Actual *
-                </label>
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowTemplateAssistant(true)}
-                    className="flex items-center px-3 py-1 text-xs font-medium text-blue-300 bg-blue-900/50 rounded-md hover:bg-blue-800/70 transition-colors"
-                    title="Asistente Inteligente de Plantillas"
-                  >
-                    <Lightbulb className="h-4 w-4 mr-2" />
-                    Plantillas IA
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsTranscriptionModalOpen(true)}
-                    className="flex items-center px-3 py-1 text-xs font-medium text-cyan-300 bg-cyan-900/50 rounded-md hover:bg-cyan-800/70 transition-colors"
-                    title="Usar Asistente de Transcripción con IA"
-                  >
-                    <Mic className="h-4 w-4 mr-2" />
-                    Transcripción IA
-                  </button>
-                </div>
-              </div>
-              <textarea
-                {...register('current_condition', { 
-                  required: 'El padecimiento actual es requerido',
-                  minLength: { value: 10, message: 'Mínimo 10 caracteres' },
-                  maxLength: { value: 1000, message: 'Máximo 1000 caracteres' }
-                })}
-                rows={4}
-                className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
-                placeholder="Describe el motivo de consulta y síntomas principales..."
+              <h3 className="text-lg font-medium text-white mb-4">Interrogatorio / Padecimiento Actual</h3>
+              <InterrogatorioTabsPanel
+                freeText={watchedData.current_condition || ''}
+                onFreeTextChange={(text) => {
+                  setValue('current_condition', text, { shouldValidate: true, shouldDirty: true });
+                  setHasUnsavedChanges(true);
+                }}
+                structuredData={interrogatorioStructured}
+                onStructuredDataChange={setInterrogatorioStructured}
+                doctorId={doctorId}
+                clinicId={profile?.clinic_id}
+                currentCondition={watchedData.current_condition}
+                diagnosis={watchedData.diagnosis}
+                onOpenTranscription={() => setIsTranscriptionModalOpen(true)}
+                className="bg-gray-800/50 rounded-lg p-4"
               />
               {errors.current_condition && (
-                <p className="mt-1 text-sm text-red-400">{errors.current_condition.message}</p>
+                <p className="mt-2 text-sm text-red-400 flex items-center">
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  {errors.current_condition.message}
+                </p>
               )}
-              <p className="mt-1 text-xs text-gray-400">
-                {watchedData.current_condition?.length || 0}/1000 caracteres
-              </p>
             </div>
 
             {/* ===== NUEVO: SMART SYMPTOM ANALYZER ===== */}
@@ -1189,95 +1181,33 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
               isVisible={showMedicalWidgets && (!!watchedData.current_condition || !!watchedData.diagnosis)}
             />
 
-            {/* ✅ MEJORADO: Exploración Física */}
+            {/* ✅ NUEVO: Exploración Física con Pestañas (Plantillas vs Estilo Libre) */}
             <div>
-              <h3 className="text-lg font-medium text-white mb-4">Exploración Física</h3>
-              
-              {!selectedTemplate ? (
-                <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 bg-gray-750">
-                  <PhysicalExamTemplates
-                    onSelectTemplate={handleTemplateSelect}
-                    onSelectMultiple={(templates) => {
-                      // Combinar múltiples plantillas en una sola
-                      const combinedTemplate = combinePhysicalExamTemplates(templates);
-                      handleTemplateSelect(combinedTemplate);
-                    }}
-                    doctorId={doctorId}
-                    allowMultipleSelection={true}
-                  />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="font-medium text-green-300">Plantilla Seleccionada:</h4>
-                        <p className="text-green-200">{selectedTemplate.name}</p>
-                        {physicalExamData && (
-                          <p className="text-sm text-green-400 mt-1">
-                            ✓ Examen físico completado - {physicalExamData.examDate} {physicalExamData.examTime}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowPhysicalExam(true)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                        >
-                          {physicalExamData ? 'Editar Examen' : 'Realizar Examen'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedTemplate(null);
-                            setPhysicalExamData(null);
-                          }}
-                          className="px-4 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors text-sm"
-                        >
-                          Cambiar Plantilla
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Vista previa de campos de la plantilla */}
-                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-300 mb-3">Vista Previa de la Exploración:</h4>
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      {(selectedTemplate.definition as TemplateDefinition)?.sections?.map((section: Section) => (
-                        <div key={section.id} className="border border-gray-600 rounded-lg p-3 bg-gray-800/50">
-                          <h5 className="font-medium text-white mb-2">{section.title}</h5>
-                          {section.description && (
-                            <p className="text-sm text-gray-400 mb-3">{section.description}</p>
-                          )}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {section.questions?.map((question: Question) => (
-                              <div key={question.id} className="text-sm">
-                                <span className="text-gray-300">• {question.text || question.label}</span>
-                                {question.required && <span className="text-red-400"> *</span>}
-                                <span className="text-gray-500 ml-2">({question.type})</span>
-                                {question.options && question.options.length > 0 && (
-                                  <div className="ml-4 text-xs text-gray-400 mt-1">
-                                    Opciones: {question.options.slice(0, 3).join(', ')}{question.options.length > 3 ? '...' : ''}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )) || (
-                        <div className="text-center text-gray-400 py-4">
-                          No hay campos configurados en esta plantilla
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-3 text-xs text-gray-400">
-                      💡 Haz clic en "Realizar Examen" para completar todos estos campos de forma interactiva
-                    </div>
-                  </div>
-                </div>
-              )}
+              <ExploracionTabsPanel
+                freeText={exploracionFreeText}
+                onFreeTextChange={(text) => {
+                  setExploracionFreeText(text);
+                  // Si usa texto libre, actualizar el objeto de exploración física
+                  setValue('physical_examination', {
+                    capture_method: 'free_text',
+                    free_text: text,
+                    metadata: {
+                      completed_at: new Date().toISOString()
+                    }
+                  } as PhysicalExaminationData, { shouldValidate: true, shouldDirty: true });
+                  setHasUnsavedChanges(true);
+                }}
+                selectedTemplate={selectedTemplate}
+                onTemplateSelect={handleTemplateSelect}
+                onTemplateDeselect={() => {
+                  setSelectedTemplate(null);
+                  setPhysicalExamData(null);
+                }}
+                physicalExamData={physicalExamData}
+                onOpenPhysicalExam={() => setShowPhysicalExam(true)}
+                doctorId={doctorId}
+                className="bg-gray-800/50 rounded-lg p-4"
+              />
             </div>
 
             {/* ✅ MEJORADO: Signos Vitales */}

@@ -1535,6 +1535,99 @@ export interface TemplateStats {
 }
 
 // =====================================================
+// TIPOS PARA DATOS ESTRUCTURADOS DE CONSULTA
+// =====================================================
+
+// Tipos para interrogatorio estructurado
+export interface InterrogatorioStructuredData {
+  template_id?: string;
+  template_name?: string;
+  capture_method: 'template' | 'free_text';
+  responses?: TemplateResponses;  // Respuestas del TemplateRunner
+  sections?: Array<{
+    id: string;
+    title: string;
+    content: string;
+  }>;
+  completed_at?: string;
+  metadata?: {
+    version?: string;
+    [key: string]: any;
+  };
+}
+
+// Tipo para respuestas de plantillas (ya existe en TemplateRunnerModal pero lo centralizamos)
+export interface TemplateResponses {
+  [sectionId: string]: {
+    [fieldId: string]: string | number | boolean | string[];
+  };
+}
+
+// Tipos para exploración física mejorada
+export interface PhysicalExaminationData {
+  // Método de captura
+  capture_method: 'template' | 'free_text';
+
+  // Para modo plantilla (existente)
+  template_id?: string;
+  template_name?: string;
+  exam_date?: string;
+  exam_time?: string;
+  vital_signs?: {
+    systolic_pressure?: string;
+    diastolic_pressure?: string;
+    heart_rate?: string;
+    respiratory_rate?: string;
+    temperature?: string;
+    oxygen_saturation?: string;
+    weight?: string;
+    height?: string;
+    bmi?: string;
+  };
+  sections?: Record<string, any>;
+  general_observations?: string;
+
+  // Para modo texto libre (nuevo)
+  free_text?: string;
+
+  metadata?: {
+    completed_at?: string;
+    [key: string]: any;
+  };
+}
+
+// Tipo extendido para consultas con datos estructurados
+export interface ConsultationWithStructuredData {
+  // Campos básicos existentes
+  id: string;
+  patient_id: string;
+  doctor_id: string;
+  current_condition: string;  // Texto para compatibilidad
+  diagnosis: string;
+  prognosis?: string;
+  treatment: string;
+  created_at: string;
+  updated_at?: string;
+
+  // Datos estructurados nuevos
+  interrogatorio_structured?: InterrogatorioStructuredData;
+
+  // Signos vitales
+  vital_signs?: Record<string, any>;
+
+  // Exploración física mejorada
+  physical_examination?: PhysicalExaminationData;
+
+  // Otros campos
+  medications?: any[];
+  cie10_code?: string;
+  cie10_description?: string;
+  recommendations?: any;
+  validation_score?: number;
+  quality_metrics?: any;
+}
+
+// =====================================================
 // SISTEMA DE CITAS MEJORADO - NUEVOS TIPOS
 // =====================================================
 

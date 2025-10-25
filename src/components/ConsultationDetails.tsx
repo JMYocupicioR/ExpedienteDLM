@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { 
-  Calendar, Clock, Stethoscope, FileText, Heart, 
-  Activity, Thermometer, Weight, Ruler, Brain 
+import {
+  Calendar, Clock, Stethoscope, FileText, Heart,
+  Activity, Thermometer, Weight, Ruler, Brain,
+  ChevronDown, ChevronUp, Sparkles, FileEdit
 } from 'lucide-react';
-import type { Database } from '@/lib/database.types';
+import type { Database, InterrogatorioStructuredData, PhysicalExaminationData } from '@/lib/database.types';
 import ScaleAssessments from '@/components/ScaleAssessments';
 
 type Consultation = Database['public']['Tables']['consultations']['Row'];
@@ -16,7 +17,12 @@ interface ConsultationDetailsProps {
 
 export default function ConsultationDetails({ consultation }: ConsultationDetailsProps) {
   const vitalSigns = consultation.vital_signs as any || {};
-  const physicalExam = consultation.physical_examination as any || {};
+  const physicalExam = (consultation.physical_examination as PhysicalExaminationData) || {};
+  const interrogatorioStructured = (consultation as any).interrogatorio_structured as InterrogatorioStructuredData | undefined;
+
+  // Estados para secciones expandibles
+  const [interrogatorioExpanded, setInterrogatorioExpanded] = useState(true);
+  const [exploracionExpanded, setExploracionExpanded] = useState(true);
 
   const formatVitalSignLabel = (key: string): string => {
     const labels: Record<string, string> = {
@@ -143,13 +149,104 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
         </span>
       </div>
 
-      {/* Padecimiento Actual */}
+      {/* Interrogatorio / Padecimiento Actual */}
       <div className="bg-gray-800 rounded-lg p-4">
-        <h4 className="font-medium text-white mb-2 flex items-center">
-          <FileText className="h-4 w-4 mr-2" />
-          Padecimiento Actual
-        </h4>
-        <p className="text-gray-300 whitespace-pre-wrap">{consultation.current_condition}</p>
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="font-medium text-white flex items-center">
+            <FileText className="h-4 w-4 mr-2" />
+            Interrogatorio / Padecimiento Actual
+            {interrogatorioStructured?.capture_method === 'template' && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-600 text-white">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Plantilla
+              </span>
+            )}
+            {interrogatorioStructured?.capture_method === 'free_text' && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
+                <FileEdit className="h-3 w-3 mr-1" />
+                Estilo Libre
+              </span>
+            )}
+          </h4>
+          <button
+            onClick={() => setInterrogatorioExpanded(!interrogatorioExpanded)}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            {interrogatorioExpanded ? (
+              <ChevronUp className="h-5 w-5" />
+            ) : (
+              <ChevronDown className="h-5 w-5" />
+            )}
+          </button>
+        </div>
+
+        {interrogatorioExpanded && (
+          <>
+            {/* Si hay datos estructurados de plantilla */}
+            {interrogatorioStructured?.template_name && interrogatorioStructured?.responses && (
+              <div className="space-y-4 mb-4">
+                <div className="bg-cyan-900/20 border border-cyan-700 rounded-lg p-3 mb-3">
+                  <p className="text-cyan-300 text-sm">
+                    <strong>Plantilla utilizada:</strong> {interrogatorioStructured.template_name}
+                  </p>
+                  {interrogatorioStructured.completed_at && (
+                    <p className="text-cyan-400 text-xs mt-1">
+                      Completada: {format(new Date(interrogatorioStructured.completed_at), "d 'de' MMMM, yyyy 'a las' HH:mm", { locale: es })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Renderizar respuestas estructuradas */}
+                {Object.entries(interrogatorioStructured.responses).map(([sectionId, sectionResponses]) => {
+                  if (!sectionResponses || Object.keys(sectionResponses).length === 0) return null;
+
+                  return (
+                    <div key={sectionId} className="bg-gray-700 rounded-lg p-4">
+                      <h5 className="font-medium text-white mb-3 text-sm uppercase tracking-wide">
+                        {sectionId.replace(/_/g, ' ')}
+                      </h5>
+                      <div className="space-y-2">
+                        {Object.entries(sectionResponses).map(([fieldId, response]) => {
+                          if (!response && response !== 0 && response !== false) return null;
+
+                          const responseText = Array.isArray(response)
+                            ? response.join(', ')
+                            : typeof response === 'boolean'
+                            ? response ? 'Sí' : 'No'
+                            : String(response);
+
+                          return (
+                            <div key={fieldId} className="border-l-2 border-cyan-400 pl-3">
+                              <div className="text-sm font-medium text-gray-300">
+                                {fieldId.replace(/_/g, ' ')}:
+                              </div>
+                              <div className="text-sm text-white mt-0.5">
+                                {responseText}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Mostrar texto siempre (ya sea generado o escrito libre) */}
+            {consultation.current_condition && (
+              <div className="bg-gray-900 rounded-lg p-4">
+                <p className="text-gray-300 whitespace-pre-wrap text-sm">
+                  {consultation.current_condition}
+                </p>
+              </div>
+            )}
+
+            {!consultation.current_condition && !interrogatorioStructured?.responses && (
+              <p className="text-gray-500 text-sm italic">No se registró interrogatorio</p>
+            )}
+          </>
+        )}
       </div>
 
       {/* Signos Vitales */}
@@ -213,79 +310,125 @@ export default function ConsultationDetails({ consultation }: ConsultationDetail
       {/* Exploración Física */}
       {physicalExam && Object.keys(physicalExam).length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4">
-          <h4 className="font-medium text-white mb-3 flex items-center">
-            <Brain className="h-4 w-4 mr-2" />
-            Exploración Física
-            {physicalExam.template_name && (
-              <span className="ml-2 text-xs bg-blue-600 text-blue-100 px-2 py-1 rounded">
-                {physicalExam.template_name}
-              </span>
-            )}
-          </h4>
-          
-          {/* Información general del examen */}
-          <div className="mb-4 flex flex-wrap gap-4 text-sm text-gray-400">
-            {physicalExam.exam_date && (
-              <div className="flex items-center">
-                <Calendar className="h-4 w-4 mr-1" />
-                Realizada el {format(new Date(physicalExam.exam_date), 'dd/MM/yyyy')}
-              </div>
-            )}
-            {physicalExam.exam_time && (
-              <div className="flex items-center">
-                <Clock className="h-4 w-4 mr-1" />
-                a las {physicalExam.exam_time}
-              </div>
-            )}
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="font-medium text-white flex items-center">
+              <Brain className="h-4 w-4 mr-2" />
+              Exploración Física
+              {physicalExam.capture_method === 'template' && physicalExam.template_name && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-600 text-white">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {physicalExam.template_name}
+                </span>
+              )}
+              {physicalExam.capture_method === 'free_text' && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
+                  <FileEdit className="h-3 w-3 mr-1" />
+                  Estilo Libre
+                </span>
+              )}
+            </h4>
+            <button
+              onClick={() => setExploracionExpanded(!exploracionExpanded)}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              {exploracionExpanded ? (
+                <ChevronUp className="h-5 w-5" />
+              ) : (
+                <ChevronDown className="h-5 w-5" />
+              )}
+            </button>
           </div>
 
-          {/* Signos vitales del examen físico (si son diferentes de los generales) */}
-          {physicalExam.vital_signs && Object.keys(physicalExam.vital_signs).length > 0 && (
-            <div className="mb-4 bg-blue-900/30 border border-blue-700 rounded-lg p-3">
-              <h5 className="font-medium text-blue-300 mb-2">Signos Vitales del Examen</h5>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {Object.entries(physicalExam.vital_signs).map(([key, value]) => {
-                  if (!value) return null;
-                  return (
-                    <div key={key} className="text-xs">
-                      <span className="text-gray-400">{formatVitalSignLabel(key)}:</span>
-                      <span className="text-white ml-1">{formatVitalSignValue(key, value)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Secciones del examen */}
-          {physicalExam.sections && Object.keys(physicalExam.sections).length > 0 ? (
-            <div className="space-y-3">
-              {Object.entries(physicalExam.sections).map(([key, section]) => 
-                renderPhysicalExamSection(key, section)
+          {exploracionExpanded && (
+            <>
+              {/* Si es texto libre, mostrar directamente */}
+              {physicalExam.capture_method === 'free_text' && physicalExam.free_text && (
+                <div className="bg-gray-900 rounded-lg p-4">
+                  <p className="text-gray-300 whitespace-pre-wrap text-sm">
+                    {physicalExam.free_text}
+                  </p>
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="text-center py-6 text-gray-400">
-              <Brain className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No se registraron datos de exploración específicos</p>
-            </div>
-          )}
 
-          {/* Observaciones generales */}
-          {(physicalExam.general_observations || physicalExam.generalObservations) && (
-            <div className="mt-4 bg-gray-700 rounded-lg p-4">
-              <h5 className="font-medium text-white mb-2">Observaciones Generales</h5>
-              <p className="text-sm text-gray-300 whitespace-pre-wrap">
-                {physicalExam.general_observations || physicalExam.generalObservations}
-              </p>
-            </div>
-          )}
+              {/* Si es plantilla, mostrar estructura */}
+              {physicalExam.capture_method === 'template' && (
+                <>
+                  {/* Información general del examen */}
+                  <div className="mb-4 flex flex-wrap gap-4 text-sm text-gray-400">
+                    {physicalExam.exam_date && (
+                      <div className="flex items-center">
+                        <Calendar className="h-4 w-4 mr-1" />
+                        Realizada el {format(new Date(physicalExam.exam_date), 'dd/MM/yyyy')}
+                      </div>
+                    )}
+                    {physicalExam.exam_time && (
+                      <div className="flex items-center">
+                        <Clock className="h-4 w-4 mr-1" />
+                        a las {physicalExam.exam_time}
+                      </div>
+                    )}
+                  </div>
 
-          {/* Información de la plantilla utilizada */}
-          {physicalExam.template_id && (
-            <div className="mt-3 text-xs text-gray-500">
-              ID de plantilla: {physicalExam.template_id}
-            </div>
+                  {/* Signos vitales del examen físico */}
+                  {physicalExam.vital_signs && Object.keys(physicalExam.vital_signs).length > 0 && (
+                    <div className="mb-4 bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+                      <h5 className="font-medium text-blue-300 mb-2">Signos Vitales del Examen</h5>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {Object.entries(physicalExam.vital_signs).map(([key, value]) => {
+                          if (!value) return null;
+                          return (
+                            <div key={key} className="text-xs">
+                              <span className="text-gray-400">{formatVitalSignLabel(key)}:</span>
+                              <span className="text-white ml-1">{formatVitalSignValue(key, value)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Secciones del examen */}
+                  {physicalExam.sections && Object.keys(physicalExam.sections).length > 0 ? (
+                    <div className="space-y-3">
+                      {Object.entries(physicalExam.sections).map(([key, section]) =>
+                        renderPhysicalExamSection(key, section)
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-400">
+                      <Brain className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No se registraron datos de exploración específicos</p>
+                    </div>
+                  )}
+
+                  {/* Observaciones generales */}
+                  {(physicalExam.general_observations || physicalExam.generalObservations) && (
+                    <div className="mt-4 bg-gray-700 rounded-lg p-4">
+                      <h5 className="font-medium text-white mb-2">Observaciones Generales</h5>
+                      <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                        {physicalExam.general_observations || physicalExam.generalObservations}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Información de la plantilla utilizada */}
+                  {physicalExam.template_id && (
+                    <div className="mt-3 text-xs text-gray-500">
+                      ID de plantilla: {physicalExam.template_id}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Compatibilidad con formato antiguo (sin capture_method) */}
+              {!physicalExam.capture_method && physicalExam.sections && (
+                <div className="space-y-3">
+                  {Object.entries(physicalExam.sections).map(([key, section]) =>
+                    renderPhysicalExamSection(key, section)
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

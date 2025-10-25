@@ -98,16 +98,52 @@ export interface EffectiveConfiguration extends ClinicConfiguration, Partial<Use
 }
 
 /**
- * Servicio para gestionar configuraciones de clínicas y preferencias de usuario
+ * Servicio para gestionar configuraciones de clínicas y preferencias de usuario.
+ *
+ * Este servicio maneja dos niveles de configuración:
+ * 1. Configuración base de clínica (establecida por administradores)
+ * 2. Preferencias personales por usuario (cada médico puede personalizar su experiencia)
+ *
+ * La configuración efectiva es la combinación de ambas, con las preferencias
+ * del usuario teniendo prioridad sobre la configuración base de la clínica.
+ *
+ * @example
+ * ```typescript
+ * // Obtener configuración efectiva para un usuario en una clínica
+ * const config = await ClinicConfigService.getEffectiveConfiguration(clinicId);
+ *
+ * // Actualizar configuración base de clínica (solo admins)
+ * await ClinicConfigService.updateClinicConfiguration(clinicId, {
+ *   default_consultation_duration: 30,
+ *   enable_teleconsultation: true
+ * });
+ *
+ * // Actualizar preferencias personales del usuario
+ * await ClinicConfigService.updateUserClinicPreferences(clinicId, {
+ *   preferred_consultation_duration: 45
+ * });
+ * ```
  */
 export class ClinicConfigService {
-  
+
   // =====================================================
   // CONFIGURACIÓN DE CLÍNICA (Admin)
   // =====================================================
-  
+
   /**
-   * Obtener configuración de una clínica
+   * Obtiene la configuración base de una clínica específica.
+   *
+   * @param clinicId - ID de la clínica
+   * @returns Configuración de la clínica o null si no existe
+   * @throws Error si hay un problema de conexión con la base de datos
+   *
+   * @example
+   * ```typescript
+   * const config = await ClinicConfigService.getClinicConfiguration('clinic-123');
+   * if (config) {
+   *   console.log(`Duración de consulta: ${config.default_consultation_duration} min`);
+   * }
+   * ```
    */
   static async getClinicConfiguration(clinicId: string): Promise<ClinicConfiguration | null> {
     try {
@@ -132,7 +168,27 @@ export class ClinicConfigService {
   }
 
   /**
-   * Actualizar configuración de clínica (solo admins)
+   * Actualiza la configuración base de una clínica.
+   *
+   * **Requiere permisos de administrador** de la clínica.
+   *
+   * @param clinicId - ID de la clínica
+   * @param updates - Campos de configuración a actualizar (parcial)
+   * @returns Configuración actualizada completa
+   * @throws Error si el usuario no tiene permisos de admin o si falla la actualización
+   *
+   * @example
+   * ```typescript
+   * const updatedConfig = await ClinicConfigService.updateClinicConfiguration('clinic-123', {
+   *   max_patients_per_day: 50,
+   *   enable_emergency_mode: true,
+   *   notification_settings: {
+   *     email_enabled: true,
+   *     appointment_reminders: true,
+   *     reminder_hours_before: 24
+   *   }
+   * });
+   * ```
    */
   static async updateClinicConfiguration(
     clinicId: string,
@@ -263,8 +319,30 @@ export class ClinicConfigService {
   // =====================================================
 
   /**
-   * Obtener configuración efectiva (combinada) para usuario en clínica
-   * Esta es la configuración que se debe aplicar al sistema
+   * Obtiene la configuración efectiva combinando la configuración base de la clínica
+   * con las preferencias personales del usuario autenticado.
+   *
+   * Esta es la función principal que debe usarse para obtener la configuración
+   * que se aplicará al sistema. Las preferencias del usuario tienen prioridad
+   * sobre la configuración base de la clínica.
+   *
+   * @param clinicId - ID de la clínica
+   * @returns Configuración efectiva combinada con indicador de personalización
+   * @throws Error si el usuario no está autenticado o si no existe configuración
+   *
+   * @example
+   * ```typescript
+   * const effectiveConfig = await ClinicConfigService.getEffectiveConfiguration('clinic-123');
+   *
+   * // La configuración efectiva incluye un flag indicando si tiene personalizaciones
+   * if (effectiveConfig.isUserCustomized) {
+   *   console.log('El usuario tiene preferencias personalizadas');
+   * }
+   *
+   * // Usar la duración de consulta efectiva (puede venir de preferencias del usuario o de la clínica)
+   * const duration = effectiveConfig.preferred_consultation_duration ||
+   *                  effectiveConfig.default_consultation_duration;
+   * ```
    */
   static async getEffectiveConfiguration(
     clinicId: string
