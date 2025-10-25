@@ -80,18 +80,6 @@ ON appointments (doctor_id, appointment_date, appointment_time)
 WHERE status NOT IN ('cancelled_by_clinic', 'cancelled_by_patient', 'no_show');
 
 -- =====================================================
--- MEDICAL RECORDS TABLE INDEXES
--- =====================================================
-
--- Index for medical records by patient
-CREATE INDEX IF NOT EXISTS idx_medical_records_patient
-ON medical_records (patient_id, created_at DESC);
-
--- Index for medical records by type
-CREATE INDEX IF NOT EXISTS idx_medical_records_type
-ON medical_records (record_type, created_at DESC);
-
--- =====================================================
 -- CLINIC USER RELATIONSHIPS INDEXES
 -- =====================================================
 
@@ -205,7 +193,6 @@ WHERE is_active = true;
 ANALYZE patients;
 ANALYZE consultations;
 ANALYZE appointments;
-ANALYZE medical_records;
 ANALYZE clinic_user_relationships;
 ANALYZE profiles;
 ANALYZE activity_logs;

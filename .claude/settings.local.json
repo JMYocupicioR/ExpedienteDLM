@@ -36,7 +36,8 @@
       "Bash(npm install:*)",
       "Bash(node:*)",
       "Bash(if not exist \"src\\test\" mkdir \"src\\test\")",
-      "Bash(npm run test:coverage:*)"
+      "Bash(npm run test:coverage:*)",
+      "Bash(printf \"Y\\n\")"
     ],
     "deny": [],
     "ask": []
