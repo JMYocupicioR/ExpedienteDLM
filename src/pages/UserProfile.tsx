@@ -56,7 +56,11 @@ export default function UserProfile() {
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [prescriptionIcon, setPrescriptionIcon] = useState<string | null>(null);
-  
+
+  // Clinic management
+  const [availableClinics, setAvailableClinics] = useState<Clinic[]>([]);
+  const [isIndependentDoctor, setIsIndependentDoctor] = useState(false);
+
   // Statistics and activity
   const [stats, setStats] = useState<ProfileStats>({
     totalPatients: 0,
@@ -78,7 +82,9 @@ export default function UserProfile() {
     languages: '',
     certifications: '',
     awards: '',
-    emergency_contact: ''
+    emergency_contact: '',
+    clinic_id: null as string | null,
+    is_independent: false
   });
 
   useEffect(() => {
@@ -111,6 +117,10 @@ export default function UserProfile() {
 
       setProfileData(enhancedProfile);
 
+      // Determine if user is independent doctor
+      const isIndependent = !enhancedProfile.clinic_id;
+      setIsIndependentDoctor(isIndependent);
+
       // Update edit form data
       setEditData({
         full_name: enhancedProfile.full_name || '',
@@ -121,8 +131,13 @@ export default function UserProfile() {
         languages: enhancedProfile.additional_info?.languages?.join(', ') || '',
         certifications: enhancedProfile.additional_info?.certifications?.join(', ') || '',
         awards: enhancedProfile.additional_info?.awards?.join(', ') || '',
-        emergency_contact: enhancedProfile.additional_info?.emergency_contact || ''
+        emergency_contact: enhancedProfile.additional_info?.emergency_contact || '',
+        clinic_id: enhancedProfile.clinic_id || null,
+        is_independent: isIndependent
       });
+
+      // Load available clinics
+      await loadAvailableClinics();
 
       // Load profile photos from storage
       const photoUrl = await getProfilePhotoUrl();
@@ -145,6 +160,21 @@ export default function UserProfile() {
   };
 
 
+
+  const loadAvailableClinics = async () => {
+    try {
+      const { data: clinics, error } = await supabase
+        .from('clinics')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+
+      setAvailableClinics(clinics || []);
+    } catch (err) {
+      console.error('Error loading clinics:', err);
+    }
+  };
 
   const loadProfileStats = async () => {
     try {
@@ -259,6 +289,8 @@ export default function UserProfile() {
       const updateData = {
         full_name: editData.full_name,
         phone: editData.phone,
+        // Actualizar clinic_id: null si es independiente, o el ID seleccionado
+        clinic_id: editData.is_independent ? null : editData.clinic_id,
         additional_info: {
           ...profileData?.additional_info,
           address: editData.address,
@@ -464,6 +496,84 @@ export default function UserProfile() {
               </div>
             </div>
 
+            {/* Clinic Association */}
+            {profileData.role === 'doctor' && (
+              <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Building className="h-5 w-5 text-cyan-400 mr-2" />
+                  Asociación de Clínica
+                </h3>
+
+                {editing ? (
+                  <div className="space-y-4">
+                    {/* Toggle Independent Doctor */}
+                    <div className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
+                      <div className="flex items-center">
+                        <User className="h-5 w-5 text-cyan-400 mr-3" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-200">Médico Independiente</p>
+                          <p className="text-xs text-gray-400">Trabajar sin clínica asignada</p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editData.is_independent}
+                          onChange={(e) => setEditData(prev => ({
+                            ...prev,
+                            is_independent: e.target.checked,
+                            clinic_id: e.target.checked ? null : prev.clinic_id
+                          }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Clinic Selector */}
+                    {!editData.is_independent && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Seleccionar Clínica
+                        </label>
+                        <select
+                          value={editData.clinic_id || ''}
+                          onChange={(e) => setEditData(prev => ({
+                            ...prev,
+                            clinic_id: e.target.value || null
+                          }))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        >
+                          <option value="">Sin clínica</option>
+                          {availableClinics.map(clinic => (
+                            <option key={clinic.id} value={clinic.id}>
+                              {clinic.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    {isIndependentDoctor ? (
+                      <>
+                        <User className="h-4 w-4 text-cyan-400 mr-3" />
+                        <span className="text-cyan-400">Médico Independiente</span>
+                      </>
+                    ) : profileData.clinic ? (
+                      <>
+                        <Building className="h-4 w-4 text-gray-400 mr-3" />
+                        <span className="text-gray-300">{profileData.clinic.name}</span>
+                      </>
+                    ) : (
+                      <span className="text-gray-400">Sin clínica asignada</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Prescription Icon */}
             {(profileData.role === 'doctor' || editing) && (
               <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
@@ -471,7 +581,7 @@ export default function UserProfile() {
                   <FileText className="h-5 w-5 text-cyan-400 mr-2" />
                   Icono para Recetas
                 </h3>
-                
+
                 <div className="text-center">
                   <div className="mb-4 flex justify-center">
                     <PhotoUploader
@@ -485,7 +595,7 @@ export default function UserProfile() {
                       placeholder={<FileText className="h-8 w-8 text-gray-400" />}
                     />
                   </div>
-                  
+
                   <p className="text-xs text-gray-400">
                     Este icono aparecerá en tus recetas médicas
                   </p>

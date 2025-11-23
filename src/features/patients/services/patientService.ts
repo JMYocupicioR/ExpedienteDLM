@@ -41,12 +41,12 @@ export async function getPatientById(patientId: string, clinicId?: string): Prom
  * Esta función es el único punto de entrada para la creación de pacientes.
  * Se encarga de limpiar los datos y devolver el objeto completo del paciente creado.
  * @param patientData - Los datos del paciente a crear.
- * @param clinicId - El ID de la clínica a la que pertenece el paciente.
+ * @param clinicId - El ID de la clínica a la que pertenece el paciente (opcional para médicos independientes).
  * @returns El objeto completo del paciente recién creado.
  */
 export async function createPatient(
   patientData: PatientInsert,
-  clinicId: string
+  clinicId?: string | null
 ): Promise<Patient> {
   // 1. Limpieza y preparación de datos
   const cleanedData = {
@@ -57,7 +57,8 @@ export async function createPatient(
     birth_date: patientData.birth_date || null,
     gender: patientData.gender || null,
     address: patientData.address || null,
-    clinic_id: clinicId,
+    // clinic_id puede ser NULL para médicos independientes
+    clinic_id: clinicId || patientData.clinic_id || null,
     primary_doctor_id: patientData.primary_doctor_id || null,
     is_active: patientData.is_active !== undefined ? patientData.is_active : true,
     // Campos JSON como objetos vacíos si no se proporcionan

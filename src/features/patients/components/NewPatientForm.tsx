@@ -29,10 +29,14 @@ export default function NewPatientForm({
   // Usar hook simple como fallback si ClinicContext falla
   const { activeClinic: contextClinic, loading: clinicsLoading, error: clinicError } = useClinic();
   const { activeClinic: simpleClinic, loading: simpleLoading, error: simpleError } = useSimpleClinic();
-  
+
   // Usar el contexto si está disponible, sino usar el hook simple
   const activeClinic = contextClinic || simpleClinic;
-  
+
+  // Estado para detectar si el médico tiene clínica asignada en su perfil
+  const [userHasClinic, setUserHasClinic] = useState<boolean | null>(null);
+  const [isIndependentDoctor, setIsIndependentDoctor] = useState(false);
+
   console.log('NewPatientForm - contextClinic:', contextClinic?.name || 'null');
   console.log('NewPatientForm - simpleClinic:', simpleClinic?.name || 'null');
   console.log('NewPatientForm - activeClinic final:', activeClinic?.name || 'null');
@@ -56,6 +60,33 @@ export default function NewPatientForm({
     notes: '',
   });
 
+  // Verificar si el usuario tiene clínica en su perfil
+  useEffect(() => {
+    async function checkUserClinic() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('clinic_id')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          const hasClinic = !!profile.clinic_id;
+          setUserHasClinic(hasClinic);
+          // Si no tiene clínica en su perfil, es médico independiente
+          setIsIndependentDoctor(!hasClinic);
+        }
+      } catch (error) {
+        console.error('Error checking user clinic:', error);
+      }
+    }
+
+    checkUserClinic();
+  }, []);
+
   useEffect(() => {
     if (initialName) {
       setFormData(prev => ({ ...prev, full_name: initialName }));
@@ -74,28 +105,34 @@ export default function NewPatientForm({
   };
 
   const checkSocialSecurityExists = async (ssn: string) => {
-    if (!ssn || ssn.length < 10 || !activeClinic) return;
+    if (!ssn || ssn.length < 10) return;
+    // Solo verificar si hay clínica activa (médicos de clínica)
+    // Médicos independientes no necesitan esta validación por clínica
+    if (!activeClinic && !isIndependentDoctor) return;
 
     setCheckingCurp(true);
     try {
-      // Use service layer instead of direct query for better security
-      const patients = await searchPatients(ssn, activeClinic.id, 1);
-      const existingPatient = patients.find(p => 
-        p.social_security_number?.toUpperCase() === ssn.toUpperCase()
-      );
-
-      if (existingPatient) {
-        setExistingPatient({
-          id: existingPatient.id,
-          name: existingPatient.full_name,
-        });
-        addWarning(
-          'Paciente existente',
-          `El paciente ${existingPatient.full_name} ya está registrado con este número de seguridad social.`
+      // Para médicos de clínica, buscar en la clínica
+      if (activeClinic) {
+        const patients = await searchPatients(ssn, activeClinic.id, 1);
+        const existingPatient = patients.find(p =>
+          p.social_security_number?.toUpperCase() === ssn.toUpperCase()
         );
-      } else {
-        setExistingPatient(null);
+
+        if (existingPatient) {
+          setExistingPatient({
+            id: existingPatient.id,
+            name: existingPatient.full_name,
+          });
+          addWarning(
+            'Paciente existente',
+            `El paciente ${existingPatient.full_name} ya está registrado con este número de seguridad social.`
+          );
+        } else {
+          setExistingPatient(null);
+        }
       }
+      // Para médicos independientes, la validación se hará en el backend
     } catch (error) {
       // Error log removed for security;
     } finally {
@@ -120,7 +157,8 @@ export default function NewPatientForm({
       }
     }
 
-    if (!activeClinic) {
+    // Solo validar clínica si NO es médico independiente
+    if (!isIndependentDoctor && !activeClinic) {
       newErrors.clinic = 'No hay una clínica activa seleccionada.';
     }
 
@@ -148,8 +186,14 @@ export default function NewPatientForm({
 
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser || !activeClinic) {
-        addError('Error de Sesión', 'No se pudo verificar la sesión de usuario o la clínica activa.');
+      if (!currentUser) {
+        addError('Error de Sesión', 'No se pudo verificar la sesión de usuario.');
+        return;
+      }
+
+      // Validación adicional para médicos de clínica
+      if (!isIndependentDoctor && !activeClinic) {
+        addError('Error de Clínica', 'No hay una clínica activa seleccionada.');
         return;
       }
 
@@ -165,12 +209,14 @@ export default function NewPatientForm({
         emergency_contact: formData.emergency_contact || null,
         insurance_info: formData.insurance_info || null,
         notes: formData.notes?.trim() || null,
-        clinic_id: activeClinic.id,
+        // Para médicos independientes, clinic_id es NULL
+        clinic_id: isIndependentDoctor ? null : activeClinic!.id,
         primary_doctor_id: currentUser.id,
         is_active: true,
       };
 
       console.log('Creating patient with data:', patientData);
+      console.log('Is independent doctor:', isIndependentDoctor);
 
       // Usamos la mutación de React Query
       createPatientMutation.mutate(patientData, {
@@ -237,13 +283,20 @@ export default function NewPatientForm({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className='p-4 lg:p-6 space-y-6 overflow-y-auto flex-1'>
-          {/* Clínica Activa */}
+          {/* Clínica Activa o Médico Independiente */}
           <div>
             <label className='block text-sm font-medium text-gray-300 mb-2'>
-              Registrando en Clínica
+              {isIndependentDoctor ? 'Médico Independiente' : 'Registrando en Clínica'}
             </label>
             <div className='w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white flex items-center'>
-              {clinicsLoading ? (
+              {userHasClinic === null ? (
+                <span>Verificando perfil...</span>
+              ) : isIndependentDoctor ? (
+                <>
+                  <User className='h-4 w-4 mr-2 text-cyan-400' />
+                  <span className='text-cyan-400'>Paciente personal (sin clínica)</span>
+                </>
+              ) : clinicsLoading ? (
                 <span>Cargando clínica...</span>
               ) : clinicError ? (
                 <span className='text-red-400'>Error al cargar clínica</span>

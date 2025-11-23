@@ -33,18 +33,19 @@ export const usePatients = (): UsePatientsResult => {
 
   const createPatientMutation = useMutation<Patient, Error, PatientInsert>({
     mutationFn: (patientData: PatientInsert) => {
-      if (!activeClinic?.id) {
-        throw new Error('No hay una clínica activa para crear el paciente.');
-      }
+      // Para médicos independientes, clinic_id será null en patientData
+      // Para médicos de clínica, usamos activeClinic.id si está disponible
+      const clinicId = patientData.clinic_id || activeClinic?.id || null;
+
       // Llamamos a nuestro servicio refactorizado
-      return createPatientSvc(patientData, activeClinic.id);
+      return createPatientSvc(patientData, clinicId);
     },
     onSuccess: (newPatient) => {
       // Sensitive log removed for security;
       // Invalidación precisa: solo la lista de pacientes de la clínica activa
       queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
       // Opcional: también podemos actualizar la caché manualmente para una respuesta instantánea
-      // queryClient.setQueryData(['patients', activeClinic?.id], (oldData: Patient[] | undefined) => 
+      // queryClient.setQueryData(['patients', activeClinic?.id], (oldData: Patient[] | undefined) =>
       //   oldData ? [...oldData, newPatient] : [newPatient]
       // );
     },
