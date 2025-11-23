@@ -10,10 +10,10 @@
 -- PASO 0: Crear Funciones RLS Necesarias
 -- =====================================================
 
--- Eliminar función is_user_in_clinic si existe
-DROP FUNCTION IF EXISTS public.is_user_in_clinic(uuid);
-DROP FUNCTION IF EXISTS public.is_user_in_clinic(check_clinic_id uuid);
-DROP FUNCTION IF EXISTS public.is_user_in_clinic(target_clinic_id uuid);
+-- Eliminar función is_user_in_clinic si existe (usar CASCADE para eliminar dependencias)
+DROP FUNCTION IF EXISTS public.is_user_in_clinic(uuid) CASCADE;
+DROP FUNCTION IF EXISTS public.is_user_in_clinic(check_clinic_id uuid) CASCADE;
+DROP FUNCTION IF EXISTS public.is_user_in_clinic(target_clinic_id uuid) CASCADE;
 
 -- FUNCIÓN: is_user_in_clinic
 -- Descripción: Verifica si el usuario actual pertenece a una clínica específica

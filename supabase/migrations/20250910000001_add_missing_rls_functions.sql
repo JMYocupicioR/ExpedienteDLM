@@ -96,7 +96,7 @@ BEGIN
         DROP FUNCTION IF EXISTS public.check_patient_exists_by_social_security(uuid, text);
         DROP FUNCTION IF EXISTS public.check_patient_exists_by_curp(uuid, text);
 
-        -- Crear la función actualizada
+        -- Crear la función actualizada (usando curp en lugar de social_security_number)
         CREATE FUNCTION public.check_patient_exists_by_social_security(
           p_clinic_id uuid,
           p_social_security_number text
@@ -111,9 +111,9 @@ BEGIN
               SELECT 1
               FROM public.patients
               WHERE clinic_id = p_clinic_id
-                AND social_security_number = UPPER(TRIM(p_social_security_number))
-                AND social_security_number IS NOT NULL
-                AND social_security_number != ''
+                AND curp = UPPER(TRIM(p_social_security_number))
+                AND curp IS NOT NULL
+                AND curp != ''
             ) THEN
               json_build_object(
                 'exists', true,
@@ -121,7 +121,7 @@ BEGIN
                   SELECT id
                   FROM public.patients
                   WHERE clinic_id = p_clinic_id
-                    AND social_security_number = UPPER(TRIM(p_social_security_number))
+                    AND curp = UPPER(TRIM(p_social_security_number))
                   LIMIT 1
                 )
               )
@@ -358,16 +358,16 @@ BEGIN
         -- Eliminar la restricción antigua de CURP
         ALTER TABLE public.patients DROP CONSTRAINT IF EXISTS unique_clinic_curp;
 
-        -- Crear nueva restricción para social_security_number SOLO si no existe
+        -- Crear nueva restricción para curp SOLO si no existe
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.table_constraints
-          WHERE constraint_name = 'unique_clinic_social_security'
+          WHERE constraint_name = 'unique_clinic_curp'
           AND table_name = 'patients'
           AND table_schema = 'public'
         ) THEN
           ALTER TABLE public.patients
-          ADD CONSTRAINT unique_clinic_social_security
-          UNIQUE (clinic_id, social_security_number);
+          ADD CONSTRAINT unique_clinic_curp
+          UNIQUE (clinic_id, curp);
         END IF;
     END IF;
 END $$;

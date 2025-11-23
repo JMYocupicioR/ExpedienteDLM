@@ -4,20 +4,26 @@
 -- Descripcion: Indices para optimizar queries frecuentes
 -- =====================================================
 
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- =====================================================
 -- PATIENTS TABLE INDEXES
 -- =====================================================
 
 -- Index for patient search by name (case-insensitive)
 -- Using pg_trgm extension for fuzzy text search
-CREATE INDEX IF NOT EXISTS idx_patients_full_name_trgm
+CREATE INDEX IF NOT EXISTS idx_patients_first_name_trgm
 ON patients
-USING gin (full_name extensions.gin_trgm_ops);
+USING gin (first_name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_patients_last_name_trgm
+ON patients
+USING gin (last_name gin_trgm_ops);
 
 -- Index for patient lookup by clinic
-CREATE INDEX IF NOT EXISTS idx_patients_clinic_id_active
-ON patients (clinic_id, is_active)
-WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_patients_clinic_id
+ON patients (clinic_id);
 
 -- Index for patient lookup by doctor
 CREATE INDEX IF NOT EXISTS idx_patients_primary_doctor
@@ -26,8 +32,8 @@ WHERE primary_doctor_id IS NOT NULL;
 
 -- Index for patient search by CURP
 CREATE INDEX IF NOT EXISTS idx_patients_curp
-ON patients (social_security_number)
-WHERE social_security_number IS NOT NULL;
+ON patients (curp)
+WHERE curp IS NOT NULL;
 
 -- Composite index for common patient queries
 CREATE INDEX IF NOT EXISTS idx_patients_clinic_created
@@ -56,28 +62,29 @@ ON consultations (patient_id, doctor_id, created_at DESC);
 -- =====================================================
 -- APPOINTMENTS TABLE INDEXES
 -- =====================================================
+-- Note: Appointments table indexes will be created when appointments system is enabled
 
 -- Index for appointments by patient
-CREATE INDEX IF NOT EXISTS idx_appointments_patient_date
-ON appointments (patient_id, appointment_date DESC, appointment_time DESC);
+-- CREATE INDEX IF NOT EXISTS idx_appointments_patient_date
+-- ON appointments (patient_id, appointment_date DESC, appointment_time DESC);
 
 -- Index for appointments by doctor
-CREATE INDEX IF NOT EXISTS idx_appointments_doctor_date
-ON appointments (doctor_id, appointment_date DESC, appointment_time DESC);
+-- CREATE INDEX IF NOT EXISTS idx_appointments_doctor_date
+-- ON appointments (doctor_id, appointment_date DESC, appointment_time DESC);
 
 -- Index for appointments by clinic
-CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date
-ON appointments (clinic_id, appointment_date DESC);
+-- CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date
+-- ON appointments (clinic_id, appointment_date DESC);
 
 -- Index for appointment status filtering
-CREATE INDEX IF NOT EXISTS idx_appointments_status_date
-ON appointments (status, appointment_date DESC)
-WHERE status IN ('scheduled', 'confirmed_by_patient');
+-- CREATE INDEX IF NOT EXISTS idx_appointments_status_date
+-- ON appointments (status, appointment_date DESC)
+-- WHERE status IN ('scheduled', 'confirmed_by_patient');
 
 -- Index for conflict detection (overlapping appointments)
-CREATE INDEX IF NOT EXISTS idx_appointments_doctor_datetime
-ON appointments (doctor_id, appointment_date, appointment_time)
-WHERE status NOT IN ('cancelled_by_clinic', 'cancelled_by_patient', 'no_show');
+-- CREATE INDEX IF NOT EXISTS idx_appointments_doctor_datetime
+-- ON appointments (doctor_id, appointment_date, appointment_time)
+-- WHERE status NOT IN ('cancelled_by_clinic', 'cancelled_by_patient', 'no_show');
 
 -- =====================================================
 -- CLINIC USER RELATIONSHIPS INDEXES
@@ -95,7 +102,7 @@ WHERE is_active = true AND status = 'approved';
 
 -- Index for pending access requests
 CREATE INDEX IF NOT EXISTS idx_clinic_users_pending
-ON clinic_user_relationships (clinic_id, status, requested_at DESC)
+ON clinic_user_relationships (clinic_id, status, created_at DESC)
 WHERE status = 'pending';
 
 -- =====================================================
@@ -110,42 +117,44 @@ WHERE email IS NOT NULL;
 -- Index for profile search by name
 CREATE INDEX IF NOT EXISTS idx_profiles_full_name_trgm
 ON profiles
-USING gin (full_name extensions.gin_trgm_ops);
+USING gin (full_name gin_trgm_ops);
 
--- Index for doctors by specialty
-CREATE INDEX IF NOT EXISTS idx_profiles_specialty
-ON profiles (specialty_id)
-WHERE specialty_id IS NOT NULL;
+-- Index for doctors by specialty (commented out - specialty_id doesn't exist)
+-- CREATE INDEX IF NOT EXISTS idx_profiles_specialty
+-- ON profiles (specialty_id)
+-- WHERE specialty_id IS NOT NULL;
 
 -- =====================================================
 -- ACTIVITY LOGS TABLE INDEXES
 -- =====================================================
+-- Note: Activity logs table indexes will be created when activity logging is enabled
 
 -- Index for activity logs by user
-CREATE INDEX IF NOT EXISTS idx_activity_logs_user_date
-ON activity_logs (user_id, created_at DESC);
+-- CREATE INDEX IF NOT EXISTS idx_activity_logs_user_date
+-- ON activity_logs (user_id, created_at DESC);
 
 -- Index for activity logs by clinic
-CREATE INDEX IF NOT EXISTS idx_activity_logs_clinic_date
-ON activity_logs (clinic_id, created_at DESC)
-WHERE clinic_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_activity_logs_clinic_date
+-- ON activity_logs (clinic_id, created_at DESC)
+-- WHERE clinic_id IS NOT NULL;
 
 -- Index for activity logs by action type
-CREATE INDEX IF NOT EXISTS idx_activity_logs_action_date
-ON activity_logs (action_type, created_at DESC);
+-- CREATE INDEX IF NOT EXISTS idx_activity_logs_action_date
+-- ON activity_logs (action_type, created_at DESC);
 
 -- =====================================================
 -- MEDICAL TEST FILES INDEXES
 -- =====================================================
+-- Note: Medical test files table indexes will be created when medical test system is enabled
 
 -- Index for files by medical test
-CREATE INDEX IF NOT EXISTS idx_medical_files_test
-ON medical_test_files (medical_test_id, created_at DESC);
+-- CREATE INDEX IF NOT EXISTS idx_medical_files_test
+-- ON medical_test_files (medical_test_id, created_at DESC);
 
 -- Index for files by hash (duplicate detection)
-CREATE INDEX IF NOT EXISTS idx_medical_files_hash
-ON medical_test_files (file_hash)
-WHERE file_hash IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_medical_files_hash
+-- ON medical_test_files (file_hash)
+-- WHERE file_hash IS NOT NULL;
 
 -- =====================================================
 -- CLINIC CONFIGURATIONS INDEXES
@@ -170,20 +179,21 @@ ON user_clinic_preferences (user_id, clinic_id);
 -- =====================================================
 -- PRESCRIPTION VISUAL LAYOUTS INDEXES
 -- =====================================================
+-- Note: Prescription visual layouts table indexes will be created when prescription system is enabled
 
 -- Index for layouts by user
-CREATE INDEX IF NOT EXISTS idx_prescription_layouts_user
-ON prescription_visual_layouts (user_id, created_at DESC);
+-- CREATE INDEX IF NOT EXISTS idx_prescription_layouts_user
+-- ON prescription_visual_layouts (user_id, created_at DESC);
 
 -- Index for public layouts
-CREATE INDEX IF NOT EXISTS idx_prescription_layouts_public
-ON prescription_visual_layouts (is_public, created_at DESC)
-WHERE is_public = true;
+-- CREATE INDEX IF NOT EXISTS idx_prescription_layouts_public
+-- ON prescription_visual_layouts (is_public, created_at DESC)
+-- WHERE is_public = true;
 
 -- Index for active layouts
-CREATE INDEX IF NOT EXISTS idx_prescription_layouts_active
-ON prescription_visual_layouts (user_id, is_active)
-WHERE is_active = true;
+-- CREATE INDEX IF NOT EXISTS idx_prescription_layouts_active
+-- ON prescription_visual_layouts (user_id, is_active)
+-- WHERE is_active = true;
 
 -- =====================================================
 -- ANALYZE TABLES FOR QUERY PLANNER
@@ -192,11 +202,11 @@ WHERE is_active = true;
 -- Update statistics for query planner optimization
 ANALYZE patients;
 ANALYZE consultations;
-ANALYZE appointments;
+-- ANALYZE appointments; -- Table doesn't exist yet
 ANALYZE clinic_user_relationships;
 ANALYZE profiles;
-ANALYZE activity_logs;
-ANALYZE medical_test_files;
+-- ANALYZE activity_logs; -- Table doesn't exist yet
+-- ANALYZE medical_test_files; -- Table doesn't exist yet
 ANALYZE clinic_configurations;
 ANALYZE user_clinic_preferences;
 

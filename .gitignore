@@ -77,3 +77,7 @@ fix-*.mjs
 fix-*.ps1
 migrate-*.ps1
 *.sql.backup
+
+# Archivos de configuración con secretos
+CONFIGURACION_HCAPTCHA_LOCALHOST.md
+CREAR_ARCHIVO_ENV.md

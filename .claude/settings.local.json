@@ -37,7 +37,12 @@
       "Bash(node:*)",
       "Bash(if not exist \"src\\test\" mkdir \"src\\test\")",
       "Bash(npm run test:coverage:*)",
-      "Bash(printf \"Y\\n\")"
+      "Bash(printf \"Y\\n\")",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)",
+      "Bash(npx supabase:*)",
+      "Bash(src/types/database.types.ts)",
+      "Bash(temp_types.ts)"
     ],
     "deny": [],
     "ask": []

@@ -47,7 +47,7 @@ export default function NewPatientForm({
   const [existingPatient, setExistingPatient] = useState<{ id: string; name: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const [formData, setFormData] = useState<Omit<PatientInsert, 'clinic_id' | 'primary_doctor_id'>>({
+  const [formData, setFormData] = useState({
     full_name: initialName,
     social_security_number: '',
     phone: '',
@@ -199,12 +199,12 @@ export default function NewPatientForm({
 
       // Preparamos el objeto del paciente para la inserción
       const patientData: PatientInsert = {
-        full_name: formData.full_name.trim(),
+        full_name: formData.full_name.trim() || null,
         social_security_number: formData.social_security_number?.trim() || null,
         email: formData.email?.trim() || null,
         phone: formData.phone?.trim() || null,
         birth_date: formData.birth_date || null,
-        gender: formData.gender || '',
+        gender: formData.gender?.trim() || null,
         address: formData.address?.trim() || null,
         emergency_contact: formData.emergency_contact || null,
         insurance_info: formData.insurance_info || null,

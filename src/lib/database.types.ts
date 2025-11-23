@@ -238,9 +238,11 @@ export interface Database {
       patients: {
         Row: {
           id: string
-          full_name: string
-          birth_date: string
-          gender: string
+          first_name: string | null
+          last_name: string | null
+          full_name: string | null
+          birth_date: string | null
+          gender: string | null
           email: string | null
           phone: string | null
           address: string | null
@@ -249,18 +251,24 @@ export interface Database {
           social_security_number: string | null
           created_at: string
           updated_at: string | null
-          clinic_id: string
-          primary_doctor_id: string | null
+          clinic_id: string | null
+          primary_doctor_id: string
           patient_user_id: string | null
-          insurance_info: Json
-          emergency_contact: Json
+          insurance_info: Json | null
+          emergency_contact: Json | null
           is_active: boolean
+          curp: string | null
+          notes: string | null
+          allergies: Json | null
+          medical_history: Json | null
         }
         Insert: {
           id?: string
-          full_name: string
-          birth_date: string
-          gender: string
+          first_name?: string | null
+          last_name?: string | null
+          full_name?: string | null
+          birth_date?: string | null
+          gender?: string | null
           email?: string | null
           phone?: string | null
           address?: string | null
@@ -269,18 +277,24 @@ export interface Database {
           social_security_number?: string | null
           created_at?: string
           updated_at?: string | null
-          clinic_id?: string
-          primary_doctor_id?: string | null
+          clinic_id?: string | null
+          primary_doctor_id: string
           patient_user_id?: string | null
-          insurance_info?: Json
-          emergency_contact?: Json
+          insurance_info?: Json | null
+          emergency_contact?: Json | null
           is_active?: boolean
+          curp?: string | null
+          notes?: string | null
+          allergies?: Json | null
+          medical_history?: Json | null
         }
         Update: {
           id?: string
-          full_name?: string
-          birth_date?: string
-          gender?: string
+          first_name?: string | null
+          last_name?: string | null
+          full_name?: string | null
+          birth_date?: string | null
+          gender?: string | null
           email?: string | null
           phone?: string | null
           address?: string | null
@@ -289,12 +303,16 @@ export interface Database {
           social_security_number?: string | null
           created_at?: string
           updated_at?: string | null
-          clinic_id?: string
+          clinic_id?: string | null
           primary_doctor_id?: string | null
           patient_user_id?: string | null
-          insurance_info?: Json
-          emergency_contact?: Json
+          insurance_info?: Json | null
+          emergency_contact?: Json | null
           is_active?: boolean
+          curp?: string | null
+          notes?: string | null
+          allergies?: Json | null
+          medical_history?: Json | null
         }
       }
       patient_registration_tokens: {

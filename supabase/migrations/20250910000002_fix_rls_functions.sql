@@ -13,7 +13,20 @@ DO $$
 BEGIN
     -- Solo si clinic_user_relationships existe
     IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'clinic_user_relationships') THEN
-        -- Eliminar función is_user_in_clinic si existe
+        -- Primero eliminar todas las políticas que dependen de la función
+        DROP POLICY IF EXISTS "patients_select_own_clinic" ON public.patients;
+        DROP POLICY IF EXISTS "patients_update_own_clinic" ON public.patients;
+        DROP POLICY IF EXISTS "patients_delete_own_clinic" ON public.patients;
+        DROP POLICY IF EXISTS "medical_records_select_own_clinic" ON public.medical_records;
+        DROP POLICY IF EXISTS "medical_records_insert_own_clinic" ON public.medical_records;
+        DROP POLICY IF EXISTS "medical_records_update_own_clinic" ON public.medical_records;
+        DROP POLICY IF EXISTS "medical_records_delete_own_clinic" ON public.medical_records;
+        DROP POLICY IF EXISTS "prescriptions_select_own_clinic" ON public.prescriptions;
+        DROP POLICY IF EXISTS "prescriptions_insert_own_clinic" ON public.prescriptions;
+        DROP POLICY IF EXISTS "prescriptions_update_own_clinic" ON public.prescriptions;
+        DROP POLICY IF EXISTS "prescriptions_delete_own_clinic" ON public.prescriptions;
+        
+        -- Ahora eliminar función is_user_in_clinic si existe
         DROP FUNCTION IF EXISTS public.is_user_in_clinic(uuid);
         DROP FUNCTION IF EXISTS public.is_user_in_clinic(check_clinic_id uuid);
         DROP FUNCTION IF EXISTS public.is_user_in_clinic(target_clinic_id uuid);
@@ -63,7 +76,7 @@ BEGIN
         DROP FUNCTION IF EXISTS public.check_patient_exists_by_curp(uuid, text);
 
         -- FUNCIÓN: check_patient_exists_by_social_security
-        -- Descripción: Verifica si existe un paciente con el número de seguridad social
+        -- Descripción: Verifica si existe un paciente con el CURP
         -- en una clínica específica, respetando RLS
         CREATE FUNCTION public.check_patient_exists_by_social_security(
           p_clinic_id uuid,
@@ -79,9 +92,9 @@ BEGIN
               SELECT 1
               FROM public.patients
               WHERE clinic_id = p_clinic_id
-                AND social_security_number = UPPER(TRIM(p_social_security_number))
-                AND social_security_number IS NOT NULL
-                AND social_security_number != ''
+                AND curp = UPPER(TRIM(p_social_security_number))
+                AND curp IS NOT NULL
+                AND curp != ''
             ) THEN
               json_build_object(
                 'exists', true,
@@ -89,7 +102,7 @@ BEGIN
                   SELECT id
                   FROM public.patients
                   WHERE clinic_id = p_clinic_id
-                    AND social_security_number = UPPER(TRIM(p_social_security_number))
+                    AND curp = UPPER(TRIM(p_social_security_number))
                   LIMIT 1
                 )
               )

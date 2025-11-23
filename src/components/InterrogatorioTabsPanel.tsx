@@ -408,13 +408,15 @@ Ejemplo:
       />
 
       {/* Template Runner Modal */}
-      <TemplateRunnerModal
-        template={templateRunnerModal.template!}
-        isOpen={templateRunnerModal.isOpen}
-        onClose={() => setTemplateRunnerModal({ isOpen: false, template: null })}
-        onComplete={handleInterrogatorioComplete}
-        initialResponses={structuredData?.responses}
-      />
+      {templateRunnerModal.isOpen && templateRunnerModal.template && (
+        <TemplateRunnerModal
+          template={templateRunnerModal.template}
+          isOpen={templateRunnerModal.isOpen}
+          onClose={() => setTemplateRunnerModal({ isOpen: false, template: null })}
+          onComplete={handleInterrogatorioComplete}
+          initialResponses={structuredData?.responses}
+        />
+      )}
     </div>
   );
 }
