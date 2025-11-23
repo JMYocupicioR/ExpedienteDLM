@@ -229,6 +229,8 @@ export default function NewPatientForm({
         },
         onError: (error) => {
           // El error ya se maneja en el servicio (ej. CURP duplicado)
+          console.error('Error creating patient:', error);
+          console.error('Patient data sent:', patientData);
           addError('Error al crear', error.message);
         },
       });
