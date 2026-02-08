@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useClinicConfiguration } from '@/hooks/useClinicConfiguration';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { Save, AlertCircle, CheckCircle, Settings, Clock, Bell, Shield, DollarSign, Palette, Building } from 'lucide-react';
 import type { NotificationSettings } from '@/lib/services/clinic-config-service';
 

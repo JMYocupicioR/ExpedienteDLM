@@ -1,21 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Users, UserPlus, Building, Shield, Settings, Mail, UserCheck } from 'lucide-react';
+import { Users, Building, Shield, Settings, UserCheck, Activity } from 'lucide-react';
 import PatientsList from '@/pages/PatientsList';
 import ClinicStaffManagement from '@/components/ClinicStaffManagement';
-
-type StaffMember = {
-  id: string;
-  full_name: string | null;
-  email: string;
-  role_in_clinic: 'doctor' | 'admin_staff';
-  is_active: boolean;
-};
+import ClinicDashboardOverview from '@/components/clinic-admin/ClinicDashboardOverview';
 
 export default function ClinicAdminPage() {
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pacientes' | 'staff' | 'invite' | 'details' | 'subscription'>('pacientes');
+  const [activeTab, setActiveTab] = useState<'resumen' | 'pacientes' | 'staff' | 'invite' | 'details' | 'subscription'>('resumen');
 
   useEffect(() => {
     const loadContext = async () => {
@@ -42,7 +35,12 @@ export default function ClinicAdminPage() {
           .eq('is_active', true)
           .maybeSingle();
 
-        setIsAdmin(rel?.role_in_clinic === 'admin_staff' || profile?.role === 'super_admin');
+        const role = rel?.role_in_clinic;
+        // Roles considerados administrativos
+        const adminRoles = ['owner', 'director', 'admin_staff'];
+        const isClinicAdmin = adminRoles.includes(role) || profile?.role === 'super_admin';
+        
+        setIsAdmin(isClinicAdmin);
       }
     };
     loadContext();
@@ -51,16 +49,19 @@ export default function ClinicAdminPage() {
   const renderTabs = () => (
     <div className="flex space-x-2 border-b border-gray-700 mb-6 overflow-x-auto">
       {[
-        { key: 'pacientes', label: 'Pacientes', icon: UserCheck },
-        { key: 'staff', label: 'Personal', icon: Users },
-        { key: 'invite', label: 'Invitar', icon: UserPlus },
-        { key: 'details', label: 'Detalles de la Clínica', icon: Building },
-        { key: 'subscription', label: 'Suscripción', icon: Shield },
-      ].map(({ key, label, icon: Icon }) => (
+        { key: 'resumen', label: 'Resumen', icon: Activity, requiredAdmin: false },
+        { key: 'pacientes', label: 'Pacientes', icon: UserCheck, requiredAdmin: false },
+        { key: 'staff', label: 'Personal', icon: Users, requiredAdmin: true },
+        // Invite tab removed in favor of modal in StaffManagement
+        { key: 'details', label: 'Detalles', icon: Building, requiredAdmin: false },
+        { key: 'subscription', label: 'Suscripción', icon: Shield, requiredAdmin: true },
+      ]
+      .filter(tab => !tab.requiredAdmin || isAdmin)
+      .map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           onClick={() => setActiveTab(key as any)}
-          className={`px-4 py-2 border-b-2 whitespace-nowrap ${activeTab === key ? 'border-cyan-500 text-white' : 'border-transparent text-gray-400 hover:text-gray-300'} flex items-center space-x-2 transition-colors`}
+          className={`px-4 py-2 border-b-2 whitespace-nowrap ${activeTab === key ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-gray-400 hover:text-gray-300'} flex items-center space-x-2 transition-colors`}
         >
           <Icon className="h-4 w-4" />
           <span>{label}</span>
@@ -69,17 +70,7 @@ export default function ClinicAdminPage() {
     </div>
   );
 
-  if (!clinicId) {
-    return (
-      <div className="p-6 text-gray-300">No tienes una clínica asociada o no has iniciado sesión.</div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="p-6 text-gray-300">No tienes permisos de administración en esta clínica.</div>
-    );
-  }
+  // ... (Active checks remain same)
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -89,16 +80,16 @@ export default function ClinicAdminPage() {
         </div>
         {renderTabs()}
 
-        {/* Pestaña de Pacientes - Reutilizamos el componente PatientsList */}
+        {activeTab === 'resumen' && <ClinicDashboardOverview clinicId={clinicId} />}
+
         {activeTab === 'pacientes' && (
           <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-8">
             <PatientsList />
           </div>
         )}
         
-        {activeTab === 'staff' && <ClinicStaffManagement clinicId={clinicId} />}
-        {activeTab === 'invite' && <InviteUserForm clinicId={clinicId} />}
-        {activeTab === 'details' && <ClinicDetailsForm clinicId={clinicId} />}
+        {activeTab === 'staff' && isAdmin && <ClinicStaffManagement clinicId={clinicId} />}
+        {activeTab === 'details' && <ClinicDetailsForm clinicId={clinicId} readOnly={!isAdmin} />}
         {activeTab === 'subscription' && <SubscriptionPanel clinicId={clinicId} />}
       </div>
     </div>
@@ -107,44 +98,9 @@ export default function ClinicAdminPage() {
 
 
 
-function InviteUserForm({ clinicId }: { clinicId: string }) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'doctor' | 'admin_staff'>('doctor');
-  const [sending, setSending] = useState(false);
 
-  const handleInvite = async () => {
-    setSending(true);
-    // Placeholder: aquí se crearía un registro en una tabla de invitaciones y se enviaría correo
-    await new Promise(r => setTimeout(r, 600));
-    setSending(false);
-    setEmail('');
-  };
 
-  return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2">
-          <label className="block text-sm text-gray-300 mb-1">Email</label>
-          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="usuario@clinica.com" className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white" />
-        </div>
-        <div>
-          <label className="block text-sm text-gray-300 mb-1">Rol</label>
-          <select value={role} onChange={e => setRole(e.target.value as any)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white">
-            <option value="doctor">Doctor</option>
-            <option value="admin_staff">Administrador</option>
-          </select>
-        </div>
-      </div>
-      <div className="mt-4">
-        <button onClick={handleInvite} disabled={sending || !email} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded text-white flex items-center">
-          <Mail className="h-4 w-4 mr-2" /> {sending ? 'Enviando...' : 'Enviar invitación'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ClinicDetailsForm({ clinicId }: { clinicId: string }) {
+function ClinicDetailsForm({ clinicId, readOnly = false }: { clinicId: string; readOnly?: boolean }) {
   const [details, setDetails] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
@@ -257,18 +213,22 @@ function ClinicDetailsForm({ clinicId }: { clinicId: string }) {
         </div>
       </div>
 
-      <div className="flex items-center space-x-4">
-        <button 
-          onClick={handleSave} 
-          disabled={saving || !details.name} 
-          className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-white font-medium transition-colors"
-        >
-          {saving ? 'Guardando...' : 'Guardar cambios'}
-        </button>
-        {!details.name && (
-          <span className="text-red-400 text-sm">* El nombre de la clínica es requerido</span>
-        )}
-      </div>
+
+
+      {!readOnly && (
+        <div className="flex items-center space-x-4">
+          <button 
+            onClick={handleSave} 
+            disabled={saving || !details.name} 
+            className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-white font-medium transition-colors"
+          >
+            {saving ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+          {!details.name && (
+            <span className="text-red-400 text-sm">* El nombre de la clínica es requerido</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

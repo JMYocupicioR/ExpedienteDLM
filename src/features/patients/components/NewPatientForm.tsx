@@ -1,5 +1,5 @@
 import { useValidationNotifications } from '@/components/ValidationNotification';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { useSimpleClinic } from '@/hooks/useSimpleClinic';
 import { usePatients } from '@/features/patients/hooks/usePatients';
 import type { Patient, PatientInsert } from '@/features/patients/services/patientService';
@@ -27,7 +27,12 @@ export default function NewPatientForm({
   const { addError, addSuccess, addWarning } = useValidationNotifications();
   const navigate = useNavigate();
   // Usar hook simple como fallback si ClinicContext falla
-  const { activeClinic: contextClinic, loading: clinicsLoading, error: clinicError } = useClinic();
+  const {
+    activeClinic: contextClinic,
+    isLoading: clinicsLoading,
+    error: clinicError,
+    isIndependentDoctor: contextIndependentDoctor,
+  } = useClinic();
   const { activeClinic: simpleClinic, loading: simpleLoading, error: simpleError } = useSimpleClinic();
 
   // Usar el contexto si está disponible, sino usar el hook simple
@@ -35,12 +40,16 @@ export default function NewPatientForm({
 
   // Estado para detectar si el médico tiene clínica asignada en su perfil
   const [userHasClinic, setUserHasClinic] = useState<boolean | null>(null);
-  const [isIndependentDoctor, setIsIndependentDoctor] = useState(false);
+  const [isIndependentDoctor, setIsIndependentDoctor] = useState(contextIndependentDoctor);
 
   console.log('NewPatientForm - contextClinic:', contextClinic?.name || 'null');
   console.log('NewPatientForm - simpleClinic:', simpleClinic?.name || 'null');
   console.log('NewPatientForm - activeClinic final:', activeClinic?.name || 'null');
   const { createPatientMutation } = usePatients();
+
+  useEffect(() => {
+    setIsIndependentDoctor(contextIndependentDoctor);
+  }, [contextIndependentDoctor]);
 
   // Estados locales para el manejo del formulario y validaciones en tiempo real
   const [checkingCurp, setCheckingCurp] = useState(false);

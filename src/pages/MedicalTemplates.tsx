@@ -5,13 +5,14 @@ import {
   Eye, Edit, Trash2, Copy, Download, Upload,
   Stethoscope, Bone, Activity, Brain, Heart, Hand, 
   MessageSquare, FileText, User, Calendar, Clock,
-  Wand2, BookOpen, Apple, Dumbbell, Pill
+  Wand2, BookOpen, Apple, Dumbbell, Pill, Settings
 } from 'lucide-react';
 import { MEDICATION_CONSTRAINTS } from '@/lib/medicalConfig';
 import { useTemplates } from '@/features/medical-templates/hooks/useTemplates';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { MedicalTemplate, PredefinedTemplate } from '@/lib/database.types';
 import TemplateEditor from '@/features/medical-templates/components/TemplateEditor';
+import ConsultationConfigTab from '@/features/medical-templates/components/ConsultationConfigTab';
 
 // Plantillas predefinidas
 const PREDEFINED_INTERROGATORIO: PredefinedTemplate[] = [
@@ -324,7 +325,9 @@ export default function MedicalTemplates() {
                 { id: 'exploracion', label: 'Exploración Física', icon: Stethoscope },
                 { id: 'prescripcion', label: 'Prescripciones', icon: FileText },
                 { id: 'medicamentos', label: 'Medicamentos', icon: Pill },
-                { id: 'ai-designer', label: 'Diseño con IA', icon: Wand2 }
+                { id: 'medicamentos', label: 'Medicamentos', icon: Pill },
+                { id: 'ai-designer', label: 'Diseño con IA', icon: Wand2 },
+                { id: 'configuracion', label: 'Configuración', icon: Settings }
               ].map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -390,8 +393,12 @@ export default function MedicalTemplates() {
             <AIDesignerTab />
           )}
 
+          {activeTab === 'configuracion' && (
+            <ConsultationConfigTab />
+          )}
+
           {/* Plantillas del usuario */}
-          {activeTab !== 'ai-designer' && (
+          {activeTab !== 'ai-designer' && activeTab !== 'configuracion' && (
             <UserTemplatesSection
               templates={filteredTemplates}
               favorites={favorites}

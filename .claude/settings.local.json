@@ -42,7 +42,12 @@
       "Bash(docker ps:*)",
       "Bash(npx supabase:*)",
       "Bash(src/types/database.types.ts)",
-      "Bash(temp_types.ts)"
+      "Bash(temp_types.ts)",
+      "Bash(docker rm:*)",
+      "Bash($null)",
+      "Bash(Out-File -Append -Encoding ASCII C:WindowsSystem32driversetchosts)",
+      "Bash(printf:*)",
+      "Bash(C:/Windows/System32/drivers/etc/hosts)"
     ],
     "deny": [],
     "ask": []

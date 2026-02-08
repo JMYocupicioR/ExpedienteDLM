@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { 
   Building2, 

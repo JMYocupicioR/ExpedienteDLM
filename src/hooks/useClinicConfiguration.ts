@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import {
   ClinicConfigService,

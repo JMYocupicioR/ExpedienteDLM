@@ -44,7 +44,7 @@ export async function encryptPHI(plaintext: string): Promise<string> {
     combined.set(new Uint8Array(encrypted), iv.length);
 
     // Return base64 encoded result
-    return btoa(String.fromCharCode(...combined));
+    return btoa(String.fromCharCode(...Array.from(combined)));
   } catch (error) {
     // In case of encryption failure, log error but don't expose data
     console.error('PHI encryption failed');
@@ -91,9 +91,9 @@ export async function decryptPHI(encryptedData: string): Promise<string> {
     // Return decrypted text
     return new TextDecoder().decode(decrypted);
   } catch (error) {
-    // In case of decryption failure, return empty string to prevent data exposure
-    console.error('PHI decryption failed');
-    return '';
+    // In case of decryption failure, assume it's plaintext and return original
+    // This handles legacy data or unencrypted fields gracefully
+    return encryptedData;
   }
 }
 

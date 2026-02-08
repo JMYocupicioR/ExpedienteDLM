@@ -12,6 +12,7 @@ import { format, isToday, isTomorrow, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { validateAndSanitizeArray } from '@/lib/validation';
 import ConsultationForm from '@/components/ConsultationForm';
+import SmartConsultationWrapper from '@/components/SmartConsultationWrapper';
 import ConsultationDetails from '@/components/ConsultationDetails';
 import ConsultationModal from '@/components/ConsultationModal';
 import AppointmentQuickScheduler from '@/components/AppointmentQuickScheduler';
@@ -1579,7 +1580,7 @@ export default function PatientRecord() {
       {showConsultationForm && userProfile && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
           <div className="w-full max-w-6xl max-h-[95vh] overflow-y-auto">
-            <ConsultationForm
+            <SmartConsultationWrapper
               patientId={id!}
               doctorId={userProfile.id}
               patientName={patient?.full_name}

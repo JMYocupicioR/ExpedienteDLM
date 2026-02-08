@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Book, Code, FileText, Star, Clock, TrendingUp, Database, Zap, CheckCircle, Brain } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Search, Code, Star, Clock, TrendingUp, Database, Zap, CheckCircle, Brain } from 'lucide-react';
 import OpenAI from 'openai';
 
 interface CIE10Code {
@@ -16,14 +15,9 @@ interface CIE10Code {
   lastUsed?: string;
 }
 
-interface MedicalDatabase {
-  id: string;
-  name: string;
-  type: 'diagnostic' | 'therapeutic' | 'pharmacological' | 'reference';
-  description: string;
-  content: any;
-  tags: string[];
-  lastUpdated: string;
+interface RawCIE10Item {
+  codigo: string;
+  nombre: string;
 }
 
 interface CodeSuggestion {
@@ -45,239 +39,17 @@ interface CIE10IntegrationProps {
   doctorId: string;
 }
 
-// Base de datos CIE-10 simplificada (principales códigos)
-const CIE10_DATABASE: CIE10Code[] = [
-  // Capítulo I: Ciertas enfermedades infecciosas y parasitarias (A00-B99)
-  {
-    code: 'A09',
-    description: 'Diarrea y gastroenteritis de presunto origen infeccioso',
-    category: 'Infecciosas',
-    chapter: 'I - Enfermedades infecciosas y parasitarias',
-    includes: ['Diarrea infecciosa', 'Gastroenteritis infecciosa'],
-    usageFrequency: 85
-  },
-  {
-    code: 'B34.9',
-    description: 'Infección viral, no especificada',
-    category: 'Infecciosas',
-    chapter: 'I - Enfermedades infecciosas y parasitarias',
-    includes: ['Virosis', 'Síndrome viral'],
-    usageFrequency: 92
-  },
+import { CIE10_DATA } from '../data/cie10Data';
 
-  // Capítulo II: Neoplasias (C00-D48)
-  {
-    code: 'D22.9',
-    description: 'Nevo melanocítico, sitio no especificado',
-    category: 'Neoplasias benignas',
-    chapter: 'II - Neoplasias',
-    usageFrequency: 45
-  },
-
-  // Capítulo IV: Enfermedades endocrinas, nutricionales y metabólicas (E00-E89)
-  {
-    code: 'E11.9',
-    description: 'Diabetes mellitus tipo 2 sin complicaciones',
-    category: 'Endocrinas',
-    chapter: 'IV - Enfermedades endocrinas, nutricionales y metabólicas',
-    includes: ['Diabetes tipo 2', 'Diabetes del adulto'],
-    usageFrequency: 150
-  },
-  {
-    code: 'E78.5',
-    description: 'Hiperlipidemia, no especificada',
-    category: 'Endocrinas',
-    chapter: 'IV - Enfermedades endocrinas, nutricionales y metabólicas',
-    includes: ['Dislipidemia', 'Colesterol elevado'],
-    usageFrequency: 120
-  },
-
-  // Capítulo V: Trastornos mentales y del comportamiento (F00-F99)
-  {
-    code: 'F32.9',
-    description: 'Episodio depresivo, no especificado',
-    category: 'Mentales',
-    chapter: 'V - Trastornos mentales y del comportamiento',
-    includes: ['Depresión', 'Estado depresivo'],
-    usageFrequency: 78
-  },
-  {
-    code: 'F41.9',
-    description: 'Trastorno de ansiedad, no especificado',
-    category: 'Mentales',
-    chapter: 'V - Trastornos mentales y del comportamiento',
-    includes: ['Ansiedad', 'Estado ansioso'],
-    usageFrequency: 89
-  },
-
-  // Capítulo VI: Enfermedades del sistema nervioso (G00-G99)
-  {
-    code: 'G43.9',
-    description: 'Migraña, no especificada',
-    category: 'Neurológicas',
-    chapter: 'VI - Enfermedades del sistema nervioso',
-    includes: ['Migraña', 'Jaqueca'],
-    usageFrequency: 67
-  },
-  {
-    code: 'G44.2',
-    description: 'Cefalea de tipo tensional',
-    category: 'Neurológicas',
-    chapter: 'VI - Enfermedades del sistema nervioso',
-    includes: ['Cefalea tensional', 'Dolor de cabeza por tensión'],
-    usageFrequency: 98
-  },
-
-  // Capítulo IX: Enfermedades del sistema circulatorio (I00-I99)
-  {
-    code: 'I10',
-    description: 'Hipertensión esencial (primaria)',
-    category: 'Cardiovasculares',
-    chapter: 'IX - Enfermedades del sistema circulatorio',
-    includes: ['Hipertensión arterial', 'Presión alta'],
-    usageFrequency: 200
-  },
-  {
-    code: 'I25.9',
-    description: 'Enfermedad isquémica crónica del corazón, no especificada',
-    category: 'Cardiovasculares',
-    chapter: 'IX - Enfermedades del sistema circulatorio',
-    usageFrequency: 75
-  },
-
-  // Capítulo X: Enfermedades del sistema respiratorio (J00-J99)
-  {
-    code: 'J00',
-    description: 'Rinofaringitis aguda [resfriado común]',
-    category: 'Respiratorias',
-    chapter: 'X - Enfermedades del sistema respiratorio',
-    includes: ['Resfriado común', 'Catarro común'],
-    usageFrequency: 180
-  },
-  {
-    code: 'J06.9',
-    description: 'Infección aguda de las vías respiratorias superiores, no especificada',
-    category: 'Respiratorias',
-    chapter: 'X - Enfermedades del sistema respiratorio',
-    includes: ['IVAS', 'Infección respiratoria alta'],
-    usageFrequency: 145
-  },
-  {
-    code: 'J45.9',
-    description: 'Asma, no especificada',
-    category: 'Respiratorias',
-    chapter: 'X - Enfermedades del sistema respiratorio',
-    includes: ['Asma bronquial'],
-    usageFrequency: 95
-  },
-
-  // Capítulo XI: Enfermedades del sistema digestivo (K00-K95)
-  {
-    code: 'K21.9',
-    description: 'Enfermedad por reflujo gastroesofágico sin esofagitis',
-    category: 'Digestivas',
-    chapter: 'XI - Enfermedades del sistema digestivo',
-    includes: ['ERGE', 'Reflujo gastroesofágico'],
-    usageFrequency: 110
-  },
-  {
-    code: 'K59.0',
-    description: 'Estreñimiento',
-    category: 'Digestivas',
-    chapter: 'XI - Enfermedades del sistema digestivo',
-    includes: ['Constipación'],
-    usageFrequency: 87
-  },
-
-  // Capítulo XII: Enfermedades de la piel y tejido subcutáneo (L00-L99)
-  {
-    code: 'L20.9',
-    description: 'Dermatitis atópica, no especificada',
-    category: 'Dermatológicas',
-    chapter: 'XII - Enfermedades de la piel y tejido subcutáneo',
-    includes: ['Eczema atópico'],
-    usageFrequency: 56
-  },
-  {
-    code: 'L30.9',
-    description: 'Dermatitis, no especificada',
-    category: 'Dermatológicas',
-    chapter: 'XII - Enfermedades de la piel y tejido subcutáneo',
-    usageFrequency: 78
-  },
-
-  // Capítulo XIII: Enfermedades del sistema musculoesquelético (M00-M99)
-  {
-    code: 'M54.5',
-    description: 'Lumbago',
-    category: 'Musculoesqueléticas',
-    chapter: 'XIII - Enfermedades del sistema musculoesquelético',
-    includes: ['Lumbalgia', 'Dolor lumbar'],
-    usageFrequency: 165
-  },
-  {
-    code: 'M79.3',
-    description: 'Paniculitis, no especificada',
-    category: 'Musculoesqueléticas',
-    chapter: 'XIII - Enfermedades del sistema musculoesquelético',
-    usageFrequency: 34
-  },
-
-  // Capítulo XIV: Enfermedades del sistema genitourinario (N00-N99)
-  {
-    code: 'N39.0',
-    description: 'Infección de vías urinarias, sitio no especificado',
-    category: 'Genitourinarias',
-    chapter: 'XIV - Enfermedades del sistema genitourinario',
-    includes: ['ITU', 'Cistitis'],
-    usageFrequency: 125
-  },
-
-  // Capítulo XVIII: Síntomas, signos y hallazgos clínicos anormales (R00-R99)
-  {
-    code: 'R50.9',
-    description: 'Fiebre, no especificada',
-    category: 'Síntomas y signos',
-    chapter: 'XVIII - Síntomas, signos y hallazgos anormales',
-    includes: ['Fiebre', 'Hipertermia'],
-    usageFrequency: 140
-  },
-  {
-    code: 'R51',
-    description: 'Cefalea',
-    category: 'Síntomas y signos',
-    chapter: 'XVIII - Síntomas, signos y hallazgos anormales',
-    includes: ['Dolor de cabeza'],
-    usageFrequency: 156
-  },
-  {
-    code: 'R06.0',
-    description: 'Disnea',
-    category: 'Síntomas y signos',
-    chapter: 'XVIII - Síntomas, signos y hallazgos anormales',
-    includes: ['Dificultad respiratoria', 'Falta de aire'],
-    usageFrequency: 98
-  },
-
-  // Capítulo XIX: Traumatismos y envenenamientos (S00-T98)
-  {
-    code: 'S06.0',
-    description: 'Conmoción cerebral',
-    category: 'Traumatismos',
-    chapter: 'XIX - Traumatismos, envenenamientos',
-    usageFrequency: 42
-  },
-
-  // Capítulo XXI: Factores que influyen en el estado de salud (Z00-Z99)
-  {
-    code: 'Z00.0',
-    description: 'Examen médico general',
-    category: 'Factores de salud',
-    chapter: 'XXI - Factores que influyen en el estado de salud',
-    includes: ['Chequeo médico', 'Revisión general'],
-    usageFrequency: 220
-  }
-];
+// Base de datos CIE-10 completa importada
+const CIE10_DATABASE: CIE10Code[] = (CIE10_DATA as RawCIE10Item[]).map((item) => ({
+  code: item.codigo,
+  description: item.nombre,
+  category: 'General', // Categoría por defecto
+  chapter: 'CIE-10 Completo',
+  usageFrequency: 0,
+  includes: []
+}));
 
 export default function CIE10Integration({
   diagnosis,
@@ -312,7 +84,7 @@ export default function CIE10Integration({
   }, [searchTerm]);
 
   // Analizar y sugerir códigos CIE-10
-  const analyzeDiagnosisForCIE10 = async () => {
+  const analyzeDiagnosisForCIE10 = useCallback(async () => {
     if (!diagnosis && !currentCondition) return;
 
     setIsAnalyzing(true);
@@ -423,7 +195,13 @@ RESPONDE SOLO CON UN JSON con esta estructura:
 
             // Integrar sugerencias de IA
             if (aiAnalysis.suggestedCodes) {
-              aiAnalysis.suggestedCodes.forEach((aiCode: any) => {
+              interface AISuggestion {
+                code: string;
+                reasoning: string;
+                confidence: number;
+              }
+              
+              aiAnalysis.suggestedCodes.forEach((aiCode: AISuggestion) => {
                 const cieCode = CIE10_DATABASE.find(c => c.code === aiCode.code);
                 if (cieCode) {
                   const existingIndex = basicSuggestions.findIndex(s => s.code.code === aiCode.code);
@@ -466,10 +244,10 @@ RESPONDE SOLO CON UN JSON con esta estructura:
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [diagnosis, currentCondition, symptoms, patientAge, patientGender, onCodeSuggestions]);
 
   // Cargar códigos recientes y favoritos
-  const loadUserCodes = async () => {
+  const loadUserCodes = useCallback(async () => {
     try {
       // Códigos recientes (simulado)
       const recentCodesData = await localStorage.getItem(`recent_cie10_${doctorId}`);
@@ -485,7 +263,7 @@ RESPONDE SOLO CON UN JSON con esta estructura:
     } catch (error) {
       console.warn('Error cargando códigos del usuario:', error);
     }
-  };
+  }, [doctorId]);
 
   // Seleccionar código
   const handleCodeSelect = (code: CIE10Code) => {
@@ -498,7 +276,7 @@ RESPONDE SOLO CON UN JSON con esta estructura:
     localStorage.setItem(`recent_cie10_${doctorId}`, JSON.stringify(updatedRecent));
 
     // Actualizar frecuencia de uso
-    const updatedCode = { ...code, usageFrequency: (code.usageFrequency || 0) + 1, lastUsed: new Date().toISOString() };
+    // Actualizar frecuencia de uso
     // Aquí se podría actualizar en base de datos
   };
 
@@ -522,7 +300,7 @@ RESPONDE SOLO CON UN JSON con esta estructura:
     if (isVisible) {
       loadUserCodes();
     }
-  }, [isVisible, doctorId]);
+  }, [isVisible, doctorId, loadUserCodes]);
 
   useEffect(() => {
     if ((diagnosis || currentCondition) && isVisible) {
@@ -532,7 +310,7 @@ RESPONDE SOLO CON UN JSON con esta estructura:
 
       return () => clearTimeout(timeoutId);
     }
-  }, [diagnosis, currentCondition, symptoms, patientAge, patientGender, isVisible]);
+  }, [diagnosis, currentCondition, symptoms, patientAge, patientGender, isVisible, analyzeDiagnosisForCIE10]);
 
   if (!isVisible) return null;
 
@@ -567,7 +345,7 @@ RESPONDE SOLO CON UN JSON con esta estructura:
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as 'search' | 'suggestions' | 'recent' | 'favorites')}
               className={`
                 flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-md transition-colors text-sm font-medium
                 ${activeTab === tab.id
@@ -602,7 +380,7 @@ RESPONDE SOLO CON UN JSON con esta estructura:
             ) : (
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-indigo-300 mb-2">Códigos sugeridos basados en diagnóstico</h5>
-                {codeSuggestions.map((suggestion, index) => (
+                {codeSuggestions.map((suggestion) => (
                   <div key={suggestion.code.code} className="bg-indigo-900/30 border border-indigo-600/50 rounded-lg p-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

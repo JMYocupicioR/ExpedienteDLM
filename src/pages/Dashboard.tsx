@@ -3,7 +3,7 @@ import GenerateInvitationLinkModal from '@/components/GenerateInvitationLinkModa
 import QuickStartModal from '@/components/QuickStartModal';
 import { Button } from '@/components/ui/button';
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { EnhancedAppointment } from '@/lib/services/enhanced-appointment-service';
 import { getAppointmentsByDateRange } from '@/lib/services/enhanced-appointment-service';
 import { supabase } from '@/lib/supabase';
@@ -37,7 +37,9 @@ import KeyboardShortcutsHelp from '@/components/KeyboardShortcutsHelp';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { activeClinic, userClinics, isLoading: isClinicLoading, clinics, setActiveClinic } = useClinic();
+  const { activeClinic, userClinics, isIndependentDoctor, isLoading: isClinicLoading, setActiveClinic } =
+    useClinic();
+  const clinics = (userClinics || []).map(m => m.clinic).filter(Boolean) as any[];
   const [user, setUser] = useState<{ email?: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -123,6 +125,8 @@ const Dashboard = () => {
           if (activeClinic) {
             await loadDashboardData(activeClinic.id);
             await loadUpcomingAppointments(user.id, activeClinic.id);
+          } else if (isIndependentDoctor) {
+            await loadIndependentDashboard(user.id);
           }
         }
       } catch (error) {
@@ -138,7 +142,7 @@ const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [navigate, isClinicLoading, activeClinic, userClinics]);
+  }, [navigate, isClinicLoading, activeClinic, userClinics, isIndependentDoctor]);
 
   useEffect(() => {
     if (searchTerm.length > 2 && activeClinic) {
@@ -204,6 +208,66 @@ const Dashboard = () => {
             ? patient.consultations.sort(
                 (a: any, b: any) =>
                   new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              )[0]?.created_at
+            : null,
+      }));
+
+      setRecentPatients(processedPatients);
+    } catch (error) {
+      // Error log removed for security;
+    }
+  };
+
+  const loadIndependentDashboard = async (userId: string) => {
+    try {
+      const [patientsResult, consultationsResult] = await Promise.all([
+        supabase
+          .from('patients')
+          .select('id', { count: 'exact' })
+          .eq('primary_doctor_id', userId)
+          .is('clinic_id', null),
+        supabase
+          .from('consultations')
+          .select('id', { count: 'exact' })
+          .eq('doctor_id', userId)
+          .is('clinic_id', null),
+      ]);
+
+      setRealStats(prev => ({
+        ...prev,
+        patients: patientsResult.count || 0,
+        consultations: consultationsResult.count || 0,
+        prescriptions: prev.prescriptions,
+        todayConsultations: prev.todayConsultations,
+      }));
+
+      // Pacientes recientes del médico independiente
+      const recentPatientsResult = await supabase
+        .from('patients')
+        .select(
+          `
+            id,
+            full_name,
+            phone,
+            email,
+            created_at,
+            consultations (
+              id,
+              created_at
+            )
+          `
+        )
+        .eq('primary_doctor_id', userId)
+        .is('clinic_id', null)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const processedPatients = (recentPatientsResult.data || []).map(patient => ({
+        ...patient,
+        last_consultation:
+          patient.consultations && patient.consultations.length > 0
+            ? patient.consultations.sort(
+                (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
               )[0]?.created_at
             : null,
       }));
@@ -388,6 +452,15 @@ const Dashboard = () => {
               <h1 className='section-title text-3xl mb-2'>Bienvenido, {user?.email}</h1>
               <p className='section-subtitle'>Panel de control de Expediente DLM</p>
             </div>
+
+            {!activeClinic && isIndependentDoctor && (
+              <div className='w-full lg:w-auto bg-cyan-900/30 border border-cyan-500/40 text-cyan-100 rounded-lg p-3'>
+                <p className='font-semibold'>Modo consultorio propio</p>
+                <p className='text-sm text-cyan-200'>
+                  Sin clínicas activas; estás trabajando con pacientes asignados a tu usuario (clinic_id = NULL).
+                </p>
+              </div>
+            )}
 
             {/* Quick Search */}
             <div className='relative w-full lg:w-[28rem]'>
@@ -754,6 +827,16 @@ const Dashboard = () => {
                   <Link to='/settings'>
                     <Settings className='h-4 w-4 mr-2' />
                     Configuración
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  variant='outline'
+                  className='border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-gray-900'
+                >
+                  <Link to='/settings?section=clinic'>
+                    <Building2 className='h-4 w-4 mr-2' />
+                    Mi Consultorio
                   </Link>
                 </Button>
                 {isAdmin && (

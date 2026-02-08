@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Settings as SettingsIcon, User, Bell, Lock, Database, 
   Monitor, Globe, Shield, Save, CheckCircle, Building, Palette,
@@ -11,6 +12,8 @@ import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/useTheme';
 import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
 import { useMedicalPracticeSettings } from '@/hooks/useMedicalPracticeSettings';
+import { PersonalClinicSettings } from '@/components/settings/PersonalClinicSettings';
+import { ClinicAssociationManager } from '@/components/settings/ClinicAssociationManager';
 
 interface SettingSection {
   id: string;
@@ -161,12 +164,23 @@ export default function Settings() {
   const { user, profile } = useAuth();
   const { theme, setTheme, fontScale, setFontScale, accentPrimary, accentSecondary, setAccentColors, contrastMode, setContrastMode } = useTheme();
   const { uploadClinicLogo } = useProfilePhotos();
-  const { settings: medicalSettings, updateSettings: updateMedicalSettings, loading: medicalLoading } = useMedicalPracticeSettings(user?.id);
+  const { settings: medicalSettings, updateSettings: updateMedicalSettings, loading: medicalLoading, error: medicalSettingsError } = useMedicalPracticeSettings(user?.id, (profile as any)?.clinic_id);
+  const [searchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState('profile');
+  const [clinic, setClinic] = useState<any>(null);
+  
+  // Handle URL parameters for direct section navigation
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (section) {
+      setActiveSection(section);
+    }
+  }, [searchParams]);
   const [isSaving, setIsSaving] = useState(false);
   const [notification, setNotification] = useState<NotificationState>({ type: 'info', message: '', show: false });
   const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingSpecialties, setLoadingSpecialties] = useState<boolean>(false);
+  const [specialtiesError, setSpecialtiesError] = useState<string | null>(null);
   const [isClinicAdmin, setIsClinicAdmin] = useState<boolean>(false);
   
   // Form data states
@@ -187,11 +201,47 @@ export default function Settings() {
   
   const [profilePictureFile, setProfilePictureFile] = useState<File | null>(null);
   const [clinicLogoFile, setClinicLogoFile] = useState<File | null>(null);
+  
+  // Password Change State
+  const [passwordForm, setPasswordForm] = useState({
+    current: '',
+    new: '',
+    confirm: ''
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Notification State
+  const [notificationSettings, setNotificationSettings] = useState<NotificationPreferences>({
+    email: {
+      newPatients: true,
+      upcomingAppointments: true,
+      labResults: false,
+      systemUpdates: true
+    },
+    push: {
+      emergencyAppointments: true,
+      medicationReminders: false
+    },
+    schedule: {
+      quietHoursStart: '22:00',
+      quietHoursEnd: '07:00'
+    }
+  });
+  const [notificationLoading, setNotificationLoading] = useState(false);
+
   const [showPasswords, setShowPasswords] = useState({
     current: false,
     new: false,
     confirm: false
   });
+
+  // Handle URL section parameter
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (section && ['profile', 'clinic', 'notifications', 'security', 'appearance', 'system', 'privacy'].includes(section)) {
+      setActiveSection(section);
+    }
+  }, [searchParams]);
 
   const sections: SettingSection[] = [
     {
@@ -243,10 +293,34 @@ export default function Settings() {
     );
   }
 
+  interface NotificationPreferences {
+    email: {
+      newPatients: boolean;
+      upcomingAppointments: boolean;
+      labResults: boolean;
+      systemUpdates: boolean;
+    };
+    push: {
+      emergencyAppointments: boolean;
+      medicationReminders: boolean;
+    };
+    schedule: {
+      quietHoursStart: string;
+      quietHoursEnd: string;
+    };
+  }
+
   // Load user data on component mount
   useEffect(() => {
     if (profile) {
-      const extendedProfile = profile as unknown as ExtendedProfile & { additional_info?: any; specialty_id?: string; clinic_id?: string };
+      const extendedProfile = profile as unknown as ExtendedProfile & {
+        additional_info?: {
+          notifications?: NotificationPreferences;
+          [key: string]: any;
+        };
+        specialty_id?: string;
+        clinic_id?: string;
+      };
       setIsClinicAdmin((extendedProfile.role || '') === 'admin_staff');
       setProfileData({
         full_name: extendedProfile.full_name || '',
@@ -264,6 +338,14 @@ export default function Settings() {
         photo_url: extendedProfile?.additional_info?.photo_url,
         clinic_logo_url: extendedProfile?.additional_info?.clinic_logo_url
       });
+
+      // Parse notification settings from additional_info if available
+      if (extendedProfile.additional_info && typeof extendedProfile.additional_info === 'object' && 'notifications' in extendedProfile.additional_info) {
+        setNotificationSettings(prev => ({
+          ...prev,
+          ...(extendedProfile.additional_info!['notifications'] as Partial<NotificationPreferences>)
+        }));
+      }
     }
   }, [profile]);
 
@@ -280,8 +362,9 @@ export default function Settings() {
         if (error) throw error;
         const rows = (data || []).map((r: any) => ({ id: r.id, name: r.name }));
         setSpecialties(rows);
-      } catch (err) {
-        // Error log removed for security;
+      } catch (err: any) {
+        console.error('Error loading specialties:', err);
+        setSpecialtiesError(err.message || 'Error al cargar especialidades');
       } finally {
         setLoadingSpecialties(false);
       }
@@ -294,13 +377,97 @@ export default function Settings() {
     setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 5000);
   };
 
+  const handlePasswordChange = async () => {
+    if (!passwordForm.current || !passwordForm.new || !passwordForm.confirm) {
+      showNotification('error', 'Por favor completa todos los campos');
+      return;
+    }
+
+    if (passwordForm.new !== passwordForm.confirm) {
+      showNotification('error', 'Las contraseñas nuevas no coinciden');
+      return;
+    }
+
+    if (passwordForm.new.length < 8) {
+      showNotification('error', 'La nueva contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      if (!user?.email) throw new Error('No se pudo identificar el usuario');
+
+      // 1. Verificar contraseña actual
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: passwordForm.current
+      });
+
+      if (signInError) {
+        throw new Error('La contraseña actual es incorrecta');
+      }
+
+      // 2. Actualizar contraseña
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordForm.new
+      });
+
+      if (updateError) throw updateError;
+
+      showNotification('success', 'Contraseña actualizada correctamente');
+      setPasswordForm({ current: '', new: '', confirm: '' });
+    } catch (error: any) {
+      showNotification('error', error.message || 'Error al actualizar contraseña');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+
+
+  const handleSaveNotifications = async () => {
+    setNotificationLoading(true);
+    try {
+      if (!user?.id) throw new Error('No se pudo identificar el usuario');
+
+      // Get current profile data to merge additional_info
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('additional_info')
+        .eq('id', user.id)
+        .single();
+
+      const currentAdditionalInfo = currentProfile?.additional_info || {};
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          additional_info: {
+            ...currentAdditionalInfo,
+            notifications: notificationSettings
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      showNotification('success', 'Preferencias de notificaciones guardadas');
+    } catch (error: any) {
+      console.error('Error saving notifications:', error);
+      showNotification('error', 'Error al guardar notificaciones');
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
   const uploadFile = async (file: File, path: string): Promise<string> => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
     const filePath = `${path}/${fileName}`;
 
     const { error } = await supabase.storage
-      .from('profiles')
+      .from('profile-photos')
       .upload(filePath, file);
 
     if (error) {
@@ -308,7 +475,7 @@ export default function Settings() {
     }
 
     const { data: { publicUrl } } = supabase.storage
-      .from('profiles')
+      .from('profile-photos')
       .getPublicUrl(filePath);
 
     return publicUrl;
@@ -339,6 +506,9 @@ export default function Settings() {
         ? (specialties.find(s => s.id === specialtyId)?.name || profileData.specialty || '')
         : (specialtyNameFallback || profileData.specialty || '');
 
+      // Si se activa admin de clínica, asegurar clinic_id y relación
+      let clinicId: string | null = (profile as any)?.clinic_id || null;
+
       // Subir imágenes si se seleccionaron
       let newPhotoUrl: string | undefined;
       let newClinicLogoUrl: string | undefined;
@@ -357,9 +527,8 @@ export default function Settings() {
         newClinicLogoUrl = res.url;
       }
 
-      // Si se activa admin de clínica, asegurar clinic_id y relación
-      let clinicId: string | null = (profile as any)?.clinic_id || null;
-      
+
+
       // Si es administrador de clínica, debe tener una clínica asociada
       if (isClinicAdmin) {
         if (!clinicId) {
@@ -555,6 +724,20 @@ export default function Settings() {
                 Gestiona tu información personal y los detalles de tu clínica. Esta información aparecerá en tus recetas y documentos médicos.
               </p>
             </div>
+
+            {/* Error Alerts */}
+            {(specialtiesError || medicalSettingsError) && (
+              <div className="mb-6 bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg flex items-center">
+                <AlertCircle className="h-5 w-5 mr-2" />
+                <div>
+                  <p className="font-medium">Error al cargar información</p>
+                  <p className="text-sm opacity-90">
+                    {specialtiesError && <span>Especialidades: {specialtiesError}. </span>}
+                    {medicalSettingsError && <span>Configuración médica: {medicalSettingsError}.</span>}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Profile Images */}
             <div className="card">
@@ -792,6 +975,9 @@ export default function Settings() {
                 Configura aspectos específicos de tu práctica médica y especialidades.
               </p>
             </div>
+
+            {/* Personal Clinic Settings - Only for doctors */}
+            {profile?.role === 'doctor' && <PersonalClinicSettings />}
 
             {/* Medical Specialties */}
             <div className="card">
@@ -1158,7 +1344,15 @@ export default function Settings() {
                     <p className="text-gray-400 text-sm">Recibir notificaciones cuando se registren nuevos pacientes</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={notificationSettings.email.newPatients}
+                      onChange={(e) => setNotificationSettings(prev => ({
+                        ...prev,
+                        email: { ...prev.email, newPatients: e.target.checked }
+                      }))}
+                    />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
                   </label>
                 </div>
@@ -1169,7 +1363,15 @@ export default function Settings() {
                     <p className="text-gray-400 text-sm">Recordatorios de citas programadas para el día siguiente</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={notificationSettings.email.upcomingAppointments}
+                      onChange={(e) => setNotificationSettings(prev => ({
+                        ...prev,
+                        email: { ...prev.email, upcomingAppointments: e.target.checked }
+                      }))}
+                    />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
                   </label>
                 </div>
@@ -1180,7 +1382,15 @@ export default function Settings() {
                     <p className="text-gray-400 text-sm">Notificaciones cuando los resultados de laboratorio estén listos</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={notificationSettings.email.labResults}
+                      onChange={(e) => setNotificationSettings(prev => ({
+                        ...prev,
+                        email: { ...prev.email, labResults: e.target.checked }
+                      }))}
+                    />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
                   </label>
                 </div>
@@ -1191,7 +1401,15 @@ export default function Settings() {
                     <p className="text-gray-400 text-sm">Notificaciones sobre nuevas funciones y mantenimiento</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={notificationSettings.email.systemUpdates}
+                      onChange={(e) => setNotificationSettings(prev => ({
+                        ...prev,
+                        email: { ...prev.email, systemUpdates: e.target.checked }
+                      }))}
+                    />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
                   </label>
                 </div>
@@ -1211,7 +1429,15 @@ export default function Settings() {
                     <p className="text-gray-400 text-sm">Notificaciones inmediatas para citas urgentes</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={notificationSettings.push.emergencyAppointments}
+                      onChange={(e) => setNotificationSettings(prev => ({
+                        ...prev,
+                        push: { ...prev.push, emergencyAppointments: e.target.checked }
+                      }))}
+                    />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
                   </label>
                 </div>
@@ -1222,7 +1448,15 @@ export default function Settings() {
                     <p className="text-gray-400 text-sm">Recordatorios para seguimiento de medicación de pacientes</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={notificationSettings.push.medicationReminders}
+                      onChange={(e) => setNotificationSettings(prev => ({
+                        ...prev,
+                        push: { ...prev.push, medicationReminders: e.target.checked }
+                      }))}
+                    />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
                   </label>
                 </div>
@@ -1242,7 +1476,11 @@ export default function Settings() {
                   </label>
                   <input
                     type="time"
-                    defaultValue="22:00"
+                    value={notificationSettings.schedule.quietHoursStart}
+                    onChange={(e) => setNotificationSettings(prev => ({
+                      ...prev,
+                      schedule: { ...prev.schedule, quietHoursStart: e.target.value }
+                    }))}
                     className="form-input"
                   />
                 </div>
@@ -1252,7 +1490,11 @@ export default function Settings() {
                   </label>
                   <input
                     type="time"
-                    defaultValue="07:00"
+                    value={notificationSettings.schedule.quietHoursEnd}
+                    onChange={(e) => setNotificationSettings(prev => ({
+                      ...prev,
+                      schedule: { ...prev.schedule, quietHoursEnd: e.target.value }
+                    }))}
                     className="form-input"
                   />
                 </div>
@@ -1265,11 +1507,12 @@ export default function Settings() {
             {/* Save Button */}
             <div className="flex justify-end">
               <button
-                onClick={handleSave}
-                className="flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors font-medium"
+                onClick={handleSaveNotifications}
+                disabled={notificationLoading}
+                className={`flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors font-medium ${notificationLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <Save className="h-5 w-5" />
-                <span>Guardar Notificaciones</span>
+                {notificationLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                <span>{notificationLoading ? 'Guardando...' : 'Guardar Notificaciones'}</span>
               </button>
             </div>
           </div>
@@ -1303,6 +1546,8 @@ export default function Settings() {
                   <div className="relative">
                     <input
                       type={showPasswords.current ? "text" : "password"}
+                      value={passwordForm.current}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, current: e.target.value }))}
                       className="form-input pr-12"
                       placeholder="Ingresa tu contraseña actual"
                     />
@@ -1322,6 +1567,8 @@ export default function Settings() {
                   <div className="relative">
                     <input
                       type={showPasswords.new ? "text" : "password"}
+                      value={passwordForm.new}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, new: e.target.value }))}
                       className="form-input pr-12"
                       placeholder="Mínimo 8 caracteres"
                     />
@@ -1344,6 +1591,8 @@ export default function Settings() {
                   <div className="relative">
                     <input
                       type={showPasswords.confirm ? "text" : "password"}
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
                       className="form-input pr-12"
                       placeholder="Confirma tu nueva contraseña"
                     />
@@ -1356,9 +1605,13 @@ export default function Settings() {
                     </button>
                   </div>
                 </div>
-                <button className="flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors font-medium">
-                  <Lock className="h-5 w-5" />
-                  <span>Actualizar Contraseña</span>
+                <button 
+                  onClick={handlePasswordChange}
+                  disabled={passwordLoading}
+                  className={`flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors font-medium ${passwordLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {passwordLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Lock className="h-5 w-5" />}
+                  <span>{passwordLoading ? 'Actualizando...' : 'Actualizar Contraseña'}</span>
                 </button>
               </div>
             </div>
@@ -1870,7 +2123,7 @@ export default function Settings() {
                 Para consultas sobre privacidad y manejo de datos, contacta a nuestro oficial de privacidad:
               </p>
               <div className="space-y-2">
-                <p className="text-cyan-400">privacy@deepluxmed.com</p>
+                <p className="text-cyan-400">noreply@deeplux.org</p>
                 <p className="text-gray-400 text-sm">Tiempo de respuesta: 24-48 horas</p>
               </div>
             </div>
@@ -1947,10 +2200,25 @@ export default function Settings() {
               {/* User Info in Sidebar */}
               <div className="mt-6 pt-6 border-t border-gray-700">
                 <div className="flex items-center space-x-3 px-4 py-3 bg-gray-700/30 rounded-xl">
-                  <div className="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">
-                      {profileData.full_name?.charAt(0) || 'U'}
-                    </span>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden">
+                    {profileData.photo_url ? (
+                      <img 
+                        src={profileData.photo_url} 
+                        alt={profileData.full_name || 'Perfil'} 
+                        className="w-full h-full object-cover bg-gray-700"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.parentElement?.classList.add('bg-gradient-to-r', 'from-cyan-500', 'to-blue-600');
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-r from-cyan-500 to-blue-600 flex items-center justify-center">
+                        <span className="text-white text-sm font-medium">
+                          {profileData.full_name?.charAt(0) || 'U'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="min-w-0">
                     <p className="text-white font-medium truncate">{profileData.full_name || 'Usuario'}</p>

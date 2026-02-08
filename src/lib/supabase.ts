@@ -5,6 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+
+
 // Verificar que las variables de entorno estén configuradas
 if (!supabaseUrl || !supabaseAnonKey) {
   // Error log removed for security;
@@ -18,21 +20,36 @@ if (!supabaseUrl || !supabaseAnonKey) {
   // En lugar de lanzar error inmediatamente, intentar con valores por defecto
   if (!supabaseUrl) {
     // Warning log removed for security;
+
   }
   if (!supabaseAnonKey) {
     // Warning log removed for security;
+
   }
 }
 
 // Verificar formato de URL solo si existe
-if (supabaseUrl && (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co'))) {
+// Permitir URLs de producción (https://*.supabase.co) y desarrollo local (http://localhost o http://127.0.0.1)
+const isValidSupabaseUrl = supabaseUrl && (
+  // URL de producción
+  (supabaseUrl.startsWith('https://') && supabaseUrl.includes('.supabase.co')) ||
+  // URL de desarrollo local
+  (supabaseUrl.startsWith('http://') && (supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1')))
+);
+
+if (supabaseUrl && !isValidSupabaseUrl) {
   // Error log removed for security;
   // Error log removed for security;
+
+} else if (supabaseUrl && isValidSupabaseUrl) {
+
 }
 
 // Usar valores por defecto si no están configurados (solo para desarrollo)
 const finalUrl = supabaseUrl || 'https://YOUR_PROJECT_REF.supabase.co';
 const finalKey = supabaseAnonKey || 'YOUR_SUPABASE_ANON_KEY';
+
+
 
 // Crear cliente de Supabase
 export const supabase = createClient<Database>(finalUrl, finalKey, {
@@ -44,6 +61,19 @@ export const supabase = createClient<Database>(finalUrl, finalKey, {
   realtime: {
     params: {
       eventsPerSecond: 10,
+    },
+  },
+  global: {
+    fetch: async (url, options = {}) => {
+
+      try {
+        const response = await fetch(url, options);
+
+        return response;
+      } catch (error: any) {
+
+        throw error;
+      }
     },
   },
 });

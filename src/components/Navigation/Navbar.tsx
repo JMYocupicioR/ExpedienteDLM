@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Menu, X, Stethoscope, User, Users, FileText, Calendar, 
   Settings, LogOut, Bell, Search, Home, Activity, Building,
-  ChevronRight, ChevronLeft, Sliders
+  ChevronRight, ChevronLeft, Sliders, Shield
 } from 'lucide-react';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -119,6 +119,16 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
           href: '/assistance'
         }
       );
+    }
+
+    // Items for super_admin
+    if (profile?.role === 'super_admin') {
+      roleSpecificItems.push({
+        id: 'super-admin-panel',
+        label: 'Panel Super Admin',
+        icon: Shield,
+        href: '/super-admin'
+      });
     }
 
     // Items for admin staff
@@ -372,7 +382,7 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
               {(profile?.role === 'doctor' || profile?.role === 'admin_staff' || profile?.role === 'super_admin') && (
                 <div className="mt-3">
                   <div className="text-xs text-gray-500 mb-2">Clínica Activa</div>
-                  <ClinicSwitcher />
+                  <ClinicSwitcher isCollapsed={false} />
                 </div>
               )}
             </div>

@@ -18,10 +18,22 @@ export async function getPatientsByClinic(clinicId: string): Promise<Patient[]> 
   if (error) throw new Error(error.message);
 
   // Decrypt PHI data for each patient
-  const decryptedPatients = await Promise.all(
-    (data || []).map(patient => decryptPatientPHI(patient))
-  );
+  const decryptedPatients = await Promise.all((data || []).map(patient => decryptPatientPHI(patient)));
 
+  return decryptedPatients as Patient[];
+}
+
+export async function getPatientsForDoctor(primaryDoctorId: string): Promise<Patient[]> {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('primary_doctor_id', primaryDoctorId)
+    .is('clinic_id', null)
+    .order('full_name');
+
+  if (error) throw new Error(error.message);
+
+  const decryptedPatients = await Promise.all((data || []).map(patient => decryptPatientPHI(patient)));
   return decryptedPatients as Patient[];
 }
 
@@ -94,37 +106,32 @@ export async function createPatient(
 export async function updatePatient(
   patientId: string,
   updates: PatientUpdate,
-  clinicId: string
+  clinicId?: string | null
 ): Promise<Patient> {
   const { id, clinic_id, created_at, ...safeUpdates } = updates as any;
-  
+
   // Encrypt PHI data before updating
   const encryptedUpdates = await encryptPatientPHI({
     ...safeUpdates,
     updated_at: new Date().toISOString(),
   });
-  
-  const { data, error } = await supabase
-    .from('patients')
-    .update(encryptedUpdates)
-    .eq('id', patientId)
-    .eq('clinic_id', clinicId)
-    .select()
-    .single();
+
+  let query = supabase.from('patients').update(encryptedUpdates).eq('id', patientId);
+  query = clinicId === undefined ? query : query.eq('clinic_id', clinicId ?? null);
+
+  const { data, error } = await query.select().single();
 
   if (error) throw new Error(error.message);
-  
+
   // Decrypt PHI data before returning
   const decryptedPatient = await decryptPatientPHI(data);
   return decryptedPatient as Patient;
 }
 
-export async function deletePatient(patientId: string, clinicId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('patients')
-    .delete()
-    .eq('id', patientId)
-    .eq('clinic_id', clinicId);
+export async function deletePatient(patientId: string, clinicId?: string | null): Promise<boolean> {
+  let query = supabase.from('patients').delete().eq('id', patientId);
+  query = clinicId === undefined ? query : query.eq('clinic_id', clinicId ?? null);
+  const { error } = await query;
   if (error) throw new Error(error.message);
   return true;
 }

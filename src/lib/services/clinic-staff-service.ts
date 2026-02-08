@@ -18,6 +18,7 @@ export interface StaffMember {
   rejection_reason: string | null;
   rejected_at: string | null;
   rejected_by: string | null;
+  permissions_override: any;
 }
 
 export interface StaffOverview {
@@ -51,6 +52,7 @@ export class ClinicStaffService {
           rejection_reason,
           rejected_at,
           rejected_by,
+          permissions_override,
           profiles:profiles(full_name, email)
         `)
         .eq('clinic_id', clinicId)
@@ -71,6 +73,7 @@ export class ClinicStaffService {
         rejection_reason: item.rejection_reason,
         rejected_at: item.rejected_at,
         rejected_by: item.rejected_by,
+        permissions_override: item.permissions_override
       }));
 
       return {
@@ -232,7 +235,8 @@ export class ClinicStaffService {
   static async createUserRelationship(
     clinicId: string,
     userId: string,
-    role: 'doctor' | 'admin_staff'
+    role: 'doctor' | 'admin_staff',
+    extraData?: any
   ): Promise<ApprovalResult> {
     try {
       const { error } = await supabase
@@ -242,7 +246,8 @@ export class ClinicStaffService {
           user_id: userId,
           role_in_clinic: role,
           status: 'pending', // Siempre pendiente por defecto
-          is_active: true
+          is_active: true,
+          permissions_override: extraData
         });
 
       if (error) throw error;
@@ -511,6 +516,24 @@ export class ClinicStaffService {
 
       if (error) throw error;
       return data.map(item => item.id);
+    } catch (error) {
+      // Error log removed for security;
+      return [];
+    }
+  }
+
+  /**
+   * Busca usuarios para invitar a la clínica
+   */
+  static async searchUsers(term: string, clinicId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase.rpc('search_profiles_for_invite', {
+        search_term: term,
+        target_clinic_id: clinicId
+      });
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       // Error log removed for security;
       return [];

@@ -1,8 +1,10 @@
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 import {
   createPatient as createPatientSvc,
   deletePatient as deletePatientSvc,
   getPatientsByClinic,
+  getPatientsForDoctor,
   updatePatient as updatePatientSvc,
   type Patient,
   type PatientInsert,
@@ -18,17 +20,22 @@ interface UsePatientsResult {
 }
 
 export const usePatients = (): UsePatientsResult => {
-  const { activeClinic } = useClinic();
+  const { activeClinic, isIndependentDoctor } = useClinic();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const patientsQuery = useQuery({
-    queryKey: ['patients', activeClinic?.id],
+    queryKey: ['patients', activeClinic?.id ?? (isIndependentDoctor ? 'independent' : 'none')],
     queryFn: async () => {
-      if (!activeClinic?.id) return [] as Patient[];
-      const res = await getPatientsByClinic(activeClinic.id);
-      return res;
+      if (activeClinic?.id) {
+        return getPatientsByClinic(activeClinic.id);
+      }
+      if (isIndependentDoctor && user?.id) {
+        return getPatientsForDoctor(user.id);
+      }
+      return [] as Patient[];
     },
-    enabled: !!activeClinic?.id,
+    enabled: Boolean(activeClinic?.id || (isIndependentDoctor && user?.id)),
   });
 
   const createPatientMutation = useMutation<Patient, Error, PatientInsert>({
@@ -36,14 +43,20 @@ export const usePatients = (): UsePatientsResult => {
       // Para médicos independientes, clinic_id será null en patientData
       // Para médicos de clínica, usamos activeClinic.id si está disponible
       const clinicId = patientData.clinic_id || activeClinic?.id || null;
+      const payload = {
+        ...patientData,
+        primary_doctor_id: patientData.primary_doctor_id || user?.id || null,
+      };
 
       // Llamamos a nuestro servicio refactorizado
-      return createPatientSvc(patientData, clinicId);
+      return createPatientSvc(payload, clinicId);
     },
     onSuccess: (newPatient) => {
       // Sensitive log removed for security;
       // Invalidación precisa: solo la lista de pacientes de la clínica activa
-      queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
+      queryClient.invalidateQueries({
+        queryKey: ['patients', activeClinic?.id ?? (isIndependentDoctor ? 'independent' : 'none')],
+      });
       // Opcional: también podemos actualizar la caché manualmente para una respuesta instantánea
       // queryClient.setQueryData(['patients', activeClinic?.id], (oldData: Patient[] | undefined) =>
       //   oldData ? [...oldData, newPatient] : [newPatient]
@@ -57,23 +70,33 @@ export const usePatients = (): UsePatientsResult => {
 
   const updatePatientMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: PatientUpdate }) => {
-      if (!activeClinic?.id) throw new Error('No hay clínica activa');
-      const res = await updatePatientSvc(id, updates, activeClinic.id);
+      const clinicId = activeClinic?.id ?? null;
+      if (!clinicId && !(isIndependentDoctor && user?.id)) {
+        throw new Error('No hay clínica activa ni modo independiente disponible');
+      }
+      const res = await updatePatientSvc(id, updates, clinicId);
       return res as Patient;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
+      queryClient.invalidateQueries({
+        queryKey: ['patients', activeClinic?.id ?? (isIndependentDoctor ? 'independent' : 'none')],
+      });
     },
   });
 
   const deletePatientMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (!activeClinic?.id) throw new Error('No hay clínica activa');
-      await deletePatientSvc(id, activeClinic.id);
+      const clinicId = activeClinic?.id ?? null;
+      if (!clinicId && !(isIndependentDoctor && user?.id)) {
+        throw new Error('No hay clínica activa ni modo independiente disponible');
+      }
+      await deletePatientSvc(id, clinicId);
       return true;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patients', activeClinic?.id] });
+      queryClient.invalidateQueries({
+        queryKey: ['patients', activeClinic?.id ?? (isIndependentDoctor ? 'independent' : 'none')],
+      });
     },
   });
 

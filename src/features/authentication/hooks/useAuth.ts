@@ -37,6 +37,7 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+
       setSession(newSession);
       if (newSession?.user) {
         setUser(newSession.user);

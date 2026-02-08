@@ -1,10 +1,10 @@
 import ErrorBoundary from '@/components/ErrorBoundary';
 import AppLayout from '@/components/Layout/AppLayout';
 import PatientPortalLayout from '@/components/Layout/PatientPortalLayout';
+import ClinicAdminLayout from '@/components/Layout/ClinicAdminLayout';
 import AdminClinicConfigPanel from '@/components/clinic-config/AdminClinicConfigPanel';
 import DoctorClinicPreferences from '@/components/clinic-config/DoctorClinicPreferences';
-import { ClinicProvider } from '@/context/ClinicContext';
-import { useTheme } from '@/hooks/useTheme';
+import { ClinicProvider } from '@/features/clinic/context/ClinicContext';
 import { supabase } from '@/lib/supabase';
 import AboutPage from '@/pages/AboutPage';
 import AppointmentsPage from '@/pages/AppointmentsPage';
@@ -35,6 +35,7 @@ import PrivacyDashboard from '@/pages/PrivacyDashboard';
 import RequestClinicAccess from '@/pages/RequestClinicAccess';
 import Settings from '@/pages/Settings';
 import UserProfile from '@/pages/UserProfile';
+import SuperAdminDashboard from '@/features/super-admin/pages/SuperAdminDashboard';
 import { useEffect, useState } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes, useNavigate } from 'react-router-dom';
 
@@ -48,8 +49,10 @@ function AuthNavigationHandler() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+
       // Navegación automática basada en eventos de autenticación
       if (event === 'SIGNED_IN') {
+
         navigate('/dashboard');
       }
       if (event === 'SIGNED_OUT') {
@@ -65,7 +68,6 @@ function AuthNavigationHandler() {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     // Check initial auth state
@@ -302,40 +304,61 @@ function App() {
                   )
                 }
               />
+
+              {/* Clinic Admin Protected Routes */}
+              <Route element={<ClinicAdminLayout />}>
+                <Route
+                  path='/clinic/admin'
+                  element={
+                    isAuthenticated ? <ClinicAdminPage /> : <Navigate to='/auth' />
+                  }
+                />
+                <Route
+                  path='/clinic-admin'
+                  element={
+                    isAuthenticated ? <ClinicAdminPage /> : <Navigate to='/auth' />
+                  }
+                />
+                <Route
+                  path='/clinic/summary'
+                  element={
+                    isAuthenticated ? <ClinicSummary /> : <Navigate to='/auth' />
+                  }
+                />
+                <Route
+                  path='/clinic/patients'
+                  element={
+                    isAuthenticated ? <ClinicPatients /> : <Navigate to='/auth' />
+                  }
+                />
+                <Route
+                  path='/clinic/staff'
+                  element={
+                    isAuthenticated ? (
+                      <ClinicStaff />
+                    ) : (
+                      <Navigate to='/auth' />
+                    )
+                  }
+                />
+                <Route
+                  path='/clinic/settings'
+                  element={
+                    isAuthenticated ? <ClinicSettings /> : <Navigate to='/auth' />
+                  }
+                />
+                <Route
+                  path='/clinic/config'
+                  element={
+                    isAuthenticated ? <AdminClinicConfigPanel /> : <Navigate to='/auth' />
+                  }
+                />
+              </Route>
+
               <Route
-                path='/clinic/admin'
+                path='/super-admin'
                 element={
-                  isAuthenticated ? <ClinicAdminPage /> : <Navigate to='/auth' />
-                }
-              />
-              <Route
-                path='/clinic-admin'
-                element={
-                  isAuthenticated ? <ClinicAdminPage /> : <Navigate to='/auth' />
-                }
-              />
-              <Route
-                path='/clinic/summary'
-                element={
-                  isAuthenticated ? <ClinicSummary /> : <Navigate to='/auth' />
-                }
-              />
-              <Route
-                path='/clinic/patients'
-                element={
-                  isAuthenticated ? <ClinicPatients /> : <Navigate to='/auth' />
-                }
-              />
-              <Route
-                path='/clinic/staff'
-                element={
-                  isAuthenticated ? <ClinicStaff /> : <Navigate to='/auth' />
-                }
-              />
-              <Route
-                path='/clinic/settings'
-                element={
-                  isAuthenticated ? <ClinicSettings /> : <Navigate to='/auth' />
+                  isAuthenticated ? <SuperAdminDashboard /> : <Navigate to='/auth' />
                 }
               />
             </Route>

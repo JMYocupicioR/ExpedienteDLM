@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase';
+import { addDays, parseISO, format } from 'date-fns';
+import { googleCalendarService } from './google-calendar-service';
 import { 
   EnhancedAppointment, 
   CreateAppointmentPayload, 
@@ -62,7 +64,14 @@ class EnhancedAppointmentService {
       console.log('Using direct database insert for appointment creation (Edge Functions disabled)');
       
       // Fallback: Inserción directa en la base de datos
-      return await this.createAppointmentFallback(data);
+      const appointment = await this.createAppointmentFallback(data);
+
+      // Try to sync with Google Calendar (non-blocking)
+      this.syncToGoogleCalendar('create', appointment).catch(err =>
+        console.error('Google Calendar sync failed:', err)
+      );
+
+      return appointment;
     } catch (error) {
       console.error('Error in createAppointment:', error);
 

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { useSimpleClinic } from '@/hooks/useSimpleClinic';
 import { supabase } from '@/lib/supabase';
 

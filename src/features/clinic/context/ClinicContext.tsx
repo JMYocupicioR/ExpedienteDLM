@@ -23,6 +23,8 @@ interface ClinicContextType {
   setActiveClinic: (clinic: Clinic | null) => void;
   userClinics: ClinicMember[];
   isLoading: boolean;
+  error: string | null;
+  isIndependentDoctor: boolean;
   refreshUserClinics: () => Promise<void>;
   createClinic: (clinicData: { name: string; address?: string }) => Promise<Clinic | null>;
   joinClinic: (clinicId: string) => Promise<boolean>;
@@ -39,6 +41,8 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
   const [activeClinic, setActiveClinic] = useState<Clinic | null>(null);
   const [userClinics, setUserClinics] = useState<ClinicMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isIndependentDoctor, setIsIndependentDoctor] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Load user's clinics when component mounts or user changes
   useEffect(() => {
@@ -46,6 +50,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
       try {
         setIsLoading(true);
         // Sensitive log removed for security;
+        setError(null);
 
         // Get current user
         const {
@@ -86,6 +91,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
             code: membershipsError.code,
           });
           setUserClinics([]);
+          setError(membershipsError.message);
           return;
         }
 
@@ -123,7 +129,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
         }
 
         // Transform data to match our interface
-        const transformedMemberships: ClinicMember[] = memberships.map((membership: any) => ({
+        const transformedMemberships: ClinicMember[] = (memberships || []).map((membership: any) => ({
           clinic_id: membership.clinic_id,
           user_id: membership.user_id,
           role: membership.role_in_clinic === 'admin_staff' ? 'admin' : membership.role_in_clinic,
@@ -135,27 +141,29 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
         console.log('✅ First membership:', transformedMemberships[0]);
         setUserClinics(transformedMemberships);
 
-        // Set active clinic if none is selected or if current one is no longer valid
-        if (!activeClinic || !transformedMemberships.find(m => m.clinic_id === activeClinic.id)) {
-          if (transformedMemberships.length > 0) {
-            const firstClinic = transformedMemberships[0].clinic;
-            if (firstClinic) {
-              console.log('✅ Setting active clinic:', firstClinic.name);
-              setActiveClinic(firstClinic);
-              // Store in localStorage for persistence
-              localStorage.setItem('activeClinicId', firstClinic.id);
-            } else {
-              console.warn('⚠️ First membership has no clinic data');
-            }
-          } else {
-            console.warn('⚠️ No memberships found');
-            setActiveClinic(null);
+        // Detect independent doctor when no memberships approved/active
+        if (!transformedMemberships.length) {
+          setIsIndependentDoctor(true);
+          setActiveClinic(null);
+          localStorage.removeItem('activeClinicId');
+        } else {
+          setIsIndependentDoctor(false);
+          // Set active clinic from localStorage preference or first available
+          const storedClinicId = localStorage.getItem('activeClinicId');
+          const storedClinic = transformedMemberships.find(m => m.clinic_id === storedClinicId)?.clinic;
+          const firstClinic = transformedMemberships[0].clinic;
+          const nextClinic = storedClinic || firstClinic || null;
+          if (nextClinic && (!activeClinic || nextClinic.id !== activeClinic.id)) {
+            setActiveClinic(nextClinic);
+            localStorage.setItem('activeClinicId', nextClinic.id);
           }
         }
       } catch (error) {
         // Error log removed for security;
         setUserClinics([]);
         setActiveClinic(null);
+        setIsIndependentDoctor(false);
+        setError((error as any)?.message || 'Error cargando clínicas');
       } finally {
         setIsLoading(false);
         // Sensitive log removed for security;
@@ -249,8 +257,10 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
 
       // Sensitive log removed for security;
       setUserClinics(transformedMemberships);
+      setIsIndependentDoctor(!transformedMemberships.length);
     } catch (error) {
       // Error log removed for security;
+      setError((error as any)?.message || 'Error refrescando clínicas');
     } finally {
       setIsLoading(false);
       // Sensitive log removed for security;
@@ -374,19 +384,25 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
 
   const setActiveClinicWithSideEffect = async (clinic: Clinic | null) => {
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Persist selection in profile when there is a clinic, clear when null
+      const { error } = await supabase
+        .from('profiles')
+        .update({ clinic_id: clinic ? clinic.id : null })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
       if (clinic) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) throw new Error('User not authenticated');
-
-        const { error } = await supabase
-          .from('profiles')
-          .update({ clinic_id: clinic.id })
-          .eq('id', user.id);
-
-        if (error) throw error;
+        localStorage.setItem('activeClinicId', clinic.id);
+      } else {
+        localStorage.removeItem('activeClinicId');
       }
+
       setActiveClinic(clinic);
     } catch (err) {
       // Error log removed for security;
@@ -398,6 +414,8 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
     setActiveClinic: setActiveClinicWithSideEffect,
     userClinics,
     isLoading,
+    error,
+    isIndependentDoctor,
     refreshUserClinics,
     createClinic,
     joinClinic,

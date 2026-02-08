@@ -85,21 +85,26 @@ ALTER TABLE consultations ENABLE ROW LEVEL SECURITY;
 
 -- Create basic RLS policies
 -- Profiles policies
+DROP POLICY IF EXISTS "profiles_select_own" ON profiles;
 CREATE POLICY "profiles_select_own" ON profiles
     FOR SELECT USING (id = auth.uid());
 
+DROP POLICY IF EXISTS "profiles_update_own" ON profiles;
 CREATE POLICY "profiles_update_own" ON profiles
     FOR UPDATE USING (id = auth.uid());
 
 -- Clinics policies
+DROP POLICY IF EXISTS "clinics_select_authenticated" ON clinics;
 CREATE POLICY "clinics_select_authenticated" ON clinics
     FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Clinic relationships policies
+DROP POLICY IF EXISTS "clinic_relationships_select_own" ON clinic_user_relationships;
 CREATE POLICY "clinic_relationships_select_own" ON clinic_user_relationships
     FOR SELECT USING (user_id = auth.uid());
 
 -- Patients policies
+DROP POLICY IF EXISTS "patients_select_own_clinic" ON patients;
 CREATE POLICY "patients_select_own_clinic" ON patients
     FOR SELECT USING (
         clinic_id IN (
@@ -109,6 +114,7 @@ CREATE POLICY "patients_select_own_clinic" ON patients
     );
 
 -- Consultations policies
+DROP POLICY IF EXISTS "consultations_select_own_clinic" ON consultations;
 CREATE POLICY "consultations_select_own_clinic" ON consultations
     FOR SELECT USING (
         clinic_id IN (

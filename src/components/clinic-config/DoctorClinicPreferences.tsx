@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useClinicConfiguration } from '@/hooks/useClinicConfiguration';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { Save, CheckCircle, User, Clock, Bell, Keyboard, Building } from 'lucide-react';
 
 /**

@@ -57,7 +57,7 @@ enable_refresh_token_rotation = true
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = true
+enable_confirmations = false
 
 [auth.sms]
 enable_signup = true
@@ -168,7 +168,7 @@ client_id = ""
 secret = ""
 
 [auth.captcha]
-enabled = true
+enabled = false
 provider = "hcaptcha"
 secret = "env(HCAPTCHA_SECRET_KEY)"
 
@@ -177,11 +177,11 @@ timebox = "24h"
 inactivity_timeout = "8h"
 
 [auth.hook.before_user_created]
-enabled = true
+enabled = false
 uri = "pg-functions://postgres/auth/before-user-created-hook"
 
 [auth.hook.custom_access_token]
-enabled = true
+enabled = false
 uri = "pg-functions://postgres/auth/custom-access-token-hook"
 
 [edge_runtime]

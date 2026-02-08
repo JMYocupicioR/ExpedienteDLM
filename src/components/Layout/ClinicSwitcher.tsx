@@ -1,5 +1,5 @@
 import React from 'react';
-import { useClinic } from '@/context/ClinicContext';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { Building } from 'lucide-react';
 
 const ClinicSwitcher: React.FC<{ isCollapsed: boolean }> = ({ isCollapsed }) => {
@@ -16,7 +16,7 @@ const ClinicSwitcher: React.FC<{ isCollapsed: boolean }> = ({ isCollapsed }) => 
   if (error) {
     return (
       <div className="p-2 text-center text-sm text-red-400" title={error}>
-        {isCollapsed ? '!' : 'Error'}
+        {isCollapsed ? '!' : error || 'Error'}
       </div>
     );
   }

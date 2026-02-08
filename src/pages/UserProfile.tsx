@@ -88,19 +88,17 @@ export default function UserProfile() {
   });
 
   useEffect(() => {
-    if (!authLoading && user) {
-      loadUserProfile();
+    if (!authLoading && user?.id) {
+      loadUserProfile(user.id);
     } else if (!authLoading && !user) {
       navigate('/auth');
     }
-  }, [user, authLoading, navigate]);
+  }, [user?.id, authLoading, navigate]);
 
-  const loadUserProfile = async () => {
+  const loadUserProfile = async (userId: string) => {
     try {
       setLoading(true);
       setError(null);
-
-      if (!user) return;
 
       // Load enhanced profile data
       const { data: enhancedProfile, error: profileError } = await supabase
@@ -110,7 +108,7 @@ export default function UserProfile() {
           specialty:specialty_id(name, category, description),
           clinic:clinic_id(name, type, address, phone)
         `)
-        .eq('id', user.id)
+        .eq('id', userId)
         .single();
 
       if (profileError) throw profileError;
@@ -140,26 +138,28 @@ export default function UserProfile() {
       await loadAvailableClinics();
 
       // Load profile photos from storage
-      const photoUrl = await getProfilePhotoUrl();
-      const iconUrl = await getPrescriptionIconUrl();
-      setProfilePhoto(photoUrl);
-      setPrescriptionIcon(iconUrl);
+      try {
+        const photoUrl = await getProfilePhotoUrl();
+        const iconUrl = await getPrescriptionIconUrl();
+        setProfilePhoto(photoUrl);
+        setPrescriptionIcon(iconUrl);
+      } catch (e) {
+        console.error("Error loading photos", e);
+      }
 
-      // Load statistics
-      await loadProfileStats();
+      // Load statistics (pass data explicitly)
+      await loadProfileStats(userId, enhancedProfile);
 
       // Load recent activity
-      await loadRecentActivity();
+      await loadRecentActivity(userId);
 
     } catch (err: any) {
-      // Error log removed for security;
+      console.error('Error loading profile:', err);
       setError(err.message || 'Error al cargar el perfil');
     } finally {
       setLoading(false);
     }
   };
-
-
 
   const loadAvailableClinics = async () => {
     try {
@@ -176,33 +176,31 @@ export default function UserProfile() {
     }
   };
 
-  const loadProfileStats = async () => {
+  const loadProfileStats = async (userId: string, currentProfile: EnhancedProfile) => {
     try {
-      if (!user || !profileData) return;
-
       // Load patient count
       const { count: patientCount } = await supabase
         .from('patients')
         .select('*', { count: 'exact', head: true })
-        .eq('primary_doctor_id', user.id);
+        .eq('primary_doctor_id', userId);
 
       // Load consultation count
       const { count: consultationCount } = await supabase
         .from('consultations')
         .select('*', { count: 'exact', head: true })
-        .eq('doctor_id', user.id);
+        .eq('doctor_id', userId);
 
       // Load monthly consultations
       const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
       const { count: monthlyCount } = await supabase
         .from('consultations')
         .select('*', { count: 'exact', head: true })
-        .eq('doctor_id', user.id)
+        .eq('doctor_id', userId)
         .gte('created_at', `${currentMonth}-01`);
 
       // Calculate experience years
-      const experienceYears = profileData.hire_date 
-        ? Math.floor((new Date().getTime() - new Date(profileData.hire_date).getTime()) / (1000 * 60 * 60 * 24 * 365))
+      const experienceYears = currentProfile.hire_date 
+        ? Math.floor((new Date().getTime() - new Date(currentProfile.hire_date).getTime()) / (1000 * 60 * 60 * 24 * 365))
         : 0;
 
       setStats({
@@ -215,14 +213,12 @@ export default function UserProfile() {
       });
 
     } catch (err) {
-      // Error log removed for security;
+      console.error('Error loading stats:', err);
     }
   };
 
-  const loadRecentActivity = async () => {
+  const loadRecentActivity = async (userId: string) => {
     try {
-      if (!user) return;
-
       // Load recent consultations
       const { data: consultations } = await supabase
         .from('consultations')
@@ -230,7 +226,7 @@ export default function UserProfile() {
           id, created_at, diagnosis,
           patient:patient_id(full_name)
         `)
-        .eq('doctor_id', user.id)
+        .eq('doctor_id', userId)
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -238,14 +234,14 @@ export default function UserProfile() {
       const { data: patients } = await supabase
         .from('patients')
         .select('id, full_name, created_at')
-        .eq('primary_doctor_id', user.id)
+        .eq('primary_doctor_id', userId)
         .order('created_at', { ascending: false })
         .limit(3);
 
       const activities: RecentActivity[] = [];
 
       // Add consultations to activity
-      consultations?.forEach(consultation => {
+      consultations?.forEach((consultation: any) => {
         activities.push({
           id: consultation.id,
           type: 'consultation',
@@ -273,7 +269,7 @@ export default function UserProfile() {
       setRecentActivity(activities.slice(0, 10));
 
     } catch (err) {
-      // Error log removed for security;
+      console.error('Error loading activity:', err);
     }
   };
 

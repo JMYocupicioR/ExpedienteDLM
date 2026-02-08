@@ -18,10 +18,12 @@ export default function Auth() {
   const navigate = useNavigate();
 
   const handleCaptchaVerify = (token: string) => {
+
     setHcaptchaToken(token);
   };
 
   const handleCaptchaError = (error: any) => {
+
     setHcaptchaToken(null);
   };
 
@@ -130,27 +132,35 @@ export default function Auth() {
     const password = formData.get('password') as string;
     const confirmPassword = formData.get('confirmPassword') as string;
 
-    // Authentication attempt started
+
 
     try {
       if (isLogin) {
         // Logging in...
-        if (!hcaptchaToken) {
+        const isDevelopment = import.meta.env.DEV;
+        if (!hcaptchaToken && !isDevelopment) {
+
           setError('Por favor, completa el captcha para continuar.');
           setLoading(false); // Detener el loading
           return;
         }
+
+
 
         // Captcha token obtained, proceeding with login
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
           options: {
-            captchaToken: hcaptchaToken,
+            captchaToken: hcaptchaToken || undefined,
           },
         });
 
+
+
         if (error) throw error;
+
+
 
         // Login successful
         // NO navegar inmediatamente - dejar que useAuth maneje la navegación
@@ -160,7 +170,8 @@ export default function Auth() {
         setCheckingEmail(true);
 
         try {
-          if (!hcaptchaToken) {
+          const isDevelopment = import.meta.env.DEV;
+          if (!hcaptchaToken && !isDevelopment) {
             setError('Por favor, completa el captcha para continuar.');
             setLoading(false); // Detener el loading
             return;
@@ -252,7 +263,7 @@ export default function Auth() {
             email: email.toLowerCase().trim(),
             password: password,
             options: {
-              captchaToken: hcaptchaToken,
+              captchaToken: hcaptchaToken || undefined,
               emailRedirectTo: `${window.location.origin}/auth/callback`,
               data: {
                 email_confirmed: false,
@@ -290,7 +301,7 @@ export default function Auth() {
         }
       }
     } catch (err: any) {
-      // Error log removed for security;
+
 
       // Manejo de errores mejorado
       if (err.message === 'Invalid login credentials') {
@@ -301,6 +312,10 @@ export default function Auth() {
         );
       } else if (err.message?.includes('Too many requests')) {
         setError('Demasiados intentos. Espera unos minutos antes de intentar de nuevo.');
+      } else if (err.message === 'Failed to fetch' || err.name === 'AuthRetryableFetchError') {
+        setError(
+          'No se pudo conectar con Supabase. Verifica que Supabase local esté corriendo (npx supabase start) o que las credenciales de Supabase Cloud sean correctas.'
+        );
       } else {
         setError(err.message || 'Error desconocido');
       }
@@ -381,16 +396,18 @@ export default function Auth() {
                   </div>
                 </div>
                 {/* hCaptcha Widget for Login */}
-                <div className='mt-2'>
-                  <HCaptcha
-                    ref={loginCaptchaRef}
-                    sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY || ''}
-                    onVerify={handleCaptchaVerify}
-                    onError={handleCaptchaError}
-                    onExpire={handleCaptchaExpire}
-                    theme='dark'
-                  />
-                </div>
+                {!import.meta.env.DEV && (
+                  <div className='mt-2'>
+                    <HCaptcha
+                      ref={loginCaptchaRef}
+                      sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY || ''}
+                      onVerify={handleCaptchaVerify}
+                      onError={handleCaptchaError}
+                      onExpire={handleCaptchaExpire}
+                      theme='dark'
+                    />
+                  </div>
+                )}
               </div>
 
               <div className='text-right'>
@@ -571,16 +588,18 @@ export default function Auth() {
               </div>
 
               {/* hCaptcha Widget for Registration */}
-              <div className='mt-4'>
-                <HCaptcha
-                  ref={signupCaptchaRef}
-                  sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY || ''}
-                  onVerify={handleCaptchaVerify}
-                  onError={handleCaptchaError}
-                  onExpire={handleCaptchaExpire}
-                  theme='dark'
-                />
-              </div>
+              {!import.meta.env.DEV && (
+                <div className='mt-4'>
+                  <HCaptcha
+                    ref={signupCaptchaRef}
+                    sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY || ''}
+                    onVerify={handleCaptchaVerify}
+                    onError={handleCaptchaError}
+                    onExpire={handleCaptchaExpire}
+                    theme='dark'
+                  />
+                </div>
+              )}
 
               <button
                 type='submit'

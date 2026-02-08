@@ -13,9 +13,11 @@ import {
   MoreVertical,
   Eye,
   Trash2,
-  Edit
+  Edit,
+  UserPlus
 } from 'lucide-react';
 import ClinicStaffService, { StaffMember, StaffOverview } from '@/lib/services/clinic-staff-service';
+import { InviteStaffModal } from './clinic-admin/InviteStaffModal';
 
 interface ClinicStaffManagementProps {
   clinicId: string;
@@ -38,11 +40,12 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<StaffMember | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
   // Cargar personal de la clínica
-  const loadStaff = async () => {
+  const loadStaff = React.useCallback(async () => {
     try {
       setLoading(true);
       const staff = await ClinicStaffService.getClinicStaff(clinicId);
@@ -53,11 +56,11 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
     } finally {
       setLoading(false);
     }
-  };
+  }, [clinicId]);
 
   useEffect(() => {
     loadStaff();
-  }, [clinicId]);
+  }, [loadStaff]);
 
   // Agregar notificación
   const addNotification = (type: 'success' | 'error' | 'info', message: string) => {
@@ -172,6 +175,9 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
         case 'approved':
           return <CheckCircle className="h-5 w-5 text-green-500" />;
         case 'pending':
+          if (member.permissions_override?.origin === 'invite') {
+            return <UserPlus className="h-5 w-5 text-blue-500" />;
+          }
           return <Clock className="h-5 w-5 text-yellow-500" />;
         case 'rejected':
           return <XCircle className="h-5 w-5 text-red-500" />;
@@ -185,6 +191,9 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
         case 'approved':
           return 'border-green-500 bg-green-900/20';
         case 'pending':
+          if (member.permissions_override?.origin === 'invite') {
+            return 'border-blue-500 bg-blue-900/20';
+          }
           return 'border-yellow-500 bg-yellow-900/20';
         case 'rejected':
           return 'border-red-500 bg-red-900/20';
@@ -208,14 +217,19 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
                   {member.full_name || 'Sin nombre'}
                 </h3>
                 <p className="text-gray-400 text-sm">{member.email}</p>
-                <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded">
-                    {getRoleLabel()}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {new Date(member.created_at).toLocaleDateString()}
-                  </span>
-                </div>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded">
+                      {getRoleLabel()}
+                    </span>
+                    {member.status === 'pending' && member.permissions_override?.origin === 'invite' && (
+                      <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded border border-blue-700">
+                        Invitación Enviada
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-500">
+                      {new Date(member.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
               </div>
             </div>
           </div>
@@ -238,6 +252,16 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
                   <XCircle className="h-4 w-4" />
                 </button>
               </>
+            )}
+
+            {member.status === 'pending' && member.permissions_override?.origin === 'invite' && (
+              <button
+                onClick={() => handleReject(member)}
+                className="p-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors"
+                title="Cancelar invitación"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             )}
             
             {member.status === 'approved' && (
@@ -317,14 +341,25 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
             </div>
           </div>
           
-          <div className="flex items-center space-x-2">
-            <Filter className="h-4 w-4 text-gray-400" />
+          
+          <div className="flex items-center space-x-2 w-full md:w-auto overflow-x-auto">
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors whitespace-nowrap"
+            >
+              <UserPlus className="h-4 w-4" />
+              <span>Invitar</span>
+            </button>
+
+            <div className="h-8 w-px bg-gray-600 mx-2 hidden md:block"></div>
+
+            <Filter className="h-4 w-4 text-gray-400 flex-shrink-0" />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
               className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
             >
-              <option value="all">Todos los estados</option>
+              <option value="all">Todos</option>
               <option value="pending">Pendientes</option>
               <option value="approved">Aprobados</option>
               <option value="rejected">Rechazados</option>
@@ -404,6 +439,18 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
           </div>
         </div>
       )}
+
+
+      {/* Modal de Invitación */}
+      <InviteStaffModal
+        isOpen={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        clinicId={clinicId}
+        onInviteSuccess={() => {
+          loadStaff();
+          addNotification('success', 'Invitación enviada exitosamente');
+        }}
+      />
     </div>
   );
 }

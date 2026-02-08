@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Mic, Upload, FlaskConical, Microscope, Pill, Plus, Trash2, Lightbulb, FileEdit, Calendar } from 'lucide-react';
+import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Upload, FlaskConical, Microscope, Pill, Plus, Trash2, FileEdit, Calendar } from 'lucide-react';
 import UploadDropzone from '@/components/UploadDropzone';
 import { useForm } from 'react-hook-form';
 // ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
 import { useValidation } from '@/features/medical-records/hooks/useValidation';
 import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExam';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useSimpleClinic } from '@/hooks/useSimpleClinic';
 import { supabase } from '@/lib/supabase';
 import DynamicPhysicalExamForm from '@/components/DynamicPhysicalExamForm';
-import PhysicalExamTemplates from '@/components/PhysicalExamTemplates';
 import MedicalTranscription from '@/components/MedicalTranscription';
 import ScalePicker from '@/components/ScalePicker';
 import ScaleStepper from '@/components/ScaleStepper';
@@ -27,12 +28,14 @@ import RealTimeMedicalGuidance from '@/components/RealTimeMedicalGuidance';
 // ===== NUEVOS COMPONENTES DE PESTAÑAS =====
 import InterrogatorioTabsPanel from '@/components/InterrogatorioTabsPanel';
 import ExploracionTabsPanel from '@/components/ExploracionTabsPanel';
+import ClassicConsultationForm from '@/components/ClassicConsultationForm';
 import type {
   Database,
   MedicalTemplate,
   InterrogatorioStructuredData,
   PhysicalExaminationData
 } from '@/lib/database.types';
+import { ConsultationConfig } from '@/features/medical-templates/hooks/useConsultationConfig';
 import { calculatePrescriptionExpiry } from '@/lib/medicalConfig';
 
 type PhysicalExamTemplate = Database['public']['Tables']['physical_exam_templates']['Row'];
@@ -73,6 +76,7 @@ interface ConsultationFormProps {
   onClose: () => void;
   onSave: (data: any) => Promise<string | void> | string | void;
   patientName?: string;
+  config?: ConsultationConfig;
 }
 
 interface ConsultationFormData {
@@ -130,9 +134,27 @@ interface PendingScaleEntry { scaleId: string; scaleName: string; definition: Sc
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-export default function ConsultationForm({ patientId, doctorId, onClose, onSave, patientName }: ConsultationFormProps) {
+export default function ConsultationForm({ patientId, doctorId, onClose, onSave, patientName, config }: ConsultationFormProps) {
+  // Get clinic context
+  const { activeClinic: contextClinic } = useClinic();
+  const { activeClinic: simpleClinic } = useSimpleClinic();
+  const activeClinic = contextClinic || simpleClinic;
+  
   const [selectedTemplate, setSelectedTemplate] = useState<PhysicalExamTemplate | null>(null);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
+
+  useEffect(() => {
+    if (config?.general_config) {
+      setShowPhysicalExam(!config.general_config.hide_physical_exam);
+    }
+    if (config?.hpi_config) {
+      setShowSmartAnalyzer(config.hpi_config.enable_autocomplete);
+      // Voice is handled via prop to InterrogatorioTabsPanel
+    }
+  }, [config]);
+
+
+
   const [physicalExamData, setPhysicalExamData] = useState<PhysicalExamFormData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1043,6 +1065,58 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
     }
   };
 
+  // ===== CLASSIC MODE RENDERING =====
+  if (config?.general_config?.start_mode === 'classic') {
+    const handleClassicSave = async (classicData: any) => {
+      // Adapt Classic Data to ConsultationFormData for compatibility
+      const formData: any = {
+        current_condition: classicData.evolution,
+        vital_signs: classicData.vital_signs,
+        physical_examination: {
+           capture_method: 'classic',
+           free_text: classicData.physical_exam,
+           // Keep structured vital signs in physical_exam data as well if needed by schema
+           vitalSigns: classicData.vital_signs
+        }, 
+        diagnosis: classicData.clinical_diagnosis,
+        prognosis: classicData.prognosis,
+        treatment: `PLAN TERAPÉUTICO:
+${classicData.therapeutic_plan.indications}
+
+MEDICAMENTOS:
+${classicData.therapeutic_plan.medications.map((m: any) => `- ${m.name} ${m.dose} (${m.frequency} x ${m.duration})`).join('\n')}
+
+TERAPIA FÍSICA Y REHABILITACIÓN:
+${classicData.therapeutic_plan.physical_therapy}`,
+        // Store the full structured data in notes for retrieval
+        notes: JSON.stringify(classicData),
+        cie10_code: classicData.cie10_codes?.[0]?.code || '',
+        cie10_description: classicData.cie10_codes?.[0]?.description || '',
+        
+        // Default values for other fields
+        validation_score: 0,
+        recommendations: null,
+        quality_metrics: null,
+        medications: classicData.therapeutic_plan.medications // Map medications if compatible
+      };
+
+      await onSubmit(formData);
+    };
+
+    return (
+      <ClassicConsultationForm
+        patientId={patientId}
+        patientName={patientName}
+        patientData={patientData}
+        doctorId={doctorId}
+        onSave={handleClassicSave}
+        onClose={onClose}
+        initialData={undefined} // Could load draft here if implemented
+        isSaving={loading}
+      />
+    );
+  }
+
   if (showPhysicalExam && selectedTemplate) {
     return (
       <div className="rounded-lg shadow-xl max-w-6xl w-full mx-auto max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
@@ -1135,11 +1209,13 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
                 structuredData={interrogatorioStructured}
                 onStructuredDataChange={setInterrogatorioStructured}
                 doctorId={doctorId}
-                clinicId={profile?.clinic_id}
+                clinicId={activeClinic?.id}
                 currentCondition={watchedData.current_condition}
                 diagnosis={watchedData.diagnosis}
-                onOpenTranscription={() => setIsTranscriptionModalOpen(true)}
+                onOpenTranscription={config?.hpi_config?.enable_voice ? () => setIsTranscriptionModalOpen(true) : undefined}
                 className="bg-gray-800/50 rounded-lg p-4"
+                unifyView={config?.general_config?.unify_hpi}
+                defaultTab={config?.general_config?.consultation_start_mode === 'free_text' ? 'free' : 'template'}
               />
               {errors.current_condition && (
                 <p className="mt-2 text-sm text-red-400 flex items-center">
