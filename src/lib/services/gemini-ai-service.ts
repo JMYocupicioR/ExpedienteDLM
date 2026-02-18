@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 if (!apiKey) {
-  console.warn('VITE_GEMINI_API_KEY no está configurada');
+  // Gemini is optional in some environments; avoid noisy console warnings.
 }
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;

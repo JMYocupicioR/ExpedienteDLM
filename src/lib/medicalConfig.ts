@@ -274,6 +274,8 @@ export type PrescriptionTemplate = {
   description: string;
   category: 'general' | 'pediatric' | 'geriatric' | 'specialist' | 'emergency' | 'all';
   elements: Array<any>;
+  canvas_settings?: any;
+  canvasSettings?: any;
 };
 
 export const PRESCRIPTION_TEMPLATES: PrescriptionTemplate[] = [

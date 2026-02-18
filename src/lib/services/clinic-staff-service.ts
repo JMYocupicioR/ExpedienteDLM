@@ -5,11 +5,13 @@ type ClinicUserRelationship = Database['public']['Tables']['clinic_user_relation
 type ClinicUserRelationshipInsert = Database['public']['Tables']['clinic_user_relationships']['Insert'];
 type ClinicUserRelationshipUpdate = Database['public']['Tables']['clinic_user_relationships']['Update'];
 
+export type RoleInClinic = 'doctor' | 'admin_staff' | 'administrative_assistant';
+
 export interface StaffMember {
   id: string;
   full_name: string | null;
   email: string;
-  role_in_clinic: 'doctor' | 'admin_staff';
+  role_in_clinic: RoleInClinic | string;
   status: 'pending' | 'approved' | 'rejected';
   is_active: boolean;
   created_at: string;
@@ -83,6 +85,35 @@ export class ClinicStaffService {
       };
     } catch (error) {
       // Error log removed for security;
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene personal elegible para asignar citas (usa RPC, evita problemas RLS).
+   * Excluye administrative_assistant. Recomendado para paneles de asistente.
+   */
+  static async getStaffForScheduling(clinicId: string): Promise<StaffMember[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_clinic_staff_for_scheduling', {
+        p_clinic_id: clinicId,
+      });
+      if (error) throw error;
+      return (data ?? []).map((row: { staff_id: string; full_name: string | null; email: string; role_in_clinic: string }) => ({
+        id: row.staff_id,
+        full_name: row.full_name || 'Sin nombre',
+        email: row.email || '',
+        role_in_clinic: row.role_in_clinic,
+        status: 'approved' as const,
+        is_active: true,
+        created_at: '',
+        approved_at: null,
+        approved_by: null,
+        rejection_reason: null,
+        rejected_at: null,
+        rejected_by: null,
+      }));
+    } catch (error) {
       throw error;
     }
   }
@@ -230,15 +261,40 @@ export class ClinicStaffService {
   }
 
   /**
+   * Obtiene el preset de permisos para administrative_assistant
+   */
+  static getAdministrativeAssistantPreset(): Record<string, unknown> {
+    return {
+      permission_profile_version: 1,
+      can_manage_appointments: true,
+      can_create_patient: true,
+      can_view_pending_tasks: true,
+      can_add_pending_tasks: true,
+      can_add_notes: true,
+      can_register_payments: true,
+      can_view_patient_list: true,
+      can_view_patient_basic: true,
+    };
+  }
+
+  /**
    * Crea una nueva relación usuario-clínica (para auto-registro)
    */
   static async createUserRelationship(
     clinicId: string,
     userId: string,
-    role: 'doctor' | 'admin_staff',
+    role: RoleInClinic,
     extraData?: any
   ): Promise<ApprovalResult> {
     try {
+      const validRoles: RoleInClinic[] = ['doctor', 'admin_staff', 'administrative_assistant'];
+      if (!validRoles.includes(role)) {
+        return { success: false, message: 'Rol inválido', error: `Rol no permitido: ${role}` };
+      }
+      const permissions =
+        role === 'administrative_assistant'
+          ? { ...this.getAdministrativeAssistantPreset(), ...(extraData || {}), origin: extraData?.origin || 'invite' }
+          : extraData || {};
       const { error } = await supabase
         .from('clinic_user_relationships')
         .insert({
@@ -247,7 +303,7 @@ export class ClinicStaffService {
           role_in_clinic: role,
           status: 'pending', // Siempre pendiente por defecto
           is_active: true,
-          permissions_override: extraData
+          permissions_override: permissions
         });
 
       if (error) throw error;

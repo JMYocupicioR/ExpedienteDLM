@@ -1,8 +1,10 @@
+import AssistantDashboard from '@/pages/AssistantDashboard';
 import ClinicStatusCard from '@/components/ClinicStatusCard';
 import GenerateInvitationLinkModal from '@/components/GenerateInvitationLinkModal';
 import QuickStartModal from '@/components/QuickStartModal';
 import { Button } from '@/components/ui/button';
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
+import { usePatients } from '@/features/patients/hooks/usePatients';
 import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { EnhancedAppointment } from '@/lib/services/enhanced-appointment-service';
 import { getAppointmentsByDateRange } from '@/lib/services/enhanced-appointment-service';
@@ -30,7 +32,7 @@ import {
   MapPin,
   Eye,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import KeyboardShortcutsHelp from '@/components/KeyboardShortcutsHelp';
@@ -39,6 +41,11 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { activeClinic, userClinics, isIndependentDoctor, isLoading: isClinicLoading, setActiveClinic } =
     useClinic();
+
+  const currentMembership = activeClinic ? userClinics?.find(m => m.clinic_id === activeClinic.id) : null;
+  const isAssistant = currentMembership?.role === 'administrative_assistant';
+
+  const { patientsQuery } = usePatients();
   const clinics = (userClinics || []).map(m => m.clinic).filter(Boolean) as any[];
   const [user, setUser] = useState<{ email?: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -56,16 +63,16 @@ const Dashboard = () => {
     todayAppointments: 0,
     upcomingAppointments: 0,
   });
-  const [recentPatients, setRecentPatients] = useState<
-    Array<{
-      id: string;
-      full_name: string;
-      created_at: string;
-      phone?: string | null;
-      email?: string | null;
-      last_consultation?: string;
-    }>
-  >([]);
+  // Lista unificada con la de /patients: misma fuente que la lista de pacientes
+  const dashboardPatientList = (patientsQuery.data || []) as Array<{
+    id: string;
+    full_name: string;
+    created_at?: string;
+    phone?: string | null;
+    email?: string | null;
+    last_consultation?: string;
+  }>;
+  const recentPatients = dashboardPatientList.slice(0, isAdmin ? 10 : 5);
   const [upcomingAppointments, setUpcomingAppointments] = useState<EnhancedAppointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
@@ -88,19 +95,17 @@ const Dashboard = () => {
     onShowHelp: () => setShowShortcutsHelp(prev => !prev),
   });
 
+  // Track if the initial bootstrap has completed to avoid re-showing loading spinner
+  const bootstrapDoneRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
+    let spinnerWatchdog: ReturnType<typeof setTimeout> | null = null;
+    let clinicLoadingWatchdog: ReturnType<typeof setTimeout> | null = null;
     const bootstrap = async () => {
       try {
-        // Guard: no continuar si no existe sesión
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session) {
-          if (!cancelled) navigate('/auth');
-          return;
-        }
-
+        // Obtener el usuario actual (la protección de ruta en App.tsx
+        // ya garantiza que solo usuarios autenticados llegan aquí)
         const {
           data: { user },
         } = await supabase.auth.getUser();
@@ -118,9 +123,10 @@ const Dashboard = () => {
 
           if (cancelled) return;
 
-          // La verificación de admin ahora puede usar userClinics
+          // La verificación de admin usa userClinics (owner, director, admin_staff -> admin)
           const currentMembership = userClinics.find(m => m.clinic_id === activeClinic?.id);
-          setIsAdmin(currentMembership?.role === 'admin' || profile?.role === 'super_admin');
+          const isAdminRole = currentMembership?.role === 'admin' || currentMembership?.role === 'owner' || currentMembership?.role === 'director';
+          setIsAdmin(isAdminRole || profile?.role === 'super_admin');
 
           if (activeClinic) {
             await loadDashboardData(activeClinic.id);
@@ -132,17 +138,47 @@ const Dashboard = () => {
       } catch (error) {
         // Error log removed for security;
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          bootstrapDoneRef.current = true;
+        }
       }
     };
 
-    if (!isClinicLoading) {
-      bootstrap();
+    // Si el contexto de clínica se queda colgado, evita bloqueo visual indefinido.
+    if (isClinicLoading) {
+      clinicLoadingWatchdog = setTimeout(() => {
+        if (!cancelled) {
+          setLoading(false);
+          bootstrapDoneRef.current = true;
+        }
+      }, 12000);
     }
+
+    // Evita spinner infinito si alguna llamada queda pendiente por red/RLS.
+    spinnerWatchdog = setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        bootstrapDoneRef.current = true;
+      }
+    }, 10000);
+
+    // Only show loading spinner on initial bootstrap, not on subsequent re-runs
+    if (!bootstrapDoneRef.current) {
+      setLoading(true);
+    }
+    bootstrap();
     return () => {
       cancelled = true;
+      if (spinnerWatchdog) {
+        clearTimeout(spinnerWatchdog);
+      }
+      if (clinicLoadingWatchdog) {
+        clearTimeout(clinicLoadingWatchdog);
+      }
     };
-  }, [navigate, isClinicLoading, activeClinic, userClinics, isIndependentDoctor]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClinicLoading, activeClinic?.id, isIndependentDoctor]);
 
   useEffect(() => {
     if (searchTerm.length > 2 && activeClinic) {
@@ -154,65 +190,42 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, activeClinic]);
 
+  // Mantener Total Pacientes alineado con la misma fuente que la lista (usePatients)
+  useEffect(() => {
+    const count = (patientsQuery.data || []).length;
+    setRealStats(prev => (prev.patients === count ? prev : { ...prev, patients: count }));
+  }, [patientsQuery.data]);
+
+  if (isAssistant) {
+    return <AssistantDashboard />;
+  }
+
   const loadDashboardData = async (clinicId: string) => {
     try {
-      // Cargar estadísticas reales filtradas por clínica
-      const [patientsResult, consultationsResult, prescriptionsResult, recentPatientsResult] =
-        await Promise.all([
-          supabase.from('patients').select('id', { count: 'exact' }).eq('clinic_id', clinicId),
-          supabase.from('consultations').select('id', { count: 'exact' }).eq('clinic_id', clinicId),
-          supabase.from('prescriptions').select('id', { count: 'exact' }).eq('clinic_id', clinicId),
-          supabase
-            .from('patients')
-            .select(
-              `
-            id,
-            full_name,
-            phone,
-            email,
-            created_at,
-            consultations (
-              id,
-              created_at
-            )
-          `
-            )
+      // Estadísticas de consultas, recetas y consultas de hoy (pacientes vienen de usePatients)
+      const [consultationsResult, prescriptionsResult, todayConsultationsResult] = await Promise.all([
+        supabase.from('consultations').select('id', { count: 'exact' }).eq('clinic_id', clinicId),
+        // Evitar filtros por columnas opcionales para no disparar 400 en esquemas desalineados.
+        supabase.from('prescriptions').select('id', { count: 'exact' }),
+        (() => {
+          const today = new Date().toISOString().split('T')[0];
+          return supabase
+            .from('consultations')
+            .select('id', { count: 'exact' })
             .eq('clinic_id', clinicId)
-            .order('created_at', { ascending: false })
-            .limit(isAdmin ? 10 : 5),
-        ]);
+            .gte('created_at', `${today}T00:00:00`)
+            .lt('created_at', `${today}T23:59:59`);
+        })(),
+      ]);
 
-      // Consultas de hoy
-      const today = new Date().toISOString().split('T')[0];
-      const todayConsultationsResult = await supabase
-        .from('consultations')
-        .select('id', { count: 'exact' })
-        .eq('clinic_id', clinicId)
-        .gte('created_at', `${today}T00:00:00`)
-        .lt('created_at', `${today}T23:59:59`);
-
-      setRealStats({
-        patients: patientsResult.count || 0,
+      setRealStats(prev => ({
+        ...prev,
         consultations: consultationsResult.count || 0,
         prescriptions: prescriptionsResult.count || 0,
         todayConsultations: todayConsultationsResult.count || 0,
-        todayAppointments: 0, // Se actualizará en loadUpcomingAppointments
-        upcomingAppointments: 0, // Se actualizará en loadUpcomingAppointments
-      });
-
-      // Procesar pacientes recientes con última consulta
-      const processedPatients = (recentPatientsResult.data || []).map(patient => ({
-        ...patient,
-        last_consultation:
-          patient.consultations && patient.consultations.length > 0
-            ? patient.consultations.sort(
-                (a: any, b: any) =>
-                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              )[0]?.created_at
-            : null,
+        todayAppointments: 0,
+        upcomingAppointments: 0,
       }));
-
-      setRecentPatients(processedPatients);
     } catch (error) {
       // Error log removed for security;
     }
@@ -220,59 +233,17 @@ const Dashboard = () => {
 
   const loadIndependentDashboard = async (userId: string) => {
     try {
-      const [patientsResult, consultationsResult] = await Promise.all([
-        supabase
-          .from('patients')
-          .select('id', { count: 'exact' })
-          .eq('primary_doctor_id', userId)
-          .is('clinic_id', null),
-        supabase
-          .from('consultations')
-          .select('id', { count: 'exact' })
-          .eq('doctor_id', userId)
-          .is('clinic_id', null),
-      ]);
+      // Solo estadísticas de consultas (pacientes vienen de usePatients)
+      const consultationsResult = await supabase
+        .from('consultations')
+        .select('id', { count: 'exact' })
+        .eq('doctor_id', userId)
+        .is('clinic_id', null);
 
       setRealStats(prev => ({
         ...prev,
-        patients: patientsResult.count || 0,
         consultations: consultationsResult.count || 0,
-        prescriptions: prev.prescriptions,
-        todayConsultations: prev.todayConsultations,
       }));
-
-      // Pacientes recientes del médico independiente
-      const recentPatientsResult = await supabase
-        .from('patients')
-        .select(
-          `
-            id,
-            full_name,
-            phone,
-            email,
-            created_at,
-            consultations (
-              id,
-              created_at
-            )
-          `
-        )
-        .eq('primary_doctor_id', userId)
-        .is('clinic_id', null)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      const processedPatients = (recentPatientsResult.data || []).map(patient => ({
-        ...patient,
-        last_consultation:
-          patient.consultations && patient.consultations.length > 0
-            ? patient.consultations.sort(
-                (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              )[0]?.created_at
-            : null,
-      }));
-
-      setRecentPatients(processedPatients);
     } catch (error) {
       // Error log removed for security;
     }
@@ -637,11 +608,17 @@ const Dashboard = () => {
                 </h2>
                 <div className='flex items-center space-x-4'>
                   <Link
-                    to='/clinic-admin'
+                    to='/clinic/dashboard'
                     className='text-cyan-400 text-sm hover:text-cyan-300 flex items-center transition-colors'
                   >
                     <Building2 className='h-4 w-4 mr-1' />
-                    Administrar Clínica
+                    Panel Admin
+                  </Link>
+                  <Link
+                    to='/clinic-admin'
+                    className='text-gray-400 text-sm hover:text-gray-300 flex items-center transition-colors'
+                  >
+                    Configuración
                   </Link>
                   <Link
                     to='/patients'

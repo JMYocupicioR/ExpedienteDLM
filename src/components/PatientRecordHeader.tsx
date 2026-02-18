@@ -99,7 +99,7 @@ export default function PatientRecordHeader({
         </div>
 
         {/* Botones de acción según sección */}
-        {seccionActiva === 'consultas' ? (
+        {seccionActiva === 'dashboard' || seccionActiva === 'escalas' ? null : seccionActiva === 'consultas' ? (
           <button
             onClick={onNewConsultation}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors shadow-lg"

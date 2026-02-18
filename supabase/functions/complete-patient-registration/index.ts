@@ -22,6 +22,111 @@ const buildCorsHeaders = (req: Request): Record<string, string> => {
   };
 };
 
+const upsertPathologicalHistory = async (
+  supabase: ReturnType<typeof createClient>,
+  patientId: string,
+  pathological: any,
+) => {
+  const { data: existing } = await supabase
+    .from('pathological_histories')
+    .select('id')
+    .eq('patient_id', patientId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const payload = {
+    patient_id: patientId,
+    chronic_diseases: pathological?.chronic_diseases ?? [],
+    current_treatments: pathological?.current_treatments ?? [],
+    surgeries: pathological?.surgeries ?? [],
+    fractures: pathological?.fractures ?? [],
+    previous_hospitalizations: pathological?.previous_hospitalizations ?? [],
+    substance_use: (pathological?.substance_use ?? {}) as Json,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing?.id) {
+    return supabase
+      .from('pathological_histories')
+      .update(payload)
+      .eq('id', existing.id);
+  }
+
+  return supabase
+    .from('pathological_histories')
+    .insert({
+      ...payload,
+      created_at: new Date().toISOString(),
+    });
+};
+
+const upsertNonPathologicalHistory = async (
+  supabase: ReturnType<typeof createClient>,
+  patientId: string,
+  nonPathological: any,
+) => {
+  const { data: existing } = await supabase
+    .from('non_pathological_histories')
+    .select('id')
+    .eq('patient_id', patientId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const payload = {
+    patient_id: patientId,
+    handedness: nonPathological?.handedness ?? 'right',
+    religion: nonPathological?.religion ?? '',
+    marital_status: nonPathological?.marital_status ?? '',
+    education_level: nonPathological?.education_level ?? '',
+    diet: nonPathological?.diet ?? '',
+    personal_hygiene: nonPathological?.personal_hygiene ?? '',
+    vaccination_history: nonPathological?.vaccination_history ?? [],
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing?.id) {
+    return supabase
+      .from('non_pathological_histories')
+      .update(payload)
+      .eq('id', existing.id);
+  }
+
+  return supabase
+    .from('non_pathological_histories')
+    .insert({
+      ...payload,
+      created_at: new Date().toISOString(),
+    });
+};
+
+const replaceHereditaryBackgrounds = async (
+  supabase: ReturnType<typeof createClient>,
+  patientId: string,
+  hereditary: any[],
+) => {
+  const cleaned = (Array.isArray(hereditary) ? hereditary : [])
+    .filter((h) => h && (h.relationship || h.condition))
+    .map((h) => ({
+      patient_id: patientId,
+      relationship: String(h.relationship || ''),
+      condition: String(h.condition || ''),
+      notes: h.notes ? String(h.notes) : null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+
+  const { error: delErr } = await supabase
+    .from('hereditary_backgrounds')
+    .delete()
+    .eq('patient_id', patientId);
+  if (delErr) return { error: delErr };
+
+  if (cleaned.length === 0) return { error: null };
+  return supabase.from('hereditary_backgrounds').insert(cleaned as any);
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: buildCorsHeaders(req) });
@@ -42,6 +147,15 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Missing service configuration' }), { status: 500, headers: buildCorsHeaders(req) });
     }
     const supabase = createClient(url, key, { auth: { persistSession: false } });
+
+    // Usuario autenticado opcional (para vincular auth.uid -> patients.patient_user_id)
+    const authHeader = req.headers.get('authorization');
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    let requestingUserId: string | null = null;
+    if (bearerToken) {
+      const { data: authData } = await supabase.auth.getUser(bearerToken);
+      requestingUserId = authData?.user?.id ?? null;
+    }
 
     // 1) Validar token
     const { data: tokenRow, error: tokenErr } = await supabase
@@ -111,73 +225,38 @@ serve(async (req) => {
       patientId = patient.id as string;
     }
 
-    // 4) Crear antecedentes
-    if (pathological) {
-      const { error: phErr } = await supabase
-        .from('pathological_histories')
-        .insert({
-          patient_id: patientId,
-          chronic_diseases: pathological.chronic_diseases ?? [],
-          current_treatments: pathological.current_treatments ?? [],
-          surgeries: pathological.surgeries ?? [],
-          fractures: pathological.fractures ?? [],
-          previous_hospitalizations: pathological.previous_hospitalizations ?? [],
-          substance_use: (pathological.substance_use ?? {}) as Json,
-          created_at: new Date().toISOString(),
+    // 3b) Vincular cuenta auth del paciente cuando aplica
+    if (requestingUserId) {
+      await supabase
+        .from('patients')
+        .update({
+          patient_user_id: requestingUserId,
           updated_at: new Date().toISOString(),
-        });
+        })
+        .eq('id', patientId)
+        .or(`patient_user_id.is.null,patient_user_id.eq.${requestingUserId}`);
+    }
+
+    // 4) Crear/actualizar antecedentes (idempotente)
+    if (pathological) {
+      const { error: phErr } = await upsertPathologicalHistory(supabase, patientId, pathological);
       if (phErr) {
-        // Limpieza básica
-        await supabase.from('patients').delete().eq('id', patientId);
         return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes patológicos' }), { status: 400, headers: buildCorsHeaders(req) });
       }
     }
 
     if (nonPathological) {
-      const { error: nphErr } = await supabase
-        .from('non_pathological_histories')
-        .insert({
-          patient_id: patientId,
-          handedness: nonPathological.handedness ?? 'right',
-          religion: nonPathological.religion ?? '',
-          marital_status: nonPathological.marital_status ?? '',
-          education_level: nonPathological.education_level ?? '',
-          diet: nonPathological.diet ?? '',
-          personal_hygiene: nonPathological.personal_hygiene ?? '',
-          vaccination_history: nonPathological.vaccination_history ?? [],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+      const { error: nphErr } = await upsertNonPathologicalHistory(supabase, patientId, nonPathological);
       if (nphErr) {
-        await supabase.from('pathological_histories').delete().eq('patient_id', patientId);
-        if (!tokenRow.assigned_patient_id) {
-          await supabase.from('patients').delete().eq('id', patientId);
-        }
         return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes no patológicos' }), { status: 400, headers: buildCorsHeaders(req) });
       }
     }
 
     // 4b) Heredofamiliares
     if (hereditary && Array.isArray(hereditary)) {
-      // Insertar múltiples filas
-      const entries = (hereditary as Array<any>).filter(h => h && (h.relationship || h.condition)).map(h => ({
-        patient_id: patientId,
-        relationship: String(h.relationship || ''),
-        condition: String(h.condition || ''),
-        notes: h.notes ? String(h.notes) : null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-      if (entries.length > 0) {
-        const { error: hbErr } = await supabase.from('hereditary_backgrounds').insert(entries as any);
-        if (hbErr) {
-          await supabase.from('non_pathological_histories').delete().eq('patient_id', patientId);
-          await supabase.from('pathological_histories').delete().eq('patient_id', patientId);
-          if (!tokenRow.assigned_patient_id) {
-            await supabase.from('patients').delete().eq('id', patientId);
-          }
-          return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes heredofamiliares' }), { status: 400, headers: buildCorsHeaders(req) });
-        }
+      const { error: hbErr } = await replaceHereditaryBackgrounds(supabase, patientId, hereditary as Array<any>);
+      if (hbErr) {
+        return new Response(JSON.stringify({ error: 'No se pudieron guardar antecedentes heredofamiliares' }), { status: 400, headers: buildCorsHeaders(req) });
       }
     }
 
@@ -212,7 +291,10 @@ serve(async (req) => {
     // 6) Marcar token como completado
     const { error: updErr } = await supabase
       .from('patient_registration_tokens')
-      .update({ status: 'completed' })
+      .update({
+        status: 'completed',
+        assigned_patient_id: patientId,
+      } as any)
       .eq('id', tokenRow.id);
     if (updErr) {
       // No revertimos si ya persistimos todo, pero dejamos trazabilidad

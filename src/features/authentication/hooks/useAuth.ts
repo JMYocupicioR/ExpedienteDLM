@@ -1,7 +1,7 @@
 import type { Database } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
@@ -10,51 +10,10 @@ export function useAuth() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
+  const loadingResolvedRef = useRef(false);
+  const currentUserIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    // Get initial session
-    const getInitialSession = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (session?.user) {
-          setSession(session);
-          setUser(session.user);
-          await loadProfile(session.user.id);
-        }
-      } catch (error) {
-        // Error log removed for security;
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    getInitialSession();
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-
-      setSession(newSession);
-      if (newSession?.user) {
-        setUser(newSession.user);
-        await loadProfile(newSession.user.id);
-      } else {
-        setUser(null);
-        setProfile(null);
-      }
-      setLoading(false);
-
-      // La navegación se maneja ahora en App.tsx, no en el hook
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const loadProfile = async (userId: string) => {
+  const loadProfile = useCallback(async (userId: string) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
 
@@ -67,7 +26,75 @@ export function useAuth() {
     } catch (error) {
       // Error log removed for security;
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Safety timeout — if getSession() hangs (e.g. background tab), unblock the UI
+    const timeout = setTimeout(() => {
+      if (!loadingResolvedRef.current) {
+        loadingResolvedRef.current = true;
+        setLoading(false);
+      }
+    }, 5000);
+
+    // Get initial session
+    const getInitialSession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          setSession(session);
+          setUser(session.user);
+          currentUserIdRef.current = session.user.id;
+          await loadProfile(session.user.id);
+        }
+      } catch (error) {
+        // Error log removed for security;
+      } finally {
+        clearTimeout(timeout);
+        loadingResolvedRef.current = true;
+        setLoading(false);
+      }
+    };
+
+    getInitialSession();
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      // TOKEN_REFRESHED doesn't change user/profile — skip expensive work
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(newSession);
+        return;
+      }
+
+      setSession(newSession);
+      if (newSession?.user) {
+        setUser(newSession.user);
+        // Only reload profile if user actually changed
+        if (currentUserIdRef.current !== newSession.user.id) {
+          currentUserIdRef.current = newSession.user.id;
+          await loadProfile(newSession.user.id);
+        }
+      } else {
+        setUser(null);
+        setProfile(null);
+        currentUserIdRef.current = null;
+      }
+      loadingResolvedRef.current = true;
+      setLoading(false);
+
+      // Navigation is handled in App.tsx, not in this hook
+    });
+
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
+  }, [loadProfile]);
 
   const signOut = async () => {
     try {

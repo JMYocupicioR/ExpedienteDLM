@@ -1,29 +1,27 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import throttle from 'lodash.throttle';
+import QRCodeLib from 'qrcode';
 import { 
-  Move, Type, Palette, Image, Save, Eye, Printer, Download, 
-  Trash2, Copy, RotateCcw, ZoomIn, ZoomOut, Grid, Layers,
-  FileText, Plus, Minus, AlignLeft, AlignCenter, AlignRight,
-  Bold, Italic, Underline, Upload, X, Settings, Layout,
-  Calendar, Clock, Minus as Separator, Square, QrCode,
+  Move, Type, Image as ImageIcon, Save, Eye, Printer, Download, 
+  Trash2, Copy, ZoomIn, ZoomOut, Grid, Layers,
+  FileText, Plus, AlignLeft, AlignCenter, AlignRight,
+  Bold, Italic, Underline, X, Settings, 
+  Calendar, Clock, Square, QrCode,
   FileSignature, Table, MapPin, Phone, Mail, User, Undo2, Redo2,
-  Stethoscope, Heart, Pill, Thermometer, FileCheck, AlertTriangle,
-  Shield, Database, HelpCircle, Sparkles, Bookmark, Target
+  Stethoscope, Heart, Pill, Thermometer, AlertTriangle,
+  Shield, Database, HelpCircle, Sparkles, Target,
+  SeparatorHorizontal as Separator
 } from 'lucide-react';
-import { validateAndSanitizeArray } from '@/lib/validation';
 import { useValidation } from '@/features/medical-records/hooks/useValidation';
 import { 
   validateMedication, 
-  checkDrugInteractions, 
-  calculatePrescriptionExpiry,
-  MEDICATION_CONSTRAINTS,
+  checkDrugInteractions,
   SYSTEM_LIMITS,
-  PRESCRIPTION_TEMPLATES,
   getTemplatesByCategory,
   getTemplateById,
   type PrescriptionTemplate
 } from '@/lib/medicalConfig';
-import QRCodeLib from 'qrcode';
-import throttle from 'lodash.throttle';
+import { type PrescriptionTemplateData } from '@/lib/prescriptionTemplates';
 
 interface Position {
   x: number;
@@ -90,14 +88,7 @@ interface HistoryState {
   timestamp: number;
 }
 
-interface Template {
-  id: string;
-  name: string;
-  description: string;
-  category: 'general' | 'pediatric' | 'geriatric' | 'specialist';
-  elements: Element[];
-  thumbnail?: string;
-}
+
 
 interface ValidationError {
   field: string;
@@ -113,16 +104,14 @@ interface DrugInteraction {
 }
 
 interface VisualPrescriptionEditorProps {
-  patientId: string;
   patientName: string;
-  onSave: (prescriptionStyle: any) => Promise<void>;
+  onSave: (prescriptionStyle: PrescriptionTemplateData) => Promise<void>;
   onClose?: () => void;
   initialData?: Partial<PrescriptionData>;
-  existingTemplate?: any;
+  existingTemplate?: Partial<PrescriptionTemplateData>;
 }
 
 const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
-  patientId,
   patientName,
   onSave,
   onClose,
@@ -149,10 +138,12 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const [alignmentGuides, setAlignmentGuides] = useState<Array<{type: 'vertical' | 'horizontal', position: number}>>([]);
   const [copiedElements, setCopiedElements] = useState<Element[]>([]);
   const [showMeasurements, setShowMeasurements] = useState(false);
+  const [showElementPanel, setShowElementPanel] = useState(true);
   const [measurementStart, setMeasurementStart] = useState<{x: number, y: number} | null>(null);
   const [measurementEnd, setMeasurementEnd] = useState<{x: number, y: number} | null>(null);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   // Configuración de impresión
   const [paperSize, setPaperSize] = useState<string>('a4'); // 'a4' | 'letter' | 'legal'
   const [orientation, setOrientation] = useState<string>('portrait'); // 'portrait' | 'landscape'
@@ -166,7 +157,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const [isUndoRedo, setIsUndoRedo] = useState(false);
 
   // Estados de plantillas y guardado
-  const [templates, setTemplates] = useState<PrescriptionTemplate[]>(PRESCRIPTION_TEMPLATES);
+  const [templates, setTemplates] = useState<PrescriptionTemplate[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState<'all' | 'general' | 'pediatric' | 'geriatric' | 'specialist' | 'emergency'>('all');
   const [autoSave, setAutoSave] = useState(true);
@@ -178,52 +169,8 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const [showValidation, setShowValidation] = useState(true);
 
   // Hooks de validación
-  const { validateArrayField, validateJSONBField } = useValidation();
-
-  // Estados para tipografía avanzada
-  const [fontPresets] = useState([
-    { name: 'Clásica', font: 'Times New Roman', size: 12 },
-    { name: 'Moderna', font: 'Arial', size: 11 },
-    { name: 'Elegante', font: 'Georgia', size: 12 },
-    { name: 'Profesional', font: 'Helvetica', size: 11 },
-    { name: 'Médica', font: 'Calibri', size: 11 }
-  ]);
-  
-  // Estados para logos
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-
-  const previewData: PrescriptionData = {
-    patientName: 'Nombre del Paciente de Ejemplo',
-    doctorName: 'Dr. Nombre de Ejemplo',
-    doctorLicense: '12345678',
-    clinicName: 'Clínica de Ejemplo',
-    diagnosis: 'Diagnóstico de ejemplo para visualización.',
-    medications: [
-      {
-        name: 'Medicamento A',
-        dosage: '10mg',
-        frequency: 'Cada 8 horas',
-        duration: '7 días',
-        instructions: 'Tomar con alimentos.',
-      },
-      {
-        name: 'Medicamento B',
-        dosage: '500mg',
-        frequency: 'Cada 12 horas',
-        duration: '10 días',
-        instructions: 'Evitar la exposición al sol.',
-      },
-    ],
-    notes: 'Notas adicionales y recomendaciones para el paciente.',
-    date: new Date().toLocaleDateString(),
-    patientAge: '30',
-    patientWeight: '70kg',
-    patientAllergies: 'Ninguna conocida',
-    followUpDate: '01/01/2025',
-    prescriptionId: `RX-PREVIEW-${Date.now()}`
-  };
+  // validateCompleteForm is used in handleSave if we want to validate before saving
+  const { validateCompleteForm } = useValidation();
 
   // Elementos de la receta con plantilla inicial
   const [elements, setElements] = useState<Element[]>([
@@ -381,8 +328,8 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     }
   ]);
 
-  // Datos de la receta
-  const [prescriptionData, setPrescriptionData] = useState<PrescriptionData>({
+  // Datos de la receta (solo lectura en este componente, se pasan por props)
+  const prescriptionData = React.useMemo(() => ({
     patientName: patientName || '',
     doctorName: initialData?.doctorName || '',
     doctorLicense: initialData?.doctorLicense || '',
@@ -396,11 +343,121 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     patientAllergies: initialData?.patientAllergies || '',
     followUpDate: initialData?.followUpDate || '',
     prescriptionId: initialData?.prescriptionId || `RX-${Date.now()}`
-  });
+  }), [patientName, initialData]);
+
+  // Funciones de validación médica para el editor
+  const validatePrescription = useCallback(() => {
+    const errors: ValidationError[] = [];
+
+    if (!prescriptionData.patientName?.trim()) {
+      errors.push({ field: 'patientName', message: 'Nombre del paciente es requerido', severity: 'error' });
+    }
+    if (!prescriptionData.doctorName?.trim()) {
+      errors.push({ field: 'doctorName', message: 'Nombre del médico es requerido', severity: 'warning' });
+    }
+    if (!prescriptionData.diagnosis?.trim()) {
+      errors.push({ field: 'diagnosis', message: 'Diagnóstico es requerido', severity: 'error' });
+    }
+
+    const meds = prescriptionData.medications || [];
+    if (meds.length === 0 || (meds.length === 1 && !meds[0]?.name?.trim())) {
+      errors.push({ field: 'medications', message: 'Se requiere al menos un medicamento', severity: 'error' });
+    }
+
+    if (meds.length > SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION) {
+      errors.push({ field: 'medications', message: `Máximo ${SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION} medicamentos por receta`, severity: 'error' });
+    }
+
+    for (const med of meds) {
+      if (!med.name?.trim()) continue; // skip empty rows
+      const dosageNum = parseFloat(med.dosage);
+      const durationNum = parseInt(med.duration);
+      if (dosageNum > 0 && durationNum > 0) {
+        const validation = validateMedication(med.name, dosageNum, med.frequency, durationNum);
+        validation.errors.forEach(e => errors.push({ field: 'medications', message: `${med.name}: ${e}`, severity: 'error' }));
+        validation.warnings.forEach(w => errors.push({ field: 'medications', message: `${med.name}: ${w}`, severity: 'warning' }));
+      } else {
+        if (!med.dosage?.trim()) errors.push({ field: 'medications', message: `${med.name}: Dosis es requerida`, severity: 'error' });
+        if (!med.frequency?.trim()) errors.push({ field: 'medications', message: `${med.name}: Frecuencia es requerida`, severity: 'error' });
+        if (!med.duration?.trim()) errors.push({ field: 'medications', message: `${med.name}: Duración es requerida`, severity: 'error' });
+      }
+    }
+
+    setValidationErrors(errors);
+  }, [prescriptionData]);
+
+  const checkDrugInteractionsAdvanced = useCallback(() => {
+    const medNames = (prescriptionData.medications || [])
+      .map(m => m.name?.trim())
+      .filter((n): n is string => !!n && n.length > 0);
+
+    if (medNames.length < 2) {
+      setDrugInteractions([]);
+      return;
+    }
+
+    const rawInteractions = checkDrugInteractions(medNames);
+    const parsedInteractions: DrugInteraction[] = rawInteractions.map(msg => {
+      const parts = msg.split(':');
+      const drugs = (parts[0] || '').split('+').map(d => d.trim());
+      return {
+        drug1: drugs[0] || 'Desconocido',
+        drug2: drugs[1] || 'Desconocido',
+        severity: 'moderate' as const,
+        description: (parts[1] || msg).trim()
+      };
+    });
+
+    setDrugInteractions(parsedInteractions);
+  }, [prescriptionData.medications]);
+
+  // Estados para tipografía avanzada
+  const [fontPresets] = useState([
+    { name: 'Clásica', font: 'Times New Roman', size: 12 },
+    { name: 'Moderna', font: 'Arial', size: 11 },
+    { name: 'Elegante', font: 'Georgia', size: 12 },
+    { name: 'Profesional', font: 'Helvetica', size: 11 },
+    { name: 'Médica', font: 'Calibri', size: 11 }
+  ]);
+  
+  // QR Code URL
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+
+
+
+  const previewData: PrescriptionData = React.useMemo(() => ({
+    patientName: 'Nombre del Paciente de Ejemplo',
+    doctorName: 'Dr. Nombre de Ejemplo',
+    doctorLicense: '12345678',
+    clinicName: 'Clínica de Ejemplo',
+    diagnosis: 'Diagnóstico de ejemplo para visualización.',
+    medications: [
+      {
+        name: 'Medicamento A',
+        dosage: '10mg',
+        frequency: 'Cada 8 horas',
+        duration: '7 días',
+        instructions: 'Tomar con alimentos.',
+      },
+      {
+        name: 'Medicamento B',
+        dosage: '500mg',
+        frequency: 'Cada 12 horas',
+        duration: '10 días',
+        instructions: 'Evitar la exposición al sol.',
+      },
+    ],
+    notes: 'Notas adicionales y recomendaciones para el paciente.',
+    date: new Date().toLocaleDateString(),
+    patientAge: '30',
+    patientWeight: '70kg',
+    patientAllergies: 'Ninguna conocida',
+    followUpDate: '01/01/2025',
+    prescriptionId: `RX-PREVIEW`
+  }), []);
+
 
   // Estado de la interfaz
-
-  const [showElementPanel, setShowElementPanel] = useState(true);
 
   // ================= FUNCIONES DE HISTORIAL (DESHACER/REHACER) =================
   const addToHistory = useCallback(() => {
@@ -420,7 +477,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     setHistoryIndex(prev => Math.min(prev + 1, 49));
   }, [elements, historyIndex, isUndoRedo]);
 
-  const undo = () => {
+  const undo = useCallback(() => {
     if (historyIndex > 0) {
       setIsUndoRedo(true);
       const prevState = history[historyIndex - 1];
@@ -428,9 +485,9 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       setHistoryIndex(prev => prev - 1);
       setTimeout(() => setIsUndoRedo(false), 100);
     }
-  };
+  }, [history, historyIndex]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       setIsUndoRedo(true);
       const nextState = history[historyIndex + 1];
@@ -438,10 +495,10 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       setHistoryIndex(prev => prev + 1);
       setTimeout(() => setIsUndoRedo(false), 100);
     }
-  };
+  }, [history, historyIndex]);
 
   // ================= FUNCIONES DE GUARDADO AUTOMÁTICO =================
-  const saveToLocalStorage = () => {
+  const saveToLocalStorage = useCallback(() => {
     const data = {
       elements,
       timestamp: Date.now()
@@ -449,7 +506,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     
     localStorage.setItem('prescription-draft', JSON.stringify(data));
     setLastSaved(new Date());
-  };
+  }, [elements]);
 
   const loadFromLocalStorage = () => {
     const saved = localStorage.getItem('prescription-draft');
@@ -465,8 +522,8 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
           setShowGrid(data.canvasSettings.showGrid);
         }
         setLastSaved(new Date(data.timestamp));
-      } catch (error) {
-        // Error log removed for security;
+      } catch (e) {
+        // Error loading from localStorage
       }
     }
   };
@@ -558,7 +615,6 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setLogoFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
         const result = e.target?.result as string;
@@ -575,12 +631,19 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   };
 
   const removeLogoImage = () => {
-    setLogoFile(null);
     setLogoPreview(null);
     const logoElement = elements.find(el => el.type === 'logo');
     if (logoElement) {
       updateElement(logoElement.id, { content: 'LOGO' });
     }
+  };
+
+  const getDistance = () => {
+    if (!measurementStart || !measurementEnd) return 0;
+    return Math.sqrt(
+      Math.pow(measurementEnd.x - measurementStart.x, 2) +
+      Math.pow(measurementEnd.y - measurementStart.y, 2)
+    );
   };
 
   // Funciones de utilidad
@@ -673,22 +736,27 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
           newWidth = resizeStartSize.width + deltaX / zoom;
           newHeight = resizeStartSize.height - deltaY / zoom;
           break;
-        case 'nw':
+        case 'nw': {
           newWidth = resizeStartSize.width - deltaX / zoom;
           newHeight = resizeStartSize.height - deltaY / zoom;
           break;
-        case 'e':
+        }
+        case 'e': {
           newWidth = resizeStartSize.width + deltaX / zoom;
           break;
-        case 'w':
+        }
+        case 'w': {
           newWidth = resizeStartSize.width - deltaX / zoom;
           break;
-        case 's':
+        }
+        case 's': {
           newHeight = resizeStartSize.height + deltaY / zoom;
           break;
-        case 'n':
+        }
+        case 'n': {
           newHeight = resizeStartSize.height - deltaY / zoom;
           break;
+        }
       }
       
       newWidth = snapToGridSize(Math.max(20, newWidth));
@@ -742,29 +810,29 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   }, []);
 
   // Funciones de manipulación de elementos
-  const updateElement = (elementId: string, updates: Partial<Element>) => {
+  const updateElement = useCallback((elementId: string, updates: Partial<Element>) => {
     setElements(prev => prev.map(el => 
       el.id === elementId ? { ...el, ...updates } : el
     ));
-  };
+  }, []);
 
-  const updateElementStyle = (elementId: string, styleUpdates: Partial<TextStyle>) => {
+  const updateElementStyle = useCallback((elementId: string, styleUpdates: Partial<TextStyle>) => {
     setElements(prev => prev.map(el => 
       el.id === elementId 
         ? { ...el, style: { ...el.style, ...styleUpdates } }
         : el
     ));
-  };
+  }, []);
 
-  const deleteElement = (elementId: string) => {
+  const deleteElement = useCallback((elementId: string) => {
     setElements(prev => prev.filter(el => el.id !== elementId));
     setSelectedElement(null);
-  };
+  }, []);
 
   const addElement = (type: Element['type'], iconType?: string) => {
     let content = '';
     let defaultSize = { width: 200, height: 50 };
-    let defaultStyle: Partial<TextStyle> = {
+    const defaultStyle: Partial<TextStyle> = {
       fontSize: 14,
       fontFamily: 'Arial',
       color: '#374151',
@@ -835,7 +903,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     setSelectedElement(newElement.id);
   };
 
-  const duplicateElement = (elementId: string) => {
+  const duplicateElement = useCallback((elementId: string) => {
     const element = elements.find(el => el.id === elementId);
     if (!element) return;
     
@@ -848,7 +916,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     
     setElements(prev => [...prev, newElement]);
     setSelectedElement(newElement.id);
-  };
+  }, [elements]);
 
   // ================= FUNCIONES DE REDIMENSIONAMIENTO AVANZADO =================
   const handleResizeStart = useCallback((elementId: string, handle: string, event: React.MouseEvent) => {
@@ -864,61 +932,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     setResizeStartSize({ width: element.size.width, height: element.size.height });
   }, [elements]);
 
-  const handleResizeMove = useCallback((event: MouseEvent) => {
-    if (!isResizing || !resizeHandle || !selectedElement) return;
-    
-    const deltaX = event.clientX - resizeStartPos.x;
-    const deltaY = event.clientY - resizeStartPos.y;
-    
-    let newWidth = resizeStartSize.width;
-    let newHeight = resizeStartSize.height;
-    
-    // Calcular nuevo tamaño basado en el handle
-    switch (resizeHandle) {
-      case 'se': // Esquina sureste
-        newWidth = resizeStartSize.width + deltaX / zoom;
-        newHeight = resizeStartSize.height + deltaY / zoom;
-        break;
-      case 'sw': // Esquina suroeste  
-        newWidth = resizeStartSize.width - deltaX / zoom;
-        newHeight = resizeStartSize.height + deltaY / zoom;
-        break;
-      case 'ne': // Esquina noreste
-        newWidth = resizeStartSize.width + deltaX / zoom;
-        newHeight = resizeStartSize.height - deltaY / zoom;
-        break;
-      case 'nw': // Esquina noroeste
-        newWidth = resizeStartSize.width - deltaX / zoom;
-        newHeight = resizeStartSize.height - deltaY / zoom;
-        break;
-      case 'e': // Lado este
-        newWidth = resizeStartSize.width + deltaX / zoom;
-        break;
-      case 'w': // Lado oeste
-        newWidth = resizeStartSize.width - deltaX / zoom;
-        break;
-      case 's': // Lado sur
-        newHeight = resizeStartSize.height + deltaY / zoom;
-        break;
-      case 'n': // Lado norte
-        newHeight = resizeStartSize.height - deltaY / zoom;
-        break;
-    }
-    
-    // Aplicar snap to grid
-    newWidth = snapToGridSize(Math.max(20, newWidth));
-    newHeight = snapToGridSize(Math.max(20, newHeight));
-    
-    // Actualizar elemento
-    updateElement(selectedElement, {
-      size: { width: newWidth, height: newHeight }
-    });
-  }, [isResizing, resizeHandle, selectedElement, resizeStartPos, resizeStartSize, zoom, snapToGridSize, updateElement]);
 
-  const handleResizeEnd = useCallback(() => {
-    setIsResizing(false);
-    setResizeHandle(null);
-  }, []);
 
   // ================= FUNCIONES DE SELECCIÓN MÚLTIPLE =================
   const handleMultiSelect = useCallback((elementId: string, ctrlKey: boolean) => {
@@ -940,44 +954,50 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     const elementsToAlign = elements.filter(el => selectedElements.includes(el.id));
     
     switch (alignment) {
-      case 'left':
+      case 'left': {
         const leftmost = Math.min(...elementsToAlign.map(el => el.position.x));
         elementsToAlign.forEach(el => {
           updateElement(el.id, { position: { ...el.position, x: leftmost } });
         });
         break;
-      case 'right':
+      }
+      case 'right': {
         const rightmost = Math.max(...elementsToAlign.map(el => el.position.x + el.size.width));
         elementsToAlign.forEach(el => {
           updateElement(el.id, { position: { ...el.position, x: rightmost - el.size.width } });
         });
         break;
-      case 'center':
+      }
+      case 'center': {
         const centerX = (Math.min(...elementsToAlign.map(el => el.position.x)) + 
                        Math.max(...elementsToAlign.map(el => el.position.x + el.size.width))) / 2;
         elementsToAlign.forEach(el => {
           updateElement(el.id, { position: { ...el.position, x: centerX - el.size.width / 2 } });
         });
         break;
-      case 'top':
+      }
+      case 'top': {
         const topmost = Math.min(...elementsToAlign.map(el => el.position.y));
         elementsToAlign.forEach(el => {
           updateElement(el.id, { position: { ...el.position, y: topmost } });
         });
         break;
-      case 'middle':
+      }
+      case 'middle': {
         const centerY = (Math.min(...elementsToAlign.map(el => el.position.y)) + 
                         Math.max(...elementsToAlign.map(el => el.position.y + el.size.height))) / 2;
         elementsToAlign.forEach(el => {
           updateElement(el.id, { position: { ...el.position, y: centerY - el.size.height / 2 } });
         });
         break;
-      case 'bottom':
+      }
+      case 'bottom': {
         const bottommost = Math.max(...elementsToAlign.map(el => el.position.y + el.size.height));
         elementsToAlign.forEach(el => {
           updateElement(el.id, { position: { ...el.position, y: bottommost - el.size.height } });
         });
         break;
+      }
     }
   }, [selectedElements, elements, updateElement]);
 
@@ -1048,36 +1068,8 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   }, [selectedElements, elements, updateElement]);
 
   // ================= HERRAMIENTAS DE MEDICIÓN =================
-  const startMeasurement = useCallback((x: number, y: number) => {
-    setMeasurementStart({ x, y });
-    setMeasurementEnd(null);
-    setShowMeasurements(true);
-  }, []);
-
-  const updateMeasurement = useCallback((x: number, y: number) => {
-    if (measurementStart) {
-      setMeasurementEnd({ x, y });
-    }
-  }, [measurementStart]);
-
-  const getDistance = useCallback(() => {
-    if (!measurementStart || !measurementEnd) return 0;
-    const dx = measurementEnd.x - measurementStart.x;
-    const dy = measurementEnd.y - measurementStart.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  }, [measurementStart, measurementEnd]);
-
-  // ================= ZOOM CON RUEDA DEL MOUSE =================
-  const handleWheel = useCallback((event: WheelEvent) => {
-    if (event.ctrlKey || event.metaKey) {
-      event.preventDefault();
-      const delta = event.deltaY > 0 ? -0.1 : 0.1;
-      setZoom(prev => Math.max(0.25, Math.min(3, prev + delta)));
-    }
-  }, []);
-
   // Generar QR Code
-  const generateQRCode = async () => {
+  const generateQRCode = useCallback(async () => {
     try {
       const qrData = {
         prescriptionId: previewData.prescriptionId,
@@ -1093,15 +1085,53 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       if (qrElement) {
         updateElement(qrElement.id, { content: qrCodeDataURL });
       }
-    } catch (error) {
-      // Error log removed for security;
+    } catch (e) {
       setValidationErrors(prev => [...prev, {
         field: 'qr',
         message: 'Error al generar código QR. Verifique los datos.',
         severity: 'error'
       }]);
     }
-  };
+  }, [previewData, elements, updateElement]);
+
+  const handleSave = useCallback(async () => {
+    const prescriptionStyleData = {
+      template_elements: elements,
+      canvas_settings: {
+        backgroundColor,
+        backgroundImage,
+        canvasSize,
+        zoom
+      },
+      print_settings: {
+        paperSize,
+        orientation,
+        margins
+      },
+      // Compatibilidad con consumidores que leen en nivel raíz
+      paperSize,
+      orientation,
+      margins
+    };
+
+    const isValid = validateCompleteForm({
+      patient_id: previewData.patientName, // Fallback if no real ID
+      medications: previewData.medications as any,
+      diagnosis: previewData.diagnosis,
+      created_at: previewData.date,
+      expires_at: previewData.date
+    });
+
+    if (!isValid && showValidation) {
+      setValidationErrors(prev => [...prev, {
+        field: 'form',
+        message: 'Por favor complete todos los campos requeridos.',
+        severity: 'warning'
+      }]);
+    }
+
+    await onSave(prescriptionStyleData);
+  }, [elements, backgroundColor, backgroundImage, canvasSize, zoom, paperSize, orientation, margins, onSave, validateCompleteForm, previewData, showValidation]);
 
   const throttledMouseMove = useCallback(
     throttle((event: MouseEvent) => {
@@ -1143,7 +1173,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       
       return () => clearTimeout(timeoutId);
     }
-  }, [elements, autoSave, isUndoRedo]);
+  }, [elements, autoSave, isUndoRedo, saveToLocalStorage]);
 
   // Efecto para shortcuts de teclado
   useEffect(() => {
@@ -1266,22 +1296,14 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       }
     };
 
-    const handleWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
-        const delta = event.deltaY > 0 ? -0.1 : 0.1;
-        setZoom(prev => Math.max(0.25, Math.min(3, prev + delta)));
-      }
-    };
+
 
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('wheel', handleWheel, { passive: false });
     
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('wheel', handleWheel);
     };
-  }, [selectedElement, selectedElements, undo, redo, copySelectedElements, pasteElements, showGrid, showRulers, showElementPanel, distributeSelectedElements, showMeasurements]);
+  }, [selectedElement, selectedElements, undo, redo, copySelectedElements, pasteElements, showGrid, showRulers, showElementPanel, distributeSelectedElements, showMeasurements, deleteElement, duplicateElement, elements, handleSave]);
 
   // Efecto para cargar datos al inicio
   useEffect(() => {
@@ -1318,8 +1340,12 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     } else {
       loadFromLocalStorage();
     }
+    
+    // Cargar todas las plantillas al inicio
+    setTemplates(getTemplatesByCategory('all'));
+    
     generateQRCode();
-  }, [existingTemplate]);
+  }, [existingTemplate, generateQRCode]);
 
   // Efecto para validación automática
   useEffect(() => {
@@ -1331,31 +1357,10 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       
       return () => clearTimeout(timeoutId);
     }
-  }, [prescriptionData, showValidation]);
+  }, [prescriptionData, showValidation, validatePrescription, checkDrugInteractionsAdvanced]);
 
   // Funciones de exportación y acciones
-  const handleSave = async () => {
-    const prescriptionStyleData = {
-      template_elements: elements,
-      canvas_settings: {
-        backgroundColor,
-        backgroundImage,
-        canvasSize,
-        zoom
-      },
-      print_settings: {
-        paperSize,
-        orientation,
-        margins
-      },
-      // Compatibilidad con consumidores que leen en nivel raíz
-      paperSize,
-      orientation,
-      margins
-    };
 
-    await onSave(prescriptionStyleData);
-  };
 
   const handlePrint = () => {
     const printContent = canvasRef.current?.innerHTML;
@@ -1451,7 +1456,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
           return (
             <div className="w-full h-full flex items-center justify-center bg-gray-200 border-2 border-dashed border-gray-400 rounded-lg">
               <div className="text-center">
-                <Image className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                <ImageIcon className="h-8 w-8 mx-auto mb-2 text-gray-400" />
                 <span className="text-gray-400 text-sm">Logo</span>
               </div>
             </div>
@@ -1488,7 +1493,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       case 'time':
         return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       
-      case 'table':
+      case 'table': {
         const rows = contentWithData.split('\n');
         return (
           <table className="w-full text-xs border-collapse">
@@ -1506,9 +1511,10 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
             })}
           </table>
         );
-      
-      case 'icon':
-        const IconComponent = {
+      }
+
+      case 'icon': { // Added brackets
+        const IconComponent = ({
           'user': User,
           'phone': Phone,
           'mail': Mail,
@@ -1519,13 +1525,14 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
           'heart': Heart,
           'pill': Pill,
           'thermometer': Thermometer
-        }[element.iconType || 'user'] || User;
-        
+        } as any)[element.iconType || 'user'] || HelpCircle; // Changed default to HelpCircle
+
         return (
           <div className="w-full h-full flex items-center justify-center">
             <IconComponent className="h-8 w-8" />
           </div>
         );
+      }
       
       default:
         return contentWithData;
@@ -1533,11 +1540,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   };
 
   // ================= FUNCIONES DE LÍMITES Y VALIDACIÓN DE POSICIÓN =================
-  const constrainToCanvas = (x: number, y: number, width: number, height: number) => {
-    const newX = Math.max(0, Math.min(x, canvasSize.width - width));
-    const newY = Math.max(0, Math.min(y, canvasSize.height - height));
-    return { x: newX, y: newY };
-  };
+
 
   return (
     <div className="h-screen bg-gray-900 flex">
@@ -1772,7 +1775,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
             {/* Control de Logo */}
             <div className="bg-gray-700 p-3 rounded-lg">
               <h3 className="text-gray-300 font-medium mb-3 flex items-center">
-                <Image className="h-4 w-4 mr-2" />
+                <ImageIcon className="h-4 w-4 mr-2" />
                 Logo de la Receta
               </h3>
               
@@ -1870,7 +1873,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                     onClick={() => addElement('logo')}
                     className="flex items-center justify-center p-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 text-sm"
                   >
-                    <Image className="h-4 w-4 mr-1" />
+                    <ImageIcon className="h-4 w-4 mr-1" />
                     Logo
                   </button>
                   <button
@@ -2854,7 +2857,7 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                   <div className="flex items-center flex-1 min-w-0">
                     <div className="mr-2 flex-shrink-0">
                       {element.type === 'text' && <Type className="h-4 w-4" />}
-                      {element.type === 'logo' && <Image className="h-4 w-4" />}
+                      {element.type === 'logo' && <ImageIcon className="h-4 w-4" />}
                       {element.type === 'signature' && <FileSignature className="h-4 w-4" />}
                       {element.type === 'qr' && <QrCode className="h-4 w-4" />}
                       {element.type === 'separator' && <Separator className="h-4 w-4" />}

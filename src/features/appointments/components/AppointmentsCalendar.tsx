@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -44,24 +44,33 @@ import {
 } from '@/lib/database.types';
 import useEnhancedAppointments from '@/features/appointments/hooks/useEnhancedAppointments';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useIsAssistant } from '@/hooks/useIsAssistant';
+import { isAdminDisplayRole } from '@/lib/roles';
+import { supabase } from '@/lib/supabase';
 
 interface AppointmentsCalendarProps {
+  preselectedStaffId?: string;
   onAppointmentSelect?: (appointment: EnhancedAppointment) => void;
   onNavigateToPatient?: (patientId: string) => void;
 }
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   scheduled: 'bg-blue-600 border-blue-500',
-  confirmed_by_patient: 'bg-green-600 border-green-500', 
+  confirmed: 'bg-green-500 border-green-400',
+  confirmed_by_patient: 'bg-green-600 border-green-500',
+  in_progress: 'bg-yellow-600 border-yellow-500',
   completed: 'bg-gray-600 border-gray-500',
   cancelled_by_clinic: 'bg-red-600 border-red-500',
   cancelled_by_patient: 'bg-orange-600 border-orange-500',
   no_show: 'bg-red-700 border-red-600',
 };
 
-const statusLabels = {
+const statusLabels: Record<string, string> = {
   scheduled: 'Programada',
-  confirmed_by_patient: 'Confirmada',
+  confirmed: 'Confirmada',
+  confirmed_by_patient: 'Confirmada por Paciente',
+  in_progress: 'En Progreso',
   completed: 'Completada',
   cancelled_by_clinic: 'Cancelada por Clínica',
   cancelled_by_patient: 'Cancelada por Paciente',
@@ -79,12 +88,36 @@ const typeLabels = {
 
 // No necesitamos mock patients aquí ya que PatientSelector maneja los datos
 
+interface ClinicStaffItem {
+  staff_id: string;
+  full_name: string;
+  email: string | null;
+  role_in_clinic: string;
+}
+
 export default function AppointmentsCalendar({ 
+  preselectedStaffId,
   onAppointmentSelect,
   onNavigateToPatient 
 }: AppointmentsCalendarProps) {
   const { user, profile } = useAuth();
+  const { activeClinic, userClinics } = useClinic();
+  const { isAssistant } = useIsAssistant();
   const { messages, addError, addSuccess, removeMessage } = useValidationNotifications();
+
+  const activeClinicMember = activeClinic
+    ? userClinics.find(m => m.clinic_id === activeClinic.id)
+    : null;
+  const canScheduleForOthers =
+    isAssistant || (activeClinicMember ? isAdminDisplayRole(activeClinicMember.role) : false);
+
+  const [filterDoctorId, setFilterDoctorId] = useState<string | null>(preselectedStaffId ?? null);
+  const [clinicStaff, setClinicStaff] = useState<ClinicStaffItem[]>([]);
+
+  const effectiveDoctorId = canScheduleForOthers
+    ? filterDoctorId || undefined
+    : preselectedStaffId || user?.id;
+  const effectiveClinicId = activeClinic?.id ?? profile?.clinic_id ?? undefined;
   
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -96,6 +129,32 @@ export default function AppointmentsCalendar({
   const loadCountRef = useRef(0);
   const lastLoadTimeRef = useRef(0);
   
+  // Fetch clinic staff for doctor filter when assistant/admin
+  const fetchClinicStaff = useCallback(async () => {
+    if (!effectiveClinicId || !canScheduleForOthers) return;
+    try {
+      const { data, error } = await supabase.rpc('get_clinic_staff_for_scheduling', {
+        p_clinic_id: effectiveClinicId,
+      });
+      if (error) throw error;
+      setClinicStaff((data as ClinicStaffItem[]) || []);
+    } catch {
+      setClinicStaff([]);
+    }
+  }, [effectiveClinicId, canScheduleForOthers]);
+
+  useEffect(() => {
+    if (canScheduleForOthers && effectiveClinicId) {
+      fetchClinicStaff();
+    }
+  }, [canScheduleForOthers, effectiveClinicId, fetchClinicStaff]);
+
+  useEffect(() => {
+    if (preselectedStaffId) {
+      setFilterDoctorId(preselectedStaffId);
+    }
+  }, [preselectedStaffId]);
+
   // Usar el hook personalizado para manejar citas
   const {
     appointments,
@@ -110,8 +169,8 @@ export default function AppointmentsCalendar({
   } = useEnhancedAppointments({
     autoLoad: true,
     filters: {
-      doctor_id: user?.id,
-      clinic_id: profile?.clinic_id,
+      ...(effectiveDoctorId && { doctor_id: effectiveDoctorId }),
+      clinic_id: effectiveClinicId,
     }
   });
 
@@ -185,7 +244,7 @@ export default function AppointmentsCalendar({
 
   // Recargar cuando cambia el mes - con protección anti-bucle
   useEffect(() => {
-    if (user?.id && profile?.clinic_id) {
+    if (effectiveClinicId) {
       const now = Date.now();
       
       // Prevenir bucles infinitos
@@ -207,8 +266,8 @@ export default function AppointmentsCalendar({
       // Debounce para evitar múltiples llamadas
       const timeoutId = setTimeout(() => {
         loadAppointments({
-          doctor_id: user.id,
-          clinic_id: profile.clinic_id,
+          ...(effectiveDoctorId && { doctor_id: effectiveDoctorId }),
+          clinic_id: effectiveClinicId,
           date_from: format(monthStart, 'yyyy-MM-dd'),
           date_to: format(monthEnd, 'yyyy-MM-dd'),
         });
@@ -216,7 +275,7 @@ export default function AppointmentsCalendar({
 
       return () => clearTimeout(timeoutId);
     }
-  }, [currentDate, user?.id, profile?.clinic_id]);
+  }, [currentDate, effectiveDoctorId, effectiveClinicId]);
 
   const handleCreateAppointment = async (data: CreateAppointmentPayload) => {
     try {
@@ -274,21 +333,13 @@ export default function AppointmentsCalendar({
   };
 
   const handleNewAppointment = (date?: Date, time?: string) => {
-    console.log('🔧 Nueva Cita clicked:', {
-      user: user?.id,
-      profile: profile?.clinic_id,
-      showAppointmentForm,
-      date: date || selectedDate,
-      time: time || ''
-    });
-
-    if (!user?.id) {
-      addError('Error', 'Usuario no autenticado. Por favor, inicie sesión nuevamente.');
+    if (!effectiveClinicId) {
+      addError('Error', 'Complete su perfil o seleccione una clínica.');
       return;
     }
 
-    if (!profile?.clinic_id) {
-      addError('Error', 'Perfil incompleto. Por favor, complete su perfil y asocie una clínica.');
+    if (!effectiveDoctorId && !canScheduleForOthers) {
+      addError('Error', 'Usuario no autenticado o no hay profesional seleccionado.');
       return;
     }
 
@@ -296,12 +347,6 @@ export default function AppointmentsCalendar({
     setSelectedDate(date || selectedDate);
     setSelectedTimeSlot(time || '');
     setShowAppointmentForm(true);
-    
-    console.log('✅ AppointmentForm should show:', {
-      showAppointmentForm: true,
-      hasUser: !!user?.id,
-      hasClinic: !!profile?.clinic_id
-    });
   };
 
   const handleDateClick = (date: Date) => {
@@ -396,6 +441,25 @@ export default function AppointmentsCalendar({
                   <p className="text-gray-400 text-sm mt-1">
                     {format(currentDate, "MMMM 'de' yyyy", { locale: es })}
                   </p>
+                  {canScheduleForOthers && clinicStaff.length > 0 && (
+                    <div className="mt-2">
+                      <label className="text-xs text-gray-400 mr-2">Ver agenda de:</label>
+                      <select
+                        value={filterDoctorId ?? '__all__'}
+                        onChange={e =>
+                          setFilterDoctorId(e.target.value === '__all__' ? null : e.target.value)
+                        }
+                        className="mt-1 px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                      >
+                        <option value="__all__">Todos los profesionales</option>
+                        {clinicStaff.map(s => (
+                          <option key={s.staff_id} value={s.staff_id}>
+                            {s.full_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {/* Debug Info */}
                   {import.meta.env.DEV && (
                     <div className="text-xs text-yellow-400 mt-1">
@@ -684,19 +748,25 @@ export default function AppointmentsCalendar({
       {/* Modal de Formulario de Cita */}
       {showAppointmentForm && (
         <>
-          {user?.id && profile?.clinic_id ? (
+          {effectiveClinicId &&
+          (effectiveDoctorId ||
+            (canScheduleForOthers && (clinicStaff.length > 0 || editingAppointment))) ? (
             <AppointmentForm
               isOpen={showAppointmentForm}
               onClose={() => {
-                console.log('🔧 Closing AppointmentForm');
                 setShowAppointmentForm(false);
                 setEditingAppointment(null);
                 setSelectedTimeSlot('');
               }}
               onSubmit={editingAppointment ? handleUpdateAppointment : handleCreateAppointment}
               appointment={editingAppointment}
-              doctorId={user.id}
-              clinicId={profile.clinic_id}
+              doctorId={
+                editingAppointment?.doctor_id ??
+                effectiveDoctorId ??
+                (clinicStaff.length > 0 ? clinicStaff[0].staff_id : user?.id ?? '')
+              }
+              clinicId={effectiveClinicId}
+              allowDoctorSelection={canScheduleForOthers}
               selectedDate={format(selectedDate, 'yyyy-MM-dd')}
               selectedTime={selectedTimeSlot}
             />
@@ -707,11 +777,10 @@ export default function AppointmentsCalendar({
                   No se puede abrir el formulario
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  {!user?.id ? 'Usuario no autenticado.' : 'Perfil incompleto o sin clínica asociada.'}
+                  {!effectiveClinicId
+                    ? 'Seleccione una clínica.'
+                    : 'Seleccione un profesional o complete su perfil.'}
                 </p>
-                <div className="text-xs text-gray-500 mb-4 font-mono">
-                  Debug: user={user?.id || 'null'}, clinic={profile?.clinic_id || 'null'}
-                </div>
                 <div className="flex justify-end space-x-3">
                   <button
                     onClick={() => setShowAppointmentForm(false)}

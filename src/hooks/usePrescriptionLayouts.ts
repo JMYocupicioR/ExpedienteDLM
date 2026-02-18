@@ -87,7 +87,7 @@ export function usePrescriptionLayouts() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('prescription_visual_layouts')
+        .from('prescription_layouts')
         .select('*')
         .or(`doctor_id.eq.${user.id},is_public.eq.true`)
         .order('usage_count', { ascending: false });
@@ -137,7 +137,7 @@ export function usePrescriptionLayouts() {
       if (layoutId) {
         // Update existing layout
         const { data, error } = await supabase
-          .from('prescription_visual_layouts')
+          .from('prescription_layouts')
           .update(layoutData)
           .eq('id', layoutId)
           .eq('doctor_id', user.id)
@@ -149,7 +149,7 @@ export function usePrescriptionLayouts() {
       } else {
         // Create new layout
         const { data, error } = await supabase
-          .from('prescription_visual_layouts')
+          .from('prescription_layouts')
           .insert(layoutData)
           .select()
           .single();
@@ -172,7 +172,7 @@ export function usePrescriptionLayouts() {
 
     try {
       const { error } = await supabase
-        .from('prescription_visual_layouts')
+        .from('prescription_layouts')
         .delete()
         .eq('id', layoutId)
         .eq('doctor_id', user.id);
@@ -193,13 +193,13 @@ export function usePrescriptionLayouts() {
     try {
       // First, remove default from all layouts
       await supabase
-        .from('prescription_visual_layouts')
+        .from('prescription_layouts')
         .update({ is_default: false })
         .eq('doctor_id', user.id);
 
       // Then set the selected layout as default
       const { error } = await supabase
-        .from('prescription_visual_layouts')
+        .from('prescription_layouts')
         .update({ is_default: true })
         .eq('id', layoutId)
         .eq('doctor_id', user.id);
@@ -216,7 +216,7 @@ export function usePrescriptionLayouts() {
   // Increment usage count for a layout
   const incrementUsage = async (layoutId: string) => {
     try {
-      await supabase.rpc('increment_layout_usage', { layout_id: layoutId });
+      await supabase.rpc('increment_prescription_layout_usage', { p_layout_id: layoutId });
     } catch (err) {
       console.warn('Error incrementing usage:', err);
     }

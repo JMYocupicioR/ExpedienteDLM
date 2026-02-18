@@ -1,19 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  User, Settings, Camera, Award, Calendar, Phone, Mail, MapPin, 
-  Stethoscope, Users, Building, FileText, Star, Activity, Clock,
-  Edit3, Save, X, Upload, Download, Eye, ChevronRight, Heart,
-  TrendingUp, CheckCircle, AlertCircle
+  User, 
+  Award, Calendar, Phone, Mail, MapPin, 
+  Stethoscope, Users, Building, FileText, Star, 
+  Edit3, Save, X, DoorOpen, Clock,
+  AlertCircle, CheckCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
-import { EnhancedProfile, MedicalSpecialty, Clinic } from '@/lib/database.types';
+import { EnhancedProfile, Clinic } from '@/lib/database.types';
 import PhotoUploader from '@/components/shared/PhotoUploader';
 import MedicalStatsCard from '@/components/MedicalStatsCard';
 import ActivityFeed from '@/components/shared/ActivityFeed';
 import ClinicStatusCard from '@/components/ClinicStatusCard';
+
+type ProfileWithAssociations = EnhancedProfile & {
+  clinic?: {
+    id: string;
+    name: string;
+    type: string;
+    address?: string;
+    phone?: string;
+  } | null;
+  specialty?: {
+    name: string;
+    category: string;
+    description?: string;
+  } | null;
+};
 
 interface ProfileStats {
   totalPatients: number;
@@ -33,9 +49,55 @@ interface RecentActivity {
   patientName?: string;
 }
 
+const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+function PhysicalPresenceScheduleEditor({
+  schedule,
+  onChange,
+}: {
+  schedule: Array<{ day: number; start: string; end: string }>;
+  onChange: (s: Array<{ day: number; start: string; end: string }>) => void;
+}) {
+  const updateSlot = (day: number, start: string, end: string) => {
+    const rest = schedule.filter((s) => s.day !== day);
+    if (start && end) {
+      onChange([...rest, { day, start, end }].sort((a, b) => a.day - b.day));
+    } else {
+      onChange(rest);
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-700 space-y-3">
+      <p className="text-sm text-gray-400">Define tu horario de presencia física en el consultorio</p>
+      {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+        const slot = schedule.find((s) => s.day === day);
+        return (
+          <div key={day} className="flex items-center gap-3 flex-wrap">
+            <span className="w-24 text-sm text-gray-400">{DAY_LABELS[day]}</span>
+            <input
+              type="time"
+              value={slot?.start || ''}
+              onChange={(e) => updateSlot(day, e.target.value, slot?.end || '')}
+              className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white"
+            />
+            <span className="text-gray-500">-</span>
+            <input
+              type="time"
+              value={slot?.end || ''}
+              onChange={(e) => updateSlot(day, slot?.start || '', e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function UserProfile() {
   const navigate = useNavigate();
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { 
     uploadProfilePhoto, 
     uploadPrescriptionIcon, 
@@ -51,9 +113,7 @@ export default function UserProfile() {
   const [success, setSuccess] = useState<string | null>(null);
 
   // Profile data
-  const [profileData, setProfileData] = useState<EnhancedProfile | null>(null);
-  const [specialty, setSpecialty] = useState<MedicalSpecialty | null>(null);
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const [profileData, setProfileData] = useState<ProfileWithAssociations | null>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [prescriptionIcon, setPrescriptionIcon] = useState<string | null>(null);
 
@@ -84,75 +144,114 @@ export default function UserProfile() {
     awards: '',
     emergency_contact: '',
     clinic_id: null as string | null,
-    is_independent: false
+    is_independent: false,
+    primary_room_id: null as string | null,
+    accepts_appointments: true,
+    physical_presence_schedule: [] as Array<{ day: number; start: string; end: string }>,
   });
+
+  // Rooms and assignments for doctors with clinic
+  const [availableRooms, setAvailableRooms] = useState<Array<{ id: string; room_number: string; room_name: string | null; floor: string | null }>>([]);
+  const [myRoomAssignments, setMyRoomAssignments] = useState<Array<{ room_id: string; is_primary: boolean }>>([]);
 
   useEffect(() => {
     if (!authLoading && user?.id) {
       loadUserProfile(user.id);
-    } else if (!authLoading && !user) {
-      navigate('/auth');
     }
-  }, [user?.id, authLoading, navigate]);
+    // La protección de ruta en App.tsx redirige automáticamente si no hay usuario
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, authLoading]);
 
   const loadUserProfile = async (userId: string) => {
     try {
       setLoading(true);
       setError(null);
 
-      // Load enhanced profile data
-      const { data: enhancedProfile, error: profileError } = await supabase
+      // Load profile with plain select only (no embeds) - avoids FK/schema mismatches
+      // (specialty_id/clinic_id embeds can fail if FKs or tables don't exist)
+      const { data: rawProfile, error: profileError } = await supabase
         .from('profiles')
-        .select(`
-          *,
-          specialty:specialty_id(name, category, description),
-          clinic:clinic_id(name, type, address, phone)
-        `)
+        .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (profileError) throw profileError;
+      if (!rawProfile) {
+        setError('Perfil no encontrado');
+        setProfileData(null);
+        setLoading(false);
+        return;
+      }
 
-      setProfileData(enhancedProfile);
+      const enhancedProfile = rawProfile as Record<string, unknown>;
+      const addInfo = (enhancedProfile.additional_info || {}) as Record<string, unknown>;
+
+      // Optionally fetch clinic when clinic_id exists (separate query, no embed)
+      let clinic: ProfileWithAssociations['clinic'] = null;
+      if (enhancedProfile?.clinic_id) {
+        try {
+          const { data: clinicData } = await supabase
+            .from('clinics')
+            .select('id, name, type, address, phone')
+            .eq('id', enhancedProfile.clinic_id)
+            .maybeSingle();
+          clinic = clinicData || null;
+        } catch {
+          clinic = null;
+        }
+      }
+
+      setProfileData({
+        ...enhancedProfile,
+        clinic,
+        // specialty: profiles has string column; ProfileWithAssociations expects object with .name
+        specialty: (enhancedProfile as any)?.specialty
+          ? typeof (enhancedProfile as any).specialty === 'object'
+            ? (enhancedProfile as any).specialty
+            : { name: (enhancedProfile as any).specialty, category: '', description: '' }
+          : null
+      } as ProfileWithAssociations);
 
       // Determine if user is independent doctor
       const isIndependent = !enhancedProfile.clinic_id;
       setIsIndependentDoctor(isIndependent);
 
-      // Update edit form data
+      const acceptsAppointments = (enhancedProfile.accepts_appointments ?? addInfo?.accepts_appointments) !== false;
+      const physSchedule = (enhancedProfile.physical_presence_schedule ?? addInfo?.physical_presence_schedule ?? []) as Array<{ day: number; start: string; end: string }>;
+
       setEditData({
-        full_name: enhancedProfile.full_name || '',
-        phone: enhancedProfile.phone || '',
-        address: enhancedProfile.additional_info?.address || '',
-        bio: enhancedProfile.additional_info?.bio || '',
-        consultation_fee: enhancedProfile.additional_info?.consultation_fee || '',
-        languages: enhancedProfile.additional_info?.languages?.join(', ') || '',
-        certifications: enhancedProfile.additional_info?.certifications?.join(', ') || '',
-        awards: enhancedProfile.additional_info?.awards?.join(', ') || '',
-        emergency_contact: enhancedProfile.additional_info?.emergency_contact || '',
-        clinic_id: enhancedProfile.clinic_id || null,
-        is_independent: isIndependent
+        full_name: String(enhancedProfile.full_name || ''),
+        phone: String(enhancedProfile.phone || ''),
+        address: String(addInfo?.address || ''),
+        bio: String(addInfo?.bio || ''),
+        consultation_fee: String(addInfo?.consultation_fee || ''),
+        languages: Array.isArray(addInfo?.languages) ? (addInfo.languages as string[]).join(', ') : '',
+        certifications: Array.isArray(addInfo?.certifications) ? (addInfo.certifications as string[]).join(', ') : '',
+        awards: Array.isArray(addInfo?.awards) ? (addInfo.awards as string[]).join(', ') : '',
+        emergency_contact: String(addInfo?.emergency_contact || ''),
+        clinic_id: (enhancedProfile.clinic_id as string) || null,
+        is_independent: isIndependent,
+        primary_room_id: null as string | null,
+        accepts_appointments: acceptsAppointments,
+        physical_presence_schedule: Array.isArray(physSchedule) ? physSchedule : [],
       });
 
-      // Load available clinics
-      await loadAvailableClinics();
+      // Load available clinics (non-blocking; may fail for some roles)
+      loadAvailableClinics().catch(() => {});
 
-      // Load profile photos from storage
-      try {
-        const photoUrl = await getProfilePhotoUrl();
-        const iconUrl = await getPrescriptionIconUrl();
-        setProfilePhoto(photoUrl);
-        setPrescriptionIcon(iconUrl);
-      } catch (e) {
-        console.error("Error loading photos", e);
+      // Load rooms and assignments for doctors with clinic
+      if (enhancedProfile.clinic_id && (enhancedProfile.role === 'doctor' || (enhancedProfile as { role?: string }).role === 'health_staff')) {
+        loadRoomsAndAssignments(enhancedProfile.clinic_id as string, userId).catch(() => {});
       }
 
-      // Load statistics (pass data explicitly)
-      await loadProfileStats(userId, enhancedProfile);
+      // Load profile photos from storage (non-blocking)
+      getProfilePhotoUrl().then(setProfilePhoto).catch(() => {});
+      getPrescriptionIconUrl().then(setPrescriptionIcon).catch(() => {});
 
-      // Load recent activity
-      await loadRecentActivity(userId);
-
+      // Load statistics and activity (non-blocking; may fail for assistants due to RLS)
+      loadProfileStats(userId, enhancedProfile as EnhancedProfile).catch(() => {});
+      loadRecentActivity(userId).catch(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error('Error loading profile:', err);
       setError(err.message || 'Error al cargar el perfil');
@@ -176,42 +275,73 @@ export default function UserProfile() {
     }
   };
 
+  const loadRoomsAndAssignments = async (clinicId: string, userId: string) => {
+    try {
+      const { data: rooms } = await supabase
+        .from('clinic_rooms')
+        .select('id, room_number, room_name, floor')
+        .eq('clinic_id', clinicId)
+        .eq('is_active', true)
+        .order('room_number');
+      setAvailableRooms((rooms as Array<{ id: string; room_number: string; room_name: string | null; floor: string | null }>) || []);
+
+      const { data: assignments } = await supabase
+        .from('room_assignments')
+        .select('room_id, is_primary')
+        .eq('staff_id', userId)
+        .eq('clinic_id', clinicId);
+      const list = (assignments || []) as Array<{ room_id: string; is_primary: boolean }>;
+      setMyRoomAssignments(list);
+
+      const primary = list.find((a) => a.is_primary);
+      const primaryRoomId = primary?.room_id ?? list[0]?.room_id ?? null;
+      setEditData((prev) => ({ ...prev, primary_room_id: primaryRoomId }));
+    } catch (err) {
+      console.error('Error loading rooms:', err);
+    }
+  };
+
   const loadProfileStats = async (userId: string, currentProfile: EnhancedProfile) => {
     try {
-      // Load patient count
-      const { count: patientCount } = await supabase
+      let patientCount = 0;
+      let consultationCount = 0;
+      let monthlyCount = 0;
+
+      // Assistants may be blocked by RLS on consultations - check for errors
+      const { count: pCount, error: pErr } = await supabase
         .from('patients')
         .select('*', { count: 'exact', head: true })
         .eq('primary_doctor_id', userId);
+      patientCount = pErr ? 0 : (pCount ?? 0);
 
-      // Load consultation count
-      const { count: consultationCount } = await supabase
+      const { count: cCount, error: cErr } = await supabase
         .from('consultations')
         .select('*', { count: 'exact', head: true })
         .eq('doctor_id', userId);
+      consultationCount = cErr ? 0 : (cCount ?? 0);
 
-      // Load monthly consultations
-      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
-      const { count: monthlyCount } = await supabase
-        .from('consultations')
-        .select('*', { count: 'exact', head: true })
-        .eq('doctor_id', userId)
-        .gte('created_at', `${currentMonth}-01`);
+      if (!cErr) {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const { count: mCount } = await supabase
+          .from('consultations')
+          .select('*', { count: 'exact', head: true })
+          .eq('doctor_id', userId)
+          .gte('created_at', `${currentMonth}-01`);
+        monthlyCount = mCount ?? 0;
+      }
 
-      // Calculate experience years
-      const experienceYears = currentProfile.hire_date 
+      const experienceYears = currentProfile.hire_date
         ? Math.floor((new Date().getTime() - new Date(currentProfile.hire_date).getTime()) / (1000 * 60 * 60 * 24 * 365))
         : 0;
 
       setStats({
-        totalPatients: patientCount || 0,
-        totalConsultations: consultationCount || 0,
-        totalPrescriptions: 0, // TODO: Add when prescriptions table is available
-        monthlyConsultations: monthlyCount || 0,
-        averageRating: 4.8, // TODO: Implement rating system
+        totalPatients: patientCount,
+        totalConsultations: consultationCount,
+        totalPrescriptions: 0,
+        monthlyConsultations: monthlyCount,
+        averageRating: 4.8,
         experienceYears
       });
-
     } catch (err) {
       console.error('Error loading stats:', err);
     }
@@ -219,19 +349,27 @@ export default function UserProfile() {
 
   const loadRecentActivity = async (userId: string) => {
     try {
-      // Load recent consultations
-      const { data: consultations } = await supabase
+      // Load recent consultations (no embed - PostgREST schema cache doesn't expose consultations->patients FK)
+      const { data: consultations, error: consultErr } = await supabase
         .from('consultations')
-        .select(`
-          id, created_at, diagnosis,
-          patient:patient_id(full_name)
-        `)
+        .select('id, created_at, diagnosis, patient_id')
         .eq('doctor_id', userId)
         .order('created_at', { ascending: false })
         .limit(5);
 
+      // Resolve patient names (separate query avoids PostgREST embed/PGRST200)
+      const patientIds = [...new Set((consultations ?? []).map((c: { patient_id: string }) => c.patient_id).filter(Boolean))];
+      const patientNames: Record<string, string> = {};
+      if (patientIds.length > 0) {
+        const { data: patientRows } = await supabase
+          .from('patients')
+          .select('id, full_name')
+          .in('id', patientIds);
+        (patientRows ?? []).forEach((p: { id: string; full_name: string }) => { patientNames[p.id] = p.full_name ?? ''; });
+      }
+
       // Load recent patients
-      const { data: patients } = await supabase
+      const { data: patients, error: patientsErr } = await supabase
         .from('patients')
         .select('id, full_name, created_at')
         .eq('primary_doctor_id', userId)
@@ -239,21 +377,24 @@ export default function UserProfile() {
         .limit(3);
 
       const activities: RecentActivity[] = [];
+      const consultList = consultErr ? [] : (consultations ?? []);
+      const patientList = patientsErr ? [] : (patients ?? []);
 
       // Add consultations to activity
-      consultations?.forEach((consultation: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      consultList.forEach((consultation: any) => {
         activities.push({
           id: consultation.id,
           type: 'consultation',
           title: 'Consulta realizada',
           description: consultation.diagnosis || 'Consulta médica',
           date: consultation.created_at,
-          patientName: consultation.patient?.full_name
+          patientName: consultation.patient_id ? patientNames[consultation.patient_id] : undefined
         });
       });
 
       // Add patients to activity
-      patients?.forEach(patient => {
+      patientList.forEach(patient => {
         activities.push({
           id: patient.id,
           type: 'patient_created',
@@ -275,6 +416,63 @@ export default function UserProfile() {
 
 
 
+  const getOrCreatePersonalClinic = async (userId: string) => {
+    try {
+      // 1. Check if user already has a personal clinic relationship
+      const { data: existingRelationships } = await supabase
+        .from('clinic_user_relationships')
+        .select('clinic_id, clinic:clinics(id, type)')
+        .eq('user_id', userId)
+        .eq('status', 'approved');
+        
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const personalClinic = existingRelationships?.find((r: any) => r.clinic?.type === 'consultorio_personal');
+      
+      if (personalClinic) {
+        return personalClinic.clinic_id;
+      }
+
+      // 2. Identify the personal clinic if it exists but relationship is missing (unlikely but good safety)
+      // This step can be skipped if we assume strict data integrity, but checking created_by or similar would be better.
+      // For now, if no relationship, we create a new one.
+
+      // 3. Create new clinic
+      const { data: newClinic, error: createError } = await supabase
+        .from('clinics')
+        .insert({
+          name: `Consultorio de ${editData.full_name || 'Dr. ' + profileData?.full_name}`,
+          type: 'consultorio_personal',
+          address: editData.address,
+          phone: editData.phone,
+          director_name: editData.full_name || profileData?.full_name,
+          is_active: true
+        })
+        .select()
+        .single();
+        
+      if (createError) throw createError;
+      
+      // 4. Create relationship
+      const { error: relError } = await supabase
+        .from('clinic_user_relationships')
+        .insert({
+          clinic_id: newClinic.id,
+          user_id: userId,
+          role_in_clinic: 'doctor', // Default role for personal clinic
+          status: 'approved',
+          is_active: true,
+          start_date: new Date().toISOString()
+        });
+        
+      if (relError) throw relError;
+      
+      return newClinic.id;
+    } catch (error) {
+      console.error('Error getting/creating personal clinic:', error);
+      throw error;
+    }
+  };
+
   const handleSaveProfile = async () => {
     try {
       setLoading(true);
@@ -282,11 +480,27 @@ export default function UserProfile() {
 
       if (!user) return;
 
-      const updateData = {
+      // Validate clinic selection
+      if (!editData.is_independent && !editData.clinic_id) {
+        throw new Error('Debe seleccionar una clínica o marcar "Médico Independiente"');
+      }
+
+      let targetClinicId = editData.clinic_id;
+
+      if (editData.is_independent) {
+        try {
+          // Pass user.id explicitly, safe because of check above
+          targetClinicId = await getOrCreatePersonalClinic(user.id);
+        } catch (clinicErr) {
+          console.error(clinicErr);
+          throw new Error('Error al configurar el consultorio personal');
+        }
+      }
+
+      const updateData: Record<string, unknown> = {
         full_name: editData.full_name,
         phone: editData.phone,
-        // Actualizar clinic_id: null si es independiente, o el ID seleccionado
-        clinic_id: editData.is_independent ? null : editData.clinic_id,
+        clinic_id: targetClinicId,
         additional_info: {
           ...profileData?.additional_info,
           address: editData.address,
@@ -295,7 +509,9 @@ export default function UserProfile() {
           languages: editData.languages.split(',').map(l => l.trim()).filter(l => l),
           certifications: editData.certifications.split(',').map(c => c.trim()).filter(c => c),
           awards: editData.awards.split(',').map(a => a.trim()).filter(a => a),
-          emergency_contact: editData.emergency_contact
+          emergency_contact: editData.emergency_contact,
+          accepts_appointments: editData.accepts_appointments,
+          physical_presence_schedule: editData.physical_presence_schedule,
         },
         updated_at: new Date().toISOString()
       };
@@ -307,12 +523,31 @@ export default function UserProfile() {
 
       if (error) throw error;
 
+      // Update room assignment if doctor has clinic and selected a room
+      if (targetClinicId && editData.primary_room_id && profileData?.role === 'doctor') {
+        const room = availableRooms.find((r) => r.id === editData.primary_room_id);
+        if (room) {
+          await supabase.from('room_assignments').upsert(
+            { room_id: editData.primary_room_id, staff_id: user.id, clinic_id: targetClinicId, is_primary: true },
+            { onConflict: 'room_id,staff_id' }
+          );
+          const otherAssignments = myRoomAssignments.filter((a) => a.room_id !== editData.primary_room_id);
+          for (const a of otherAssignments) {
+            await supabase
+              .from('room_assignments')
+              .update({ is_primary: false })
+              .eq('room_id', a.room_id)
+              .eq('staff_id', user.id);
+          }
+        }
+      }
+
       setSuccess('Perfil actualizado correctamente');
       setEditing(false);
-      await loadUserProfile();
-
+      await loadUserProfile(user.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      // Error log removed for security;
+      console.error('Error saving profile:', err);
       setError(err.message || 'Error al guardar el perfil');
     } finally {
       setLoading(false);
@@ -412,20 +647,24 @@ export default function UserProfile() {
                   {profileData.role === 'doctor' && <Stethoscope className="h-5 w-5 text-cyan-400 mr-2" />}
                   {profileData.role === 'health_staff' && <Users className="h-5 w-5 text-green-400 mr-2" />}
                   {profileData.role === 'admin_staff' && <Building className="h-5 w-5 text-purple-400 mr-2" />}
+                  {profileData.role === 'administrative_assistant' && <Users className="h-5 w-5 text-amber-400 mr-2" />}
                   <span className="text-gray-300 capitalize">
                     {profileData.role === 'doctor' ? 'Médico' : 
                      profileData.role === 'health_staff' ? 'Personal de Salud' :
-                     profileData.role === 'admin_staff' ? 'Personal Administrativo' : 
+                     profileData.role === 'admin_staff' ? 'Personal Administrativo' :
+                     profileData.role === 'administrative_assistant' ? 'Asistente Administrativo' :
                      profileData.role}
                   </span>
                 </div>
 
                 {profileData.specialty && (
-                  <p className="text-cyan-400 mb-4">{profileData.specialty.name}</p>
+                  <p className="text-cyan-400 mb-4">
+                    {typeof profileData.specialty === 'object' ? profileData.specialty.name : String(profileData.specialty)}
+                  </p>
                 )}
 
                 {profileData.additional_info?.bio && !editing && (
-                  <p className="text-gray-400 text-sm">{profileData.additional_info.bio}</p>
+                  <p className="text-gray-400 text-sm">{profileData.additional_info.bio as string}</p>
                 )}
 
                 {editing && (
@@ -479,7 +718,7 @@ export default function UserProfile() {
                       placeholder="Dirección"
                     />
                   ) : (
-                    <span className="text-gray-300">{profileData.additional_info?.address || 'No especificada'}</span>
+                    <span className="text-gray-300">{(profileData.additional_info?.address as string) || 'No especificada'}</span>
                   )}
                 </div>
 
@@ -565,6 +804,105 @@ export default function UserProfile() {
                     ) : (
                       <span className="text-gray-400">Sin clínica asignada</span>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mi Consultorio - for doctors with clinic */}
+            {profileData.role === 'doctor' && profileData.clinic && !editData.is_independent && (
+              <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <DoorOpen className="h-5 w-5 text-cyan-400 mr-2" />
+                  Mi Consultorio
+                </h3>
+                {editing ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Consultorio asignado</label>
+                    <select
+                      value={editData.primary_room_id || ''}
+                      onChange={(e) => setEditData((prev) => ({ ...prev, primary_room_id: e.target.value || null }))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    >
+                      <option value="">Sin asignar</option>
+                      {availableRooms.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.room_number} {r.room_name ? `- ${r.room_name}` : ''} {r.floor ? `(Piso ${r.floor})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="text-gray-300">
+                    {editData.primary_room_id ? (
+                      (() => {
+                        const r = availableRooms.find((x) => x.id === editData.primary_room_id);
+                        return r ? (
+                          <span>{r.room_number} {r.room_name ? `- ${r.room_name}` : ''}</span>
+                        ) : (
+                          <span className="text-gray-500">Consultorio asignado</span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-gray-500">Sin consultorio asignado</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Consulta por Citas - for doctors */}
+            {profileData.role === 'doctor' && (
+              <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Calendar className="h-5 w-5 text-cyan-400 mr-2" />
+                  Consulta por Citas
+                </h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-300">
+                      {editData.accepts_appointments
+                        ? 'Los pacientes pueden agendar citas contigo'
+                        : 'Modo horario libre: atención sin citas previas'}
+                    </p>
+                  </div>
+                  {editing ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditData((prev) => ({ ...prev, accepts_appointments: !prev.accepts_appointments }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        editData.accepts_appointments ? 'bg-cyan-600' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                          editData.accepts_appointments ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  ) : (
+                    <span className={`px-2 py-1 rounded text-sm ${editData.accepts_appointments ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                      {editData.accepts_appointments ? 'Por citas' : 'Horario libre'}
+                    </span>
+                  )}
+                </div>
+                {editing && !editData.accepts_appointments && (
+                  <PhysicalPresenceScheduleEditor
+                    schedule={editData.physical_presence_schedule}
+                    onChange={(s) => setEditData((prev) => ({ ...prev, physical_presence_schedule: s }))}
+                  />
+                )}
+                {!editing && !editData.accepts_appointments && editData.physical_presence_schedule.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <p className="text-xs text-gray-500 mb-2">Horario de presencia física:</p>
+                    <ul className="text-sm text-gray-400 space-y-1">
+                      {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d, i) => {
+                        const slot = editData.physical_presence_schedule.find((s) => s.day === i);
+                        return slot ? (
+                          <li key={i}>{d}: {slot.start} - {slot.end}</li>
+                        ) : null;
+                      })}
+                    </ul>
                   </div>
                 )}
               </div>
@@ -754,7 +1092,7 @@ export default function UserProfile() {
             {/* Recent Activity */}
             <ActivityFeed
               activities={recentActivity}
-              onActivityClick={(activity) => {
+              onActivityClick={() => {
                 // Aquí podrías navegar a detalles de la actividad
                 // Sensitive log removed for security;
               }}
@@ -765,7 +1103,9 @@ export default function UserProfile() {
             <ClinicStatusCard 
               onStatusUpdate={() => {
                 // Recargar datos del perfil cuando cambie el estado
-                loadUserProfile();
+                if (user?.id) {
+                  loadUserProfile(user.id);
+                }
               }}
             />
           </div>

@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchActiveMedicalScalesSafe } from '@/lib/services/medical-scales-service';
+import {
+  fetchScaleAssessmentsByConsultation,
+  fetchScaleAssessmentsByPatient,
+  type ScaleAssessmentViewModel
+} from '@/features/medical-records/utils/scaleAssessmentViewModel';
 // ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
-import { 
-  validateVitalSign, 
-  SYSTEM_LIMITS,
-  VITAL_SIGNS_RANGES 
-} from '@/lib/medicalConfig';
+import { validateVitalSign, SYSTEM_LIMITS } from '@/lib/medicalConfig';
 import { validateJSONBSchema } from '@/lib/validation';
-import { useValidation } from '@/features/medical-records/hooks/useValidation';
 
 interface PhysicalExamFormData {
   examDate: string;
@@ -88,7 +89,9 @@ interface UsePhysicalExamReturn {
       interpretation?: Record<string, unknown>;
     }
   ) => Promise<{ id: string }>; 
-  getScaleAssessmentsByConsultation: (consultationId: string) => Promise<any[]>;
+  getScaleAssessmentsByConsultation: (consultationId: string) => Promise<ScaleAssessmentViewModel[]>;
+  getScaleAssessmentsByPatient: (patientId: string) => Promise<ScaleAssessmentViewModel[]>;
+  deleteScaleAssessment: (assessmentId: string) => Promise<void>;
   getChangeLog: (examId: string) => Promise<any[]>;
 }
 
@@ -120,7 +123,7 @@ export function usePhysicalExam({
       if (fetchError) throw fetchError;
       
       setTemplates(data || []);
-    } catch (err) {
+    } catch (_err) {
       // Error log removed for security;
       setError('Error al cargar las plantillas');
     } finally {
@@ -134,7 +137,7 @@ export function usePhysicalExam({
       setSavingDraft(true);
       setError(null);
 
-      const { data: savedDraft, error: saveError } = await supabase.rpc(
+      const { error: saveError } = await supabase.rpc(
         'auto_save_physical_exam_draft',
         {
           p_patient_id: patientId,
@@ -169,7 +172,7 @@ export function usePhysicalExam({
       setError(null);
 
       // Try to load from database first
-      const { data, error: loadError } = await supabase
+      const { data, error: _loadError } = await supabase
         .from('physical_exam_drafts')
         .select('draft_data')
         .eq('patient_id', patientId)
@@ -340,7 +343,7 @@ export function usePhysicalExam({
             </div>
           </div>
           
-          ${Object.entries(data.sections || {}).map(([sectionId, section]) => `
+          ${Object.entries(data.sections || {}).map(([_sectionId, section]) => `
             <div class="section">
               <h3>${section.title}</h3>
               ${section.selectedFindings?.length > 0 ? `
@@ -581,14 +584,10 @@ export function usePhysicalExam({
 
   // ===== Medical scales API =====
   const listActiveScales = useCallback(async (): Promise<Array<{ id: string; name: string }>> => {
-    const { data, error } = await supabase
-      .from('medical_scales')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('name', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
+    const rows = await fetchActiveMedicalScalesSafe();
+    return rows
+      .map((row) => ({ id: String(row.id), name: String(row.name || row.id) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, []);
 
   const saveScaleAssessment = useCallback(async (
@@ -621,14 +620,20 @@ export function usePhysicalExam({
   }, [patientId, doctorId]);
 
   const getScaleAssessmentsByConsultation = useCallback(async (consultationId: string) => {
-    const { data, error } = await supabase
+    return fetchScaleAssessmentsByConsultation(consultationId);
+  }, []);
+
+  const getScaleAssessmentsByPatient = useCallback(async (patientId: string) => {
+    return fetchScaleAssessmentsByPatient(patientId);
+  }, []);
+
+  const deleteScaleAssessment = useCallback(async (assessmentId: string) => {
+    const { error } = await supabase
       .from('scale_assessments')
-      .select('*')
-      .eq('consultation_id', consultationId)
-      .order('created_at', { ascending: false });
+      .delete()
+      .eq('id', assessmentId);
 
     if (error) throw error;
-    return data || [];
   }, []);
 
   // Auto-save effect
@@ -686,6 +691,8 @@ export function usePhysicalExam({
     // Scales
     listActiveScales,
     saveScaleAssessment,
-    getScaleAssessmentsByConsultation
+    getScaleAssessmentsByConsultation,
+    getScaleAssessmentsByPatient,
+    deleteScaleAssessment
   };
 } 

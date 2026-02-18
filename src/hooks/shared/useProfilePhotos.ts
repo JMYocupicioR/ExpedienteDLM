@@ -53,20 +53,25 @@ export const useProfilePhotos = () => {
         .from('profile-photos')
         .getPublicUrl(filePath);
 
-      // Actualizar el perfil con la nueva URL
-      const { error: updateError } = await supabase
+      const publicUrl = urlData.publicUrl;
+
+      // Save URL in additional_info JSONB (profile_photo_url column doesn't exist on profiles)
+      const { data: currentProfile } = await supabase
         .from('profiles')
-        .update({ 
-          profile_photo_url: urlData.publicUrl,
+        .select('additional_info')
+        .eq('id', user.id)
+        .single();
+
+      const additionalInfo = (currentProfile?.additional_info as Record<string, unknown>) || {};
+      await supabase
+        .from('profiles')
+        .update({
+          additional_info: { ...additionalInfo, photo_url: publicUrl },
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
 
-      if (updateError) {
-        // Warning log removed for security;
-      }
-
-      return { url: urlData.publicUrl, error: null };
+      return { url: publicUrl, error: null };
 
     } catch (err: any) {
       const errorMessage = err.message || 'Error al subir la imagen';
@@ -116,8 +121,9 @@ export const useProfilePhotos = () => {
           .single(),
       ]);
 
-      const isClinicAdmin = rel?.role_in_clinic === 'admin_staff' || prof?.role === 'super_admin';
-      if (!isClinicAdmin) {
+      const canUploadLogo =
+        ['owner', 'director', 'admin_staff', 'doctor'].includes(rel?.role_in_clinic ?? '') || prof?.role === 'super_admin';
+      if (!canUploadLogo) {
         throw new Error('No tienes permisos para actualizar el logo de la clínica');
       }
 
@@ -136,7 +142,21 @@ export const useProfilePhotos = () => {
         .from('clinic-assets')
         .getPublicUrl(filePath);
 
-      return { url: publicUrlData.publicUrl, error: null };
+      const logoPublicUrl = publicUrlData.publicUrl;
+
+      // Sync logo_url to both clinics table and clinic_configurations
+      await Promise.allSettled([
+        supabase
+          .from('clinics')
+          .update({ logo_url: logoPublicUrl, updated_at: new Date().toISOString() })
+          .eq('id', clinicId),
+        supabase
+          .from('clinic_configurations')
+          .update({ logo_url: logoPublicUrl })
+          .eq('clinic_id', clinicId),
+      ]);
+
+      return { url: logoPublicUrl, error: null };
     } catch (err: any) {
       const errorMessage = err.message || 'Error al subir el logo';
       setError(errorMessage);
@@ -198,20 +218,25 @@ export const useProfilePhotos = () => {
         .from('prescription-icons')
         .getPublicUrl(filePath);
 
-      // Actualizar el perfil con la nueva URL
-      const { error: updateError } = await supabase
+      const iconUrl = urlData.publicUrl;
+
+      // Save URL in additional_info JSONB (prescription_icon_url column doesn't exist on profiles)
+      const { data: currentProfile } = await supabase
         .from('profiles')
-        .update({ 
-          prescription_icon_url: urlData.publicUrl,
+        .select('additional_info')
+        .eq('id', user.id)
+        .single();
+
+      const additionalInfo = (currentProfile?.additional_info as Record<string, unknown>) || {};
+      await supabase
+        .from('profiles')
+        .update({
+          additional_info: { ...additionalInfo, prescription_icon_url: iconUrl },
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
 
-      if (updateError) {
-        // Warning log removed for security;
-      }
-
-      return { url: urlData.publicUrl, error: null };
+      return { url: iconUrl, error: null };
 
     } catch (err: any) {
       const errorMessage = err.message || 'Error al subir el icono';
@@ -223,34 +248,28 @@ export const useProfilePhotos = () => {
   }, [user]);
 
   // Función para obtener URL de foto de perfil
+  // Usa storage.list() para evitar HEAD 400 en archivos inexistentes (como getPrescriptionIconUrl)
   const getProfilePhotoUrl = useCallback(async (userId?: string): Promise<string | null> => {
     const targetUserId = userId || user?.id;
     if (!targetUserId) return null;
 
     try {
-      // Intentar diferentes extensiones
-      const extensions = ['jpg', 'jpeg', 'png', 'webp'];
-      
-      for (const ext of extensions) {
-        const filePath = `${targetUserId}/profile.${ext}`;
-        const { data } = supabase.storage
-          .from('profile-photos')
-          .getPublicUrl(filePath);
+      const { data: files, error: listError } = await supabase.storage
+        .from('profile-photos')
+        .list(targetUserId);
 
-        // Verificar si la imagen existe haciendo una petición HEAD
-        try {
-          const response = await fetch(data.publicUrl, { method: 'HEAD' });
-          if (response.ok) {
-            return data.publicUrl;
-          }
-        } catch {
-          continue;
-        }
-      }
+      if (listError || !files?.length) return null;
 
-      return null;
+      const profileFile = files.find((f) =>
+        /^profile\.(jpg|jpeg|png|webp)$/i.test(f.name)
+      );
+      if (!profileFile) return null;
+
+      const { data } = supabase.storage
+        .from('profile-photos')
+        .getPublicUrl(`${targetUserId}/${profileFile.name}`);
+      return data.publicUrl;
     } catch (err) {
-      // Error log removed for security;
       return null;
     }
   }, [user]);
@@ -324,18 +343,22 @@ export const useProfilePhotos = () => {
 
         if (deleteError) throw deleteError;
 
-        // Actualizar el perfil removiendo la URL
-        const { error: updateError } = await supabase
+        // Remove URL from additional_info JSONB
+        const { data: currentProfile } = await supabase
           .from('profiles')
-          .update({ 
-            profile_photo_url: null,
+          .select('additional_info')
+          .eq('id', user.id)
+          .single();
+
+        const additionalInfo = (currentProfile?.additional_info as Record<string, unknown>) || {};
+        const { photo_url: _removed, ...restInfo } = additionalInfo;
+        await supabase
+          .from('profiles')
+          .update({
+            additional_info: restInfo,
             updated_at: new Date().toISOString()
           })
           .eq('id', user.id);
-
-        if (updateError) {
-          // Warning log removed for security;
-        }
       }
 
       return { success: true, error: null };
@@ -373,18 +396,22 @@ export const useProfilePhotos = () => {
 
         if (deleteError) throw deleteError;
 
-        // Actualizar el perfil removiendo la URL
-        const { error: updateError } = await supabase
+        // Remove URL from additional_info JSONB
+        const { data: currentProfile } = await supabase
           .from('profiles')
-          .update({ 
-            prescription_icon_url: null,
+          .select('additional_info')
+          .eq('id', user.id)
+          .single();
+
+        const additionalInfo = (currentProfile?.additional_info as Record<string, unknown>) || {};
+        const { prescription_icon_url: _removed, ...restInfo } = additionalInfo;
+        await supabase
+          .from('profiles')
+          .update({
+            additional_info: restInfo,
             updated_at: new Date().toISOString()
           })
           .eq('id', user.id);
-
-        if (updateError) {
-          // Warning log removed for security;
-        }
       }
 
       return { success: true, error: null };
@@ -395,6 +422,46 @@ export const useProfilePhotos = () => {
       return { success: false, error: errorMessage };
     }
   }, [user]);
+
+  // Resolve clinic logo URL: clinics.logo_url → clinic_configurations.logo_url → storage lookup
+  const getClinicLogoUrl = useCallback(async (clinicId?: string): Promise<string | null> => {
+    if (!clinicId) return null;
+    try {
+      // 1. Try clinics table first (fastest)
+      const { data: clinic } = await supabase
+        .from('clinics')
+        .select('logo_url')
+        .eq('id', clinicId)
+        .single();
+      if (clinic?.logo_url) return clinic.logo_url as string;
+
+      // 2. Try clinic_configurations table
+      const { data: cfg } = await supabase
+        .from('clinic_configurations')
+        .select('logo_url')
+        .eq('clinic_id', clinicId)
+        .maybeSingle();
+      if (cfg?.logo_url) return cfg.logo_url as string;
+
+      // 3. Fallback: check storage bucket directly
+      const { data: files } = await supabase.storage
+        .from('clinic-assets')
+        .list(clinicId);
+      if (files?.length) {
+        const logoFile = files.find((f) => /^logo\.(jpg|jpeg|png|webp|svg)$/i.test(f.name));
+        if (logoFile) {
+          const { data } = supabase.storage
+            .from('clinic-assets')
+            .getPublicUrl(`${clinicId}/${logoFile.name}`);
+          return data.publicUrl;
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
 
   // Función para redimensionar imagen antes de subir
   const resizeImage = useCallback(async (file: File, maxWidth: number, maxHeight: number, quality: number = 0.8): Promise<File> => {
@@ -452,6 +519,7 @@ export const useProfilePhotos = () => {
     uploadClinicLogo,
     getProfilePhotoUrl,
     getPrescriptionIconUrl,
+    getClinicLogoUrl,
     deleteProfilePhoto,
     deletePrescriptionIcon,
     resizeImage,

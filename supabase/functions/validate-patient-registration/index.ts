@@ -25,7 +25,7 @@ serve(async (req) => {
   try {
     const { token } = await req.json();
     if (!token) {
-      return new Response(JSON.stringify({ error: 'Missing token' }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Missing token' }), { status: 400, headers: buildCorsHeaders(req) });
     }
 
     const url = Deno.env.get('SUPABASE_URL');

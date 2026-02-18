@@ -90,7 +90,7 @@ export function useUnifiedPrescriptionSystem() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('prescription_layouts_unified')
+        .from('prescription_layouts')
         .select('*')
         .or(`doctor_id.eq.${user.id},is_public.eq.true,is_predefined.eq.true`)
         .order('is_predefined', { ascending: false })
@@ -111,7 +111,7 @@ export function useUnifiedPrescriptionSystem() {
 
     try {
       const { data, error } = await supabase
-        .from('patient_prescription_history')
+        .from('prescription_history_log')
         .select(`
           *,
           prescription:prescriptions(
@@ -149,7 +149,7 @@ export function useUnifiedPrescriptionSystem() {
           };
           
           // Increment usage count
-          await supabase.rpc('increment_layout_usage', { layout_id: layoutId });
+          await supabase.rpc('increment_prescription_layout_usage', { p_layout_id: layoutId });
         }
       }
 
@@ -161,10 +161,31 @@ export function useUnifiedPrescriptionSystem() {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + maxDuration);
 
-      // 3. Create prescription
+      // 3. Resolve clinic_id from the doctor's active clinic membership
+      let clinicId = (prescriptionData as any).clinic_id;
+      if (!clinicId) {
+        const { data: membership } = await supabase
+          .from('clinic_user_relationships')
+          .select('clinic_id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .limit(1)
+          .single();
+        clinicId = membership?.clinic_id;
+      }
+      if (!clinicId) {
+        throw new Error('No se encontró clínica activa para el doctor. Verifique su membresía de clínica.');
+      }
+
+      // 4. Create prescription
       const prescriptionPayload = {
-        ...prescriptionData,
+        patient_id: prescriptionData.patient_id,
         doctor_id: user.id,
+        clinic_id: clinicId,
+        consultation_id: prescriptionData.consultation_id || null,
+        medications: prescriptionData.medications,
+        diagnosis: prescriptionData.diagnosis,
+        notes: prescriptionData.notes || null,
         expires_at: expiresAt.toISOString(),
         status: prescriptionData.status || 'active',
         visual_layout: layoutSnapshot,
@@ -181,26 +202,27 @@ export function useUnifiedPrescriptionSystem() {
 
       // 4. Create history entry automatically
       const historyPayload = {
-        patient_id: prescriptionData.patient_id,
         prescription_id: prescription.id,
-        layout_id: layoutId || null,
-        layout_snapshot: layoutSnapshot,
-        medications_snapshot: prescriptionData.medications,
-        prescribed_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString(),
-        status: 'active'
+        action: 'created' as const,
+        performed_by: user.id,
+        notes: `Receta creada con ${prescriptionData.medications.length} medicamento(s)`,
+        metadata: {
+          layout_id: layoutId || null,
+          medications_count: prescriptionData.medications.length,
+          diagnosis: prescriptionData.diagnosis,
+          expires_at: expiresAt.toISOString()
+        }
       };
 
-      const { data: historyEntry, error: historyError } = await supabase
-        .from('patient_prescription_history')
-        .insert([historyPayload])
-        .select('*')
-        .single();
+      const { error: historyError } = await supabase
+        .from('prescription_history_log')
+        .insert([historyPayload]);
 
       if (historyError) {
         // Log warning but don't fail the prescription creation
         console.warn('Failed to create prescription history entry:', historyError);
       }
+      const historyEntry = historyPayload;
 
       // 5. Link to consultation if provided
       if (prescriptionData.consultation_id) {
@@ -511,7 +533,7 @@ export function usePrescriptionHistory(patientId: string) {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('patient_prescription_history')
+        .from('prescription_history_log')
         .select(`
           *,
           prescription:prescriptions(
@@ -643,26 +665,19 @@ export function usePrescriptionHistory(patientId: string) {
   };
 }
 
-// Hook for layout versioning
+// Hook for layout versioning (simplified - uses prescription_layouts directly)
 export function useLayoutVersioning(layoutId: string) {
   const [versions, setVersions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Layout versioning is tracked via prescription_history_log metadata
+  // Full version history table can be added later if needed
   const loadVersions = useCallback(async () => {
     if (!layoutId) return;
-
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('prescription_layout_versions')
-        .select('*')
-        .eq('layout_id', layoutId)
-        .order('version_number', { ascending: false });
-
-      if (error) throw error;
-      setVersions(data || []);
-    } catch (err) {
-      console.error('Error loading layout versions:', err);
+      // For now, return empty - versioning will be enhanced in future
+      setVersions([]);
     } finally {
       setLoading(false);
     }
@@ -677,43 +692,26 @@ export function useLayoutVersioning(layoutId: string) {
   ) => {
     if (!layoutId) throw new Error('Layout ID requerido');
 
-    const nextVersion = versions.length > 0 ? Math.max(...versions.map(v => v.version_number)) + 1 : 1;
-
+    // Save changes directly to the layout
     const { data, error } = await supabase
-      .from('prescription_layout_versions')
-      .insert([{
-        layout_id: layoutId,
-        version_number: nextVersion,
-        changes_summary: changes.changes_summary,
+      .from('prescription_layouts')
+      .update({
         template_elements: changes.template_elements,
         canvas_settings: changes.canvas_settings,
-        created_by: (await supabase.auth.getUser()).data.user?.id
-      }])
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', layoutId)
       .select('*')
       .single();
 
     if (error) throw error;
-    
-    setVersions(prev => [data, ...prev]);
     return data;
-  }, [layoutId, versions]);
+  }, [layoutId]);
 
-  const restoreVersion = useCallback(async (versionId: string) => {
-    const version = versions.find(v => v.id === versionId);
-    if (!version) throw new Error('Versión no encontrada');
-
-    // Update the main layout with version data
-    const { error } = await supabase
-      .from('prescription_layouts_unified')
-      .update({
-        template_elements: version.template_elements,
-        canvas_settings: version.canvas_settings,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', layoutId);
-
-    if (error) throw error;
-  }, [layoutId, versions]);
+  const restoreVersion = useCallback(async (_versionId: string) => {
+    // Versioning restore not yet implemented - will use full version table later
+    console.warn('Layout version restore not yet implemented');
+  }, []);
 
   useEffect(() => {
     loadVersions();

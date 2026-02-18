@@ -107,7 +107,104 @@ const PREDEFINED_PRESCRIPCIONES: PredefinedTemplate[] = [
     description: 'Plan de ejercicios para dolor lumbar', 
     icon: 'Dumbbell', 
     type: 'prescripcion',
-    specialty: 'Fisioterapia'
+    specialty: 'Fisioterapia',
+    content: {
+      sections: [
+        {
+          id: 'stretching',
+          title: 'Estiramientos Lumbares',
+          description: 'Realizar sobre superficie firme, sin rebotes',
+          exercises: [
+            { name: 'Rodillas al pecho', description: 'Acostado boca arriba, llevar ambas rodillas al pecho sosteniéndolas con las manos', repetitions: '3 series de 15 segundos', frequency: '2 veces al día', duration: '15 segundos por serie', intensity: 'Baja', precautions: ['Detener si hay dolor agudo', 'No forzar el rango de movimiento'] },
+            { name: 'Gato-camello', description: 'En cuatro puntos, alternar entre arquear y redondear la espalda', repetitions: '3 series de 10 repeticiones', frequency: '2 veces al día', duration: '', intensity: 'Baja', precautions: ['Movimiento lento y controlado'] },
+            { name: 'Estiramiento de piriforme', description: 'Acostado boca arriba, cruzar tobillo sobre rodilla contraria y jalar hacia el pecho', repetitions: '3 series de 20 segundos por lado', frequency: '1 vez al día', duration: '20 segundos', intensity: 'Baja-Moderada', precautions: [] }
+          ]
+        },
+        {
+          id: 'strengthening',
+          title: 'Fortalecimiento Core',
+          description: 'Progresar gradualmente en intensidad',
+          exercises: [
+            { name: 'Puente de glúteos', description: 'Acostado boca arriba con rodillas flexionadas, elevar cadera', repetitions: '3 series de 12 repeticiones', frequency: 'Diario', duration: '', intensity: 'Moderada', precautions: ['No hiperextender la espalda'] },
+            { name: 'Plancha frontal', description: 'Posición de plancha apoyado en antebrazos, mantener cuerpo recto', repetitions: '3 series', frequency: 'Diario', duration: '15-30 segundos', intensity: 'Moderada', precautions: ['Mantener abdomen contraído', 'No dejar caer la cadera'] }
+          ]
+        }
+      ]
+    }
+  },
+  { 
+    id: 'cervical-exercises', 
+    name: 'Ejercicios Cervicales', 
+    description: 'Plan de ejercicios para dolor cervical y rigidez', 
+    icon: 'Dumbbell', 
+    type: 'prescripcion',
+    specialty: 'Fisioterapia',
+    content: {
+      sections: [
+        {
+          id: 'cervical-mobility',
+          title: 'Movilidad Cervical',
+          description: 'Realizar sentado con espalda recta',
+          exercises: [
+            { name: 'Rotación cervical', description: 'Girar la cabeza lentamente hacia cada lado', repetitions: '10 repeticiones por lado', frequency: '3 veces al día', duration: '', intensity: 'Baja', precautions: ['No forzar el rango', 'Detener si hay mareo'] },
+            { name: 'Flexión lateral', description: 'Inclinar la cabeza llevando oreja hacia el hombro', repetitions: '3 series de 15 segundos por lado', frequency: '2 veces al día', duration: '15 segundos', intensity: 'Baja', precautions: ['No elevar el hombro'] },
+            { name: 'Retracción cervical', description: 'Llevar la barbilla hacia atrás como haciendo doble mentón', repetitions: '3 series de 10 repeticiones', frequency: '3 veces al día', duration: '', intensity: 'Baja', precautions: [] }
+          ]
+        }
+      ]
+    }
+  },
+  { 
+    id: 'shoulder-rehab', 
+    name: 'Rehabilitación de Hombro', 
+    description: 'Programa de rehabilitación para lesiones de hombro', 
+    icon: 'Dumbbell', 
+    type: 'prescripcion',
+    specialty: 'Fisioterapia',
+    content: {
+      sections: [
+        {
+          id: 'shoulder-rom',
+          title: 'Rango de Movimiento',
+          description: 'Ejercicios pasivos y activo-asistidos',
+          exercises: [
+            { name: 'Péndulo de Codman', description: 'Inclinado hacia adelante, dejar el brazo colgando y hacer círculos suaves', repetitions: '2 minutos en cada dirección', frequency: '3 veces al día', duration: '2 minutos', intensity: 'Baja', precautions: ['No usar peso inicialmente'] },
+            { name: 'Elevación asistida con bastón', description: 'Acostado, usar un bastón para ayudar a elevar el brazo afectado', repetitions: '3 series de 10 repeticiones', frequency: '2 veces al día', duration: '', intensity: 'Baja-Moderada', precautions: ['No forzar más allá del dolor tolerado'] }
+          ]
+        },
+        {
+          id: 'shoulder-strength',
+          title: 'Fortalecimiento de Manguito Rotador',
+          description: 'Usar banda elástica o peso ligero',
+          exercises: [
+            { name: 'Rotación externa con banda', description: 'Codo pegado al cuerpo a 90 grados, rotar el antebrazo hacia afuera contra la resistencia de la banda', repetitions: '3 series de 15 repeticiones', frequency: 'Diario', duration: '', intensity: 'Moderada', precautions: ['Mantener codo fijo', 'No compensar con el tronco'] },
+            { name: 'Rotación interna con banda', description: 'Misma posición, rotar el antebrazo hacia adentro contra la banda', repetitions: '3 series de 15 repeticiones', frequency: 'Diario', duration: '', intensity: 'Moderada', precautions: ['Movimiento controlado'] }
+          ]
+        }
+      ]
+    }
+  },
+  { 
+    id: 'knee-rehab', 
+    name: 'Rehabilitación de Rodilla', 
+    description: 'Programa post-lesión o post-quirúrgico de rodilla', 
+    icon: 'Dumbbell', 
+    type: 'prescripcion',
+    specialty: 'Fisioterapia',
+    content: {
+      sections: [
+        {
+          id: 'knee-exercises',
+          title: 'Ejercicios de Rodilla',
+          description: 'Progresión gradual según tolerancia',
+          exercises: [
+            { name: 'Extensión de cuádriceps', description: 'Sentado, extender la rodilla completamente y mantener', repetitions: '3 series de 10 repeticiones', frequency: '2 veces al día', duration: '5 segundos sostenido', intensity: 'Baja-Moderada', precautions: ['No bloquear la rodilla con fuerza excesiva'] },
+            { name: 'Sentadilla parcial', description: 'De pie, flexionar rodillas hasta 45 grados manteniendo espalda recta', repetitions: '3 series de 12 repeticiones', frequency: 'Diario', duration: '', intensity: 'Moderada', precautions: ['Rodillas no deben pasar la punta de los pies', 'Usar soporte si es necesario'] },
+            { name: 'Elevación de pierna recta', description: 'Acostado boca arriba, elevar pierna recta a 45 grados', repetitions: '3 series de 15 repeticiones', frequency: '2 veces al día', duration: '', intensity: 'Baja', precautions: ['Mantener rodilla extendida'] }
+          ]
+        }
+      ]
+    }
   },
   { 
     id: 'hypertension-diet', 
@@ -170,18 +267,68 @@ export default function MedicalTemplates() {
   }, [activeTab, setSearchParams]);
 
   // Cargar plantillas cuando cambia el tab o término de búsqueda
+  // No incluir searchTemplates en deps para evitar loop infinito de re-renders
   useEffect(() => {
     if (user) {
       searchTemplates({
         type: activeTab as any,
         search: searchTerm,
         include_public: true
+      }).catch(() => {
+        // Errors are handled inside searchTemplates via setError
       });
     }
-  }, [activeTab, searchTerm, user, searchTemplates]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, searchTerm, user?.id]);
 
   const handleCreateNew = () => {
-    setSelectedTemplate(null);
+    const getDefaultTemplateType = () => {
+      if (activeTab === 'interrogatorio' || activeTab === 'exploracion' || activeTab === 'prescripcion') {
+        return activeTab as 'interrogatorio' | 'exploracion' | 'prescripcion';
+      }
+      return 'interrogatorio' as const;
+    };
+
+    const templateType = getDefaultTemplateType();
+    const isPhysioPrescription = templateType === 'prescripcion';
+    const sectionId = `section-${Date.now()}`;
+
+    const seedTemplate: MedicalTemplate = {
+      id: `temp-new-${Date.now()}`,
+      user_id: user?.id || '',
+      clinic_id: profile?.clinic_id,
+      name: '',
+      description: '',
+      type: templateType,
+      specialty: isPhysioPrescription ? 'Fisioterapia' : '',
+      content: {
+        sections: [
+          isPhysioPrescription
+            ? {
+                id: sectionId,
+                title: 'Grupo de Ejercicios 1',
+                description: '',
+                exercises: []
+              }
+            : {
+                id: sectionId,
+                title: 'Sección Principal',
+                fields: []
+              }
+        ]
+      },
+      tags: [],
+      is_public: false,
+      is_predefined: false,
+      is_active: true,
+      usage_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      created_by: user?.id,
+      updated_by: user?.id
+    };
+
+    setSelectedTemplate(seedTemplate);
     setIsEditorOpen(true);
   };
 
@@ -191,6 +338,24 @@ export default function MedicalTemplates() {
   };
 
   const handleSelectPredefined = (predefined: PredefinedTemplate) => {
+    // Si la plantilla predefinida ya trae contenido estructurado, usarlo directamente
+    const templateContent = predefined.content 
+      ? predefined.content 
+      : {
+          sections: [
+            {
+              id: 'main',
+              title: `Sección principal - ${predefined.name}`,
+              fields: Array(predefined.fields || 5).fill(null).map((_, i) => ({
+                id: `field-${i + 1}`,
+                label: `Campo ${i + 1}`,
+                type: 'text' as const,
+                required: i === 0
+              }))
+            }
+          ]
+        };
+
     // Convertir plantilla predefinida a MedicalTemplate para edición
     const newTemplate: Partial<MedicalTemplate> = {
       id: `temp-${predefined.id}`,
@@ -199,20 +364,7 @@ export default function MedicalTemplates() {
       description: predefined.description,
       type: predefined.type,
       specialty: predefined.specialty,
-      content: {
-        sections: [
-          {
-            id: 'main',
-            title: `Sección principal - ${predefined.name}`,
-            fields: Array(predefined.fields || 5).fill(null).map((_, i) => ({
-              id: `field-${i + 1}`,
-              label: `Campo ${i + 1}`,
-              type: 'text' as const,
-              required: i === 0
-            }))
-          }
-        ]
-      },
+      content: templateContent,
       tags: [],
       is_public: false,
       is_predefined: false,
@@ -324,7 +476,6 @@ export default function MedicalTemplates() {
                 { id: 'interrogatorio', label: 'Interrogatorio', icon: MessageSquare },
                 { id: 'exploracion', label: 'Exploración Física', icon: Stethoscope },
                 { id: 'prescripcion', label: 'Prescripciones', icon: FileText },
-                { id: 'medicamentos', label: 'Medicamentos', icon: Pill },
                 { id: 'medicamentos', label: 'Medicamentos', icon: Pill },
                 { id: 'ai-designer', label: 'Diseño con IA', icon: Wand2 },
                 { id: 'configuracion', label: 'Configuración', icon: Settings }

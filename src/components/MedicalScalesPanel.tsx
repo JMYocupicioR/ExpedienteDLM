@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExam';
-import { Plus, Save, ListChecks } from 'lucide-react';
+import { formatAssessmentDate, type ScaleAssessmentViewModel } from '@/features/medical-records/utils/scaleAssessmentViewModel';
+import { fetchMedicalScalesSafe } from '@/lib/services/medical-scales-service';
+import { Save, ListChecks } from 'lucide-react';
 
 type ScaleDefinition = {
   version?: string;
@@ -21,17 +22,18 @@ type ScaleDefinition = {
 interface MedicalScalesPanelProps {
   patientId: string;
   doctorId: string;
-  consultationId: string;
+  consultationId?: string;
+  onAssessmentSaved?: () => void;
 }
 
-export default function MedicalScalesPanel({ patientId, doctorId, consultationId }: MedicalScalesPanelProps) {
+export default function MedicalScalesPanel({ patientId, doctorId, consultationId, onAssessmentSaved }: MedicalScalesPanelProps) {
   const { listActiveScales, saveScaleAssessment, getScaleAssessmentsByConsultation } = usePhysicalExam({ patientId, doctorId });
   const [scales, setScales] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedScaleId, setSelectedScaleId] = useState<string>('');
   const [selectedScaleDef, setSelectedScaleDef] = useState<ScaleDefinition | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
-  const [existingAssessments, setExistingAssessments] = useState<any[]>([]);
+  const [existingAssessments, setExistingAssessments] = useState<ScaleAssessmentViewModel[]>([]);
 
   const loadScales = useCallback(async () => {
     const data = await listActiveScales();
@@ -39,6 +41,7 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
   }, [listActiveScales]);
 
   const loadExisting = useCallback(async () => {
+    if (!consultationId) return;
     const list = await getScaleAssessmentsByConsultation(consultationId);
     setExistingAssessments(list);
   }, [getScaleAssessmentsByConsultation, consultationId]);
@@ -53,16 +56,10 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
     setSelectedScaleDef(null);
     setAnswers({});
     if (!scaleId) return;
-    const { data, error } = await supabase
-      .from('medical_scales')
-      .select('definition')
-      .eq('id', scaleId)
-      .single();
-    if (error) {
-      // Error log removed for security;
-      return;
-    }
-    setSelectedScaleDef((data?.definition as unknown) as ScaleDefinition);
+    const rows = await fetchMedicalScalesSafe();
+    const selected = rows.find((row) => row.id === scaleId);
+    if (!selected) return;
+    setSelectedScaleDef((selected.definition as unknown) as ScaleDefinition);
   };
 
   const computedScore = useMemo(() => {
@@ -87,6 +84,37 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
     return r?.severity || null;
   }, [computedScore, selectedScaleDef]);
 
+  const computedInterpretation = useMemo(() => {
+    if (!selectedScaleDef || typeof computedScore !== 'number' || !computedSeverity) return null;
+    
+    // Generate clinical interpretation based on severity
+    const recommendations: string[] = [];
+    const severityLower = computedSeverity.toLowerCase();
+    
+    if (severityLower.includes('severo') || severityLower.includes('severe') || severityLower.includes('alto')) {
+      recommendations.push('Considerar intervención terapéutica inmediata');
+      recommendations.push('Evaluación especializada recomendada');
+      recommendations.push('Seguimiento estrecho del paciente');
+    } else if (severityLower.includes('moderado') || severityLower.includes('moderate')) {
+      recommendations.push('Monitoreo regular recomendado');
+      recommendations.push('Considerar terapia preventiva');
+      recommendations.push('Reevaluación en 2-4 semanas');
+    } else {
+      recommendations.push('Mantener observación');
+      recommendations.push('Promover medidas preventivas');
+      recommendations.push('Reevaluación según evolución clínica');
+    }
+
+    return {
+      severity: computedSeverity,
+      score: computedScore,
+      clinical_significance: `Puntuación de ${computedScore.toFixed(2)} indica ${computedSeverity}`,
+      recommendations,
+      evaluated_at: new Date().toISOString(),
+      scale_version: selectedScaleDef.version || '1.0'
+    };
+  }, [selectedScaleDef, computedScore, computedSeverity]);
+
   const handleSave = async () => {
     if (!selectedScaleId || !selectedScaleDef) return;
     try {
@@ -97,12 +125,16 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
         answers,
         score: typeof computedScore === 'number' ? computedScore : undefined,
         severity: computedSeverity ?? undefined,
+        interpretation: computedInterpretation ?? undefined,
       });
       setSelectedScaleId('');
       setSelectedScaleDef(null);
       setAnswers({});
       await loadExisting();
-    } catch (e) {
+      if (onAssessmentSaved) {
+        onAssessmentSaved();
+      }
+    } catch {
       // Error log removed for security;
     } finally {
       setSaving(false);
@@ -191,8 +223,11 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
             {existingAssessments.map(a => (
               <li key={a.id} className="text-sm text-gray-300 bg-gray-700 rounded p-2 border border-gray-600">
                 <div className="flex justify-between">
-                  <span>Escala: {a.scale_id}</span>
-                  <span>{new Date(a.created_at).toLocaleString()}</span>
+                  <span>Escala: {a.scaleName}</span>
+                  <span>{formatAssessmentDate(a.createdAt)}</span>
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  Aplicada por: {a.doctorName || 'No disponible'}
                 </div>
                 {typeof a.score === 'number' && (
                   <div>Puntuación: <span className="font-semibold text-white">{a.score}</span>{a.severity ? ` • ${a.severity}` : ''}</div>

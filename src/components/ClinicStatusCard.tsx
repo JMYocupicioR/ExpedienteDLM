@@ -29,7 +29,7 @@ interface ClinicStatus {
     name: string;
     type: string;
   };
-  role_in_clinic?: 'doctor' | 'admin_staff';
+  role_in_clinic?: 'doctor' | 'admin_staff' | 'administrative_assistant';
   created_at?: string;
   approved_at?: string;
   rejected_at?: string;
@@ -75,7 +75,7 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
   const loading = contextLoading || simpleLoading;
   const error = contextError || simpleError;
   
-  console.log('ClinicStatusCard - using clinic:', activeClinic?.name || 'null');
+  // Debug log removed for production;
   const [sendingRequest, setSendingRequest] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [userRelationship, setUserRelationship] = useState<any>(null);
@@ -270,8 +270,13 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
               <div className="flex items-center text-gray-400">
                 <User className="h-4 w-4 mr-2" />
                 <span className="capitalize">
-                  {userRelationship.role_in_clinic === 'doctor' ? 'Médico' : 
-                   userRelationship.role_in_clinic === 'admin_staff' ? 'Personal Administrativo' : 'Personal'}
+                  {userRelationship.role_in_clinic === 'doctor'
+                    ? 'Médico'
+                    : userRelationship.role_in_clinic === 'admin_staff'
+                    ? 'Personal Administrativo'
+                    : userRelationship.role_in_clinic === 'administrative_assistant'
+                    ? 'Asistente administrativo'
+                    : 'Personal'}
                 </span>
               </div>
             )}

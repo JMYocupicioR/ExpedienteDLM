@@ -1,5 +1,6 @@
 import Navbar from '@/components/Navigation/Navbar';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { useIsAssistant } from '@/hooks/useIsAssistant';
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
 import type { Database } from '@/lib/database.types';
 import React, { useEffect, useState } from 'react';
@@ -13,6 +14,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const { user, loading } = useAuth();
+  const { isAssistant } = useIsAssistant();
   const navigate = useNavigate();
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
@@ -33,7 +35,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const handleNewPatientCreated = (newPatient: Patient) => {
     setShowNewPatientForm(false);
-    navigate(`/expediente/${newPatient.id}`);
+    navigate(isAssistant ? '/clinic/patients' : `/expediente/${newPatient.id}`);
   };
 
   if (loading) {

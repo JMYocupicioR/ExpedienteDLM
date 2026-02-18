@@ -38,6 +38,10 @@ interface PrescriptionData {
   date?: string;
   patientAge?: string;
   patientWeight?: string;
+  doctorSpecialty?: string;
+  clinicAddress?: string;
+  clinicPhone?: string;
+  clinicEmail?: string;
   followUpDate?: string;
   prescriptionId?: string;
 }
@@ -95,6 +99,10 @@ const replaceTemplateVariables = (content: string, data: PrescriptionData): stri
     '{{date}}': data.date || new Date().toLocaleDateString('es-ES'),
     '{{patientAge}}': data.patientAge || '',
     '{{patientWeight}}': data.patientWeight || '',
+    '{{doctorSpecialty}}': data.doctorSpecialty || '',
+    '{{clinicAddress}}': data.clinicAddress || '',
+    '{{clinicPhone}}': data.clinicPhone || '',
+    '{{clinicEmail}}': data.clinicEmail || '',
     '{{followUpDate}}': data.followUpDate || '',
     '{{prescriptionId}}': data.prescriptionId || ''
   };
@@ -166,7 +174,7 @@ export function renderTemplateElement(element: TemplateElement, prescriptionData
         />
       );
 
-    case 'icon':
+    case 'icon': {
       const IconComponent = getIconComponent(element.iconType);
       return (
         <div key={element.id} style={baseStyle} className={`flex items-center justify-center ${isPrintMode ? 'print-element' : ''}`}>
@@ -176,6 +184,7 @@ export function renderTemplateElement(element: TemplateElement, prescriptionData
           />
         </div>
       );
+    }
 
     case 'qr':
       return (
@@ -187,7 +196,7 @@ export function renderTemplateElement(element: TemplateElement, prescriptionData
         </div>
       );
 
-    case 'date':
+    case 'date': {
       const currentDate = new Date().toLocaleDateString('es-ES', {
         year: 'numeric',
         month: 'long',
@@ -198,8 +207,9 @@ export function renderTemplateElement(element: TemplateElement, prescriptionData
           {currentDate}
         </div>
       );
+    }
 
-    case 'time':
+    case 'time': {
       const currentTime = new Date().toLocaleTimeString('es-ES', {
         hour: '2-digit',
         minute: '2-digit'
@@ -209,6 +219,7 @@ export function renderTemplateElement(element: TemplateElement, prescriptionData
           {currentTime}
         </div>
       );
+    }
 
     case 'table':
       return (

@@ -25,6 +25,8 @@ import ConsultationTimeline from '@/components/ConsultationTimeline';
 import VitalSignsChart from '@/components/VitalSignsChart';
 import { appointmentService, Appointment } from '@/lib/services/appointment-service';
 import PatientPrescriptionHistory from '@/components/PatientPrescriptionHistory';
+import DashboardPaciente from '@/components/DashboardPaciente';
+import PatientRecordScales from '@/components/PatientRecordScales';
 import type { Database } from '@/lib/database.types';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
@@ -40,9 +42,8 @@ export default function PatientRecord() {
   
   // Hook simple para obtener clínica activa
   const { activeClinic, loading: clinicLoading, error: clinicError } = useSimpleClinic();
-  
-  console.log('PatientRecord - activeClinic:', activeClinic?.name || 'null');
-  const [seccionActiva, setSeccionActiva] = useState('paciente');
+
+  const [seccionActiva, setSeccionActiva] = useState('dashboard');
   const [modoEdicion, setModoEdicion] = useState(false);
   const [showConsultationForm, setShowConsultationForm] = useState(false);
   const [consultationViewMode, setConsultationViewMode] = useState<'list' | 'timeline' | 'trends'>('list');
@@ -97,7 +98,7 @@ export default function PatientRecord() {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
       if (!session) {
-        navigate('/auth');
+        // La protección de ruta en App.tsx redirige automáticamente
         return;
       }
 
@@ -114,7 +115,6 @@ export default function PatientRecord() {
       await fetchPatientData();
     } catch (err) {
       // Error log removed for security;
-      navigate('/auth');
     }
   };
 
@@ -733,6 +733,18 @@ export default function PatientRecord() {
         />
 
         <main className="p-6 max-w-7xl mx-auto">
+          {seccionActiva === 'dashboard' && patient && userProfile && (
+            <DashboardPaciente
+              patient={patient}
+              consultations={consultations}
+              appointments={patientAppointments}
+              userProfile={userProfile}
+              onNewConsultation={() => setShowConsultationForm(true)}
+              onNavigateSection={(section) => setSeccionActiva(section)}
+              onAppointmentScheduled={handleAppointmentScheduled}
+            />
+          )}
+
           {seccionActiva === 'paciente' && (
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
               <h2 className="text-xl font-bold mb-6 text-white">Información Personal</h2>
@@ -1346,6 +1358,17 @@ export default function PatientRecord() {
               )}
             </div>
           )}
+
+          {/* Sección de Escalas Médicas */}
+          {seccionActiva === 'escalas' && patient && userProfile && (
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+              <PatientRecordScales
+                patientId={patient.id}
+                doctorId={userProfile.id}
+              />
+            </div>
+          )}
+
           {seccionActiva === 'estudios' && patient && (
             <div className="space-y-6">
               <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">

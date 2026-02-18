@@ -4,13 +4,18 @@ import PatientPortalLayout from '@/components/Layout/PatientPortalLayout';
 import ClinicAdminLayout from '@/components/Layout/ClinicAdminLayout';
 import AdminClinicConfigPanel from '@/components/clinic-config/AdminClinicConfigPanel';
 import DoctorClinicPreferences from '@/components/clinic-config/DoctorClinicPreferences';
+import AdherenceDashboardPage from '@/features/adherence-dashboard/pages/AdherenceDashboardPage';
 import { ClinicProvider } from '@/features/clinic/context/ClinicContext';
+import ExerciseManagerPage from '@/features/exercise-manager/pages/ExerciseManagerPage';
+import QuestionnaireManagerPage from '@/features/questionnaire-manager/pages/QuestionnaireManagerPage';
 import { supabase } from '@/lib/supabase';
 import AboutPage from '@/pages/AboutPage';
 import AppointmentsPage from '@/pages/AppointmentsPage';
 import Auth from '@/pages/Auth';
 import AuthCallback from '@/pages/AuthCallback';
 import ClinicAdminPage from '@/pages/ClinicAdminPage';
+import ClinicAdminDashboard from '@/pages/ClinicAdminDashboard';
+import StaffSchedulePage from '@/pages/StaffSchedulePage';
 import ClinicPatients from '@/pages/ClinicPatients';
 import ClinicRegistration from '@/pages/ClinicRegistration';
 import ClinicSearch from '@/pages/ClinicSearch';
@@ -29,61 +34,76 @@ import MedicalTemplates from '@/pages/MedicalTemplates';
 import NotFound from '@/pages/NotFound';
 import PatientPublicRegistration from '@/pages/PatientPublicRegistration';
 import PatientRecord from '@/pages/PatientRecord';
+import AssistantBlockedRoute from '@/components/guards/AssistantBlockedRoute';
 import PatientsList from '@/pages/PatientsList';
 import PrescriptionDashboard from '@/pages/PrescriptionDashboard';
 import PrivacyDashboard from '@/pages/PrivacyDashboard';
 import RequestClinicAccess from '@/pages/RequestClinicAccess';
+import ResetPassword from '@/pages/ResetPassword';
+import ScaleAssessmentSession from '@/pages/ScaleAssessmentSession';
 import Settings from '@/pages/Settings';
 import UserProfile from '@/pages/UserProfile';
 import SuperAdminDashboard from '@/features/super-admin/pages/SuperAdminDashboard';
-import { useEffect, useState } from 'react';
-import { Navigate, Route, BrowserRouter as Router, Routes, useNavigate } from 'react-router-dom';
+import SuperAdminClinicDetail from '@/features/super-admin/pages/SuperAdminClinicDetail';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 
 import './App.css';
 
-// Componente interno para manejar navegación automática
-function AuthNavigationHandler() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-
-      // Navegación automática basada en eventos de autenticación
-      if (event === 'SIGNED_IN') {
-
-        navigate('/dashboard');
-      }
-      if (event === 'SIGNED_OUT') {
-        navigate('/auth');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
-
-  return null; // Este componente no renderiza nada
-}
-
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const authResolvedRef = useRef(false);
+
+  // Stable setter that avoids unnecessary re-renders when value hasn't changed
+  const setAuthSafe = useCallback((value: boolean) => {
+    authResolvedRef.current = true;
+    setIsAuthenticated(prev => (prev === value ? prev : value));
+  }, []);
 
   useEffect(() => {
-    // Check initial auth state
+    // Check initial auth state with a safety timeout
+    const timeout = setTimeout(() => {
+      // If getSession() hasn't resolved in 5s, assume no session
+      if (!authResolvedRef.current) {
+        setAuthSafe(false);
+      }
+    }, 5000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
+      clearTimeout(timeout);
+      setAuthSafe(!!session);
+    }).catch(() => {
+      clearTimeout(timeout);
+      setAuthSafe(false);
     });
 
-    // Subscribe to auth changes
+    // Subscribe to auth changes — only update on meaningful events
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      setIsAuthenticated(!!session);
+      // TOKEN_REFRESHED keeps the same auth status — skip re-render
+      if (event === 'TOKEN_REFRESHED') return;
+      setAuthSafe(!!session);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    // Handle tab visibility — re-check session when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          setAuthSafe(!!session);
+        }).catch(() => {
+          // Network error while checking — keep current state
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [setAuthSafe]);
 
   // Show loading state while checking auth
   if (isAuthenticated === null) {
@@ -96,8 +116,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Router>
-        <AuthNavigationHandler />
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ClinicProvider>
           {/* Skip links para navegación accesible */}
           <a href='#main-content' className='skip-link'>
@@ -121,6 +140,7 @@ function App() {
             <Route path='/signup-questionnaire' element={<EnhancedSignupQuestionnaire />} />
             <Route path='/email-verification' element={<EmailVerification />} />
             <Route path='/auth/callback' element={<AuthCallback />} />
+            <Route path='/auth/reset-password' element={<ResetPassword />} />
             <Route path='/register/patient/:token' element={<PatientPublicRegistration />} />
             
             {/* Clinic Search and Registration Routes */}
@@ -273,9 +293,27 @@ function App() {
                 }
               />
               <Route
+                path='/expediente/:id/escalas/:assessmentId'
+                element={
+                  isAuthenticated ? (
+                    <AssistantBlockedRoute>
+                      <ScaleAssessmentSession />
+                    </AssistantBlockedRoute>
+                  ) : (
+                    <Navigate to='/auth' />
+                  )
+                }
+              />
+              <Route
                 path='/expediente/:id'
                 element={
-                  isAuthenticated ? <PatientRecord /> : <Navigate to='/auth' />
+                  isAuthenticated ? (
+                    <AssistantBlockedRoute>
+                      <PatientRecord />
+                    </AssistantBlockedRoute>
+                  ) : (
+                    <Navigate to='/auth' />
+                  )
                 }
               />
               <Route
@@ -304,9 +342,45 @@ function App() {
                   )
                 }
               />
+              <Route
+                path='/patient-ops/cuestionarios'
+                element={
+                  isAuthenticated ? (
+                    <QuestionnaireManagerPage />
+                  ) : (
+                    <Navigate to='/auth' />
+                  )
+                }
+              />
+              <Route
+                path='/patient-ops/ejercicios'
+                element={
+                  isAuthenticated ? (
+                    <ExerciseManagerPage />
+                  ) : (
+                    <Navigate to='/auth' />
+                  )
+                }
+              />
+              <Route
+                path='/patient-ops/adherencia'
+                element={
+                  isAuthenticated ? (
+                    <AdherenceDashboardPage />
+                  ) : (
+                    <Navigate to='/auth' />
+                  )
+                }
+              />
 
               {/* Clinic Admin Protected Routes */}
               <Route element={<ClinicAdminLayout />}>
+                <Route
+                  path='/clinic/dashboard'
+                  element={
+                    isAuthenticated ? <ClinicAdminDashboard /> : <Navigate to='/auth' />
+                  }
+                />
                 <Route
                   path='/clinic/admin'
                   element={
@@ -342,6 +416,16 @@ function App() {
                   }
                 />
                 <Route
+                  path='/clinic/schedule'
+                  element={
+                    isAuthenticated ? (
+                      <StaffSchedulePage />
+                    ) : (
+                      <Navigate to='/auth' />
+                    )
+                  }
+                />
+                <Route
                   path='/clinic/settings'
                   element={
                     isAuthenticated ? <ClinicSettings /> : <Navigate to='/auth' />
@@ -359,6 +443,12 @@ function App() {
                 path='/super-admin'
                 element={
                   isAuthenticated ? <SuperAdminDashboard /> : <Navigate to='/auth' />
+                }
+              />
+              <Route
+                path='/super-admin/clinic/:clinicId'
+                element={
+                  isAuthenticated ? <SuperAdminClinicDetail /> : <Navigate to='/auth' />
                 }
               />
             </Route>

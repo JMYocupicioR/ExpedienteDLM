@@ -61,8 +61,10 @@ export async function createPatient(
   clinicId?: string | null
 ): Promise<Patient> {
   // 1. Limpieza y preparación de datos
-  const cleanedData = {
+    const cleanedData = {
     full_name: patientData.full_name,
+    first_name: patientData.first_name || null,
+    last_name: patientData.last_name || null,
     social_security_number: patientData.social_security_number ? patientData.social_security_number.toUpperCase().trim() : null,
     email: patientData.email || null,
     phone: patientData.phone || null,
@@ -76,7 +78,9 @@ export async function createPatient(
     // Campos JSON como objetos vacíos si no se proporcionan
     insurance_info: patientData.insurance_info || {},
     emergency_contact: patientData.emergency_contact || {},
-    notes: patientData.notes || null
+    notes: patientData.notes || null,
+    allergies: patientData.allergies || [],
+    medical_history: patientData.medical_history || {}
   };
 
   // 2. Encrypt PHI data before insertion
@@ -116,12 +120,31 @@ export async function updatePatient(
     updated_at: new Date().toISOString(),
   });
 
-  let query = supabase.from('patients').update(encryptedUpdates).eq('id', patientId);
-  query = clinicId === undefined ? query : query.eq('clinic_id', clinicId ?? null);
+  const executeUpdate = async (useClinicFilter: boolean) => {
+    let query = supabase.from('patients').update(encryptedUpdates).eq('id', patientId);
+    if (useClinicFilter && clinicId !== undefined) {
+      query = query.eq('clinic_id', clinicId ?? null);
+    }
+    return query.select().single();
+  };
 
-  const { data, error } = await query.select().single();
+  let { data, error } = await executeUpdate(true);
 
-  if (error) throw new Error(error.message);
+  // Compatibility fallback: some environments may still be missing clinic_id in schema cache.
+  // In that case, rely on RLS by id and retry without clinic filter.
+  const missingClinicColumn =
+    error &&
+    error.code === 'PGRST204' &&
+    typeof error.message === 'string' &&
+    error.message.includes('clinic_id');
+
+  if (missingClinicColumn) {
+    const retry = await executeUpdate(false);
+    data = retry.data as any;
+    error = retry.error as any;
+  }
+
+  if (error) throw new Error(`${error.message}${error.code ? ` (Código: ${error.code})` : ''}`);
 
   // Decrypt PHI data before returning
   const decryptedPatient = await decryptPatientPHI(data);

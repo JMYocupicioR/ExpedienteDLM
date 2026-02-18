@@ -110,7 +110,7 @@ export default function ClinicRegistration() {
         .insert({
           user_id: user.id,
           clinic_id: clinic.id,
-          role_in_clinic: 'admin',
+          role_in_clinic: 'owner',
           status: 'approved',
           is_active: true
         });

@@ -1,16 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, ExternalLink, Plus, Activity } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { fetchActiveMedicalScalesSafe } from '@/lib/services/medical-scales-service';
 
 type ScaleRow = {
   id: string;
   name: string;
   description?: string | null;
-  functions?: string[] | null;
-  specialties?: string[] | null;
-  anatomy_systems?: string[] | null;
-  tags?: string[] | null;
 };
 
 interface ScalePickerProps {
@@ -31,13 +27,11 @@ export default function ScalePicker({ patientId, doctorId, consultationId, onAdd
     (async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('medical_scales')
-          .select('id, name, description, functions, specialties, anatomy_systems, tags')
-          .eq('is_active', true)
-          .order('name', { ascending: true });
-        if (error) throw error;
-        setScales(data || []);
+        const rows = await fetchActiveMedicalScalesSafe();
+        const mapped: ScaleRow[] = rows
+          .map((row) => ({ id: row.id, name: row.name, description: row.description }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setScales(mapped);
       } catch (e) {
         // Error log removed for security;
       } finally {
@@ -48,20 +42,10 @@ export default function ScalePicker({ patientId, doctorId, consultationId, onAdd
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let out = scales.filter(s => {
-      const matchesText = !q || s.name.toLowerCase().includes(q) ||
-        (s.description || '').toLowerCase().includes(q) ||
-        (s.functions || []).some(f => (f || '').toLowerCase().includes(q)) ||
-        (s.specialties || []).some(sp => (sp || '').toLowerCase().includes(q)) ||
-        (s.anatomy_systems || []).some(an => (an || '').toLowerCase().includes(q)) ||
-        (s.tags || []).some(t => (t || '').toLowerCase().includes(q));
-      return matchesText;
-    });
-    if (filters.function) out = out.filter(s => (s.functions || []).includes(filters.function!));
-    if (filters.specialty) out = out.filter(s => (s.specialties || []).includes(filters.specialty!));
-    if (filters.anatomy) out = out.filter(s => (s.anatomy_systems || []).includes(filters.anatomy!));
-    return out;
-  }, [query, scales, filters]);
+    return scales.filter(s =>
+      !q || s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q)
+    );
+  }, [query, scales]);
 
   const handleOpenCapture = (scaleId: string) => {
     // Map known routes
@@ -161,10 +145,8 @@ export default function ScalePicker({ patientId, doctorId, consultationId, onAdd
               {s.description && (
                 <p className="text-xs text-gray-300 mt-1 line-clamp-2">{s.description}</p>
               )}
-              <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-gray-300">
-                {(s.functions || []).map(f => <span key={f} className="px-2 py-0.5 bg-gray-800 rounded border border-gray-600">{f}</span>)}
-                {(s.specialties || []).map(sp => <span key={sp} className="px-2 py-0.5 bg-gray-800 rounded border border-gray-600">{sp}</span>)}
-                {(s.anatomy_systems || []).map(an => <span key={an} className="px-2 py-0.5 bg-gray-800 rounded border border-gray-600">{an}</span>)}
+              <div className="mt-2 text-[10px] text-gray-400">
+                ID de escala: {s.id}
               </div>
             </div>
           ))}

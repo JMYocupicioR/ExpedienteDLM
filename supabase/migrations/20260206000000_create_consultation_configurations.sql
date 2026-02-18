@@ -64,6 +64,16 @@ CREATE POLICY "Users can delete own configuration" ON consultation_configuration
     FOR DELETE USING (auth.uid() = user_id);
 
 -- Update trigger
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = timezone('utc'::text, now());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_consultation_configurations_updated_at ON consultation_configurations;
+
 CREATE TRIGGER update_consultation_configurations_updated_at
     BEFORE UPDATE ON consultation_configurations
     FOR EACH ROW

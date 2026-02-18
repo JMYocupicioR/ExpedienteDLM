@@ -8,9 +8,69 @@ import {
   TemplateSearchResult,
   TemplateStats,
   TemplateFavorite,
-  TemplateUsage
+  TemplateUsage,
+  TemplateContent,
+  TemplateSection,
+  Exercise
 } from '@/lib/database.types';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
+
+/**
+ * Sanitiza el contenido de una plantilla antes de persistir.
+ * - Trim de strings en ejercicios
+ * - Eliminación de ejercicios completamente vacíos
+ * - Eliminación de precauciones vacías
+ * - No afecta campos/categories/content existentes
+ */
+function sanitizeTemplateContent(content: TemplateContent): TemplateContent {
+  if (!content || !content.sections) return content;
+
+  const sanitizedSections: TemplateSection[] = content.sections.map(section => {
+    const sanitized: TemplateSection = { ...section };
+
+    // Sanitizar ejercicios
+    if (section.exercises && section.exercises.length > 0) {
+      sanitized.exercises = section.exercises
+        .map((ex: Exercise) => ({
+          name: (ex.name || '').trim(),
+          description: (ex.description || '').trim(),
+          repetitions: (ex.repetitions || '').trim(),
+          frequency: (ex.frequency || '').trim(),
+          duration: (ex.duration || '').trim() || undefined,
+          intensity: (ex.intensity || '').trim() || undefined,
+          precautions: (ex.precautions || []).map(p => (p || '').trim()).filter(p => p.length > 0)
+        }))
+        // Eliminar ejercicios sin nombre (vacíos)
+        .filter(ex => ex.name.length > 0);
+
+      // Si no quedan ejercicios válidos, dejar array vacío
+      if (sanitized.exercises.length === 0) {
+        sanitized.exercises = [];
+      }
+    }
+
+    // Sanitizar categorías de dieta
+    if (section.categories && section.categories.length > 0) {
+      sanitized.categories = section.categories
+        .filter(c => c && (c.category || '').trim().length > 0)
+        .map(c => ({
+          category: (c.category || '').trim(),
+          servings: (c.servings || '').trim(),
+          examples: (c.examples || '').trim(),
+          notes: (c.notes || '').trim() || undefined
+        }));
+    }
+
+    // Trim título y descripción
+    if (sanitized.title) sanitized.title = sanitized.title.trim();
+    if (sanitized.description) sanitized.description = sanitized.description.trim();
+    if (sanitized.content) sanitized.content = sanitized.content.trim();
+
+    return sanitized;
+  });
+
+  return { ...content, sections: sanitizedSections };
+}
 
 export function useTemplates() {
   const { user, profile } = useAuth();
@@ -20,7 +80,7 @@ export function useTemplates() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Obtener categorías
+  // Obtener categorías — fail silently if table doesn't exist yet
   const fetchCategories = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -28,26 +88,33 @@ export function useTemplates() {
         .select('*')
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        // 404 = table doesn't exist, 42P01 = undefined_table — not a user-facing error
+        if (error.code === '42P01' || error.message?.includes('relation') || error.code === 'PGRST204') {
+          setCategories([]);
+          return;
+        }
+        throw error;
+      }
       setCategories(data || []);
     } catch (err) {
-      // Error log removed for security;
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      // Silently ignore — categories are optional and the table may not exist yet
+      setCategories([]);
     }
   }, []);
 
-  // Buscar plantillas
+  // Buscar plantillas — uses a simple select without join to avoid 400 errors
+  // when template_categories table doesn't exist
   const searchTemplates = useCallback(async (params: TemplateSearchParams = {}): Promise<TemplateSearchResult> => {
     try {
       setLoading(true);
       setError(null);
 
+      // Use simple select without the category join to avoid 400 errors
+      // when template_categories table doesn't exist
       let query = supabase
         .from('medical_templates')
-        .select(`
-          *,
-          category:template_categories(*)
-        `)
+        .select('*')
         .eq('is_active', true);
 
       // Filtros
@@ -109,7 +176,8 @@ export function useTemplates() {
       // Error log removed for security;
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       setError(errorMessage);
-      throw new Error(errorMessage);
+      // Return empty result instead of throwing to prevent uncaught promise rejections
+      return { templates: [], total: 0, categories: [] };
     } finally {
       setLoading(false);
     }
@@ -122,10 +190,7 @@ export function useTemplates() {
       
       const { data, error } = await supabase
         .from('medical_templates')
-        .select(`
-          *,
-          category:template_categories(*)
-        `)
+        .select('*')
         .eq('id', id)
         .eq('is_active', true)
         .single();
@@ -149,20 +214,25 @@ export function useTemplates() {
     try {
       setLoading(true);
 
+      // Sanitizar contenido antes de persistir
+      const sanitizedData = {
+        ...templateData,
+        name: (templateData.name || '').trim(),
+        description: (templateData.description || '').trim(),
+        content: sanitizeTemplateContent(templateData.content)
+      };
+
       const newTemplate = {
         user_id: user.id,
         clinic_id: profile?.clinic_id,
         created_by: user.id,
-        ...templateData
+        ...sanitizedData
       };
 
       const { data, error } = await supabase
         .from('medical_templates')
         .insert([newTemplate])
-        .select(`
-          *,
-          category:template_categories(*)
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
@@ -189,8 +259,16 @@ export function useTemplates() {
     try {
       setLoading(true);
 
+      // Sanitizar contenido si está presente
+      const sanitizedData = { ...templateData };
+      if (sanitizedData.name) sanitizedData.name = sanitizedData.name.trim();
+      if (sanitizedData.description) sanitizedData.description = sanitizedData.description.trim();
+      if (sanitizedData.content) {
+        sanitizedData.content = sanitizeTemplateContent(sanitizedData.content);
+      }
+
       const updates = {
-        ...templateData,
+        ...sanitizedData,
         updated_by: user.id,
         updated_at: new Date().toISOString()
       };
@@ -200,10 +278,7 @@ export function useTemplates() {
         .update(updates)
         .eq('id', id)
         .eq('user_id', user.id) // Solo el propietario puede actualizar
-        .select(`
-          *,
-          category:template_categories(*)
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
@@ -286,27 +361,29 @@ export function useTemplates() {
     }
   }, [user, getTemplate, createTemplate]);
 
-  // Obtener favoritos del usuario
+  // Obtener favoritos del usuario — fail silently if table doesn't exist
   const fetchFavorites = useCallback(async () => {
     if (!user) return;
 
     try {
       const { data, error } = await supabase
         .from('template_favorites')
-        .select(`
-          *,
-          template:medical_templates(*)
-        `)
+        .select('*')
         .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        // Table may not exist — fail silently
+        setFavorites([]);
+        return;
+      }
       setFavorites(data || []);
     } catch (err) {
-      // Error log removed for security;
+      // Silently ignore — favorites are optional
+      setFavorites([]);
     }
   }, [user]);
 
-  // Agregar/quitar favorito
+  // Agregar/quitar favorito — returns false if table doesn't exist
   const toggleFavorite = useCallback(async (templateId: string): Promise<boolean> => {
     if (!user) throw new Error('Usuario no autenticado');
 
@@ -336,8 +413,8 @@ export function useTemplates() {
         return true;
       }
     } catch (err) {
-      // Error log removed for security;
-      throw err;
+      // Fail gracefully — favorites table may not exist
+      return false;
     }
   }, [user, favorites]);
 

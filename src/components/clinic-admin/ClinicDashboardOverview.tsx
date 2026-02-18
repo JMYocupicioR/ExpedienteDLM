@@ -92,6 +92,7 @@ export default function ClinicDashboardOverview({ clinicId }: ClinicDashboardOve
       // Process Stats
       const doctors = staffResult.data?.filter(s => s.role_in_clinic === 'doctor').length || 0;
       const adminStaff = staffResult.data?.filter(s => s.role_in_clinic === 'admin_staff').length || 0;
+      const assistants = staffResult.data?.filter(s => s.role_in_clinic === 'administrative_assistant').length || 0;
       const pendingAppts = appointmentsResult.data?.filter(a => a.status === 'scheduled' || a.status === 'confirmed').length || 0;
 
       setStats({
@@ -99,7 +100,7 @@ export default function ClinicDashboardOverview({ clinicId }: ClinicDashboardOve
         activePatients: activePatients || 0,
         todayAppointments: appointmentsResult.count || 0,
         totalDoctors: doctors,
-        totalStaff: doctors + adminStaff,
+        totalStaff: doctors + adminStaff + assistants,
         pendingAppointments: pendingAppts,
         completedConsultations: consultationsResult.count || 0
       });
@@ -133,13 +134,28 @@ export default function ClinicDashboardOverview({ clinicId }: ClinicDashboardOve
     <div className="space-y-6 animate-fadeIn">
       {/* Intro Section */}
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h2 className="text-xl font-bold text-white flex items-center">
-          <Building2 className="h-6 w-6 mr-2 text-cyan-400" />
-          {clinicInfo?.name || 'Resumen de Clínica'}
-        </h2>
-        <p className="text-gray-400 mt-1">
-          {clinicInfo?.address || 'Dirección no configurada'}
-        </p>
+        <div className="flex items-center gap-5">
+          {clinicInfo?.logo_url ? (
+            <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-gray-600 bg-gray-700 flex-shrink-0">
+              <img src={clinicInfo.logo_url} alt="Logo" className="w-full h-full object-contain" />
+            </div>
+          ) : (
+            <div className="w-16 h-16 rounded-xl border-2 border-gray-600 bg-gray-700 flex items-center justify-center flex-shrink-0">
+              <Building2 className="h-8 w-8 text-gray-500" />
+            </div>
+          )}
+          <div>
+            <h2 className="text-xl font-bold text-white">
+              {clinicInfo?.name || 'Resumen de Clínica'}
+            </h2>
+            <p className="text-gray-400 mt-0.5 text-sm">
+              {clinicInfo?.address || 'Dirección no configurada'}
+            </p>
+            {clinicInfo?.phone && (
+              <p className="text-gray-500 text-xs mt-0.5">{clinicInfo.phone}</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}

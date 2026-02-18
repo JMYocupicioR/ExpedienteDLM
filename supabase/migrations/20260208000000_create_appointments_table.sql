@@ -122,55 +122,69 @@ ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 -- 5. CREATE RLS POLICIES
 -- =====================================================
 
--- Policy: Users can view appointments from their clinic or where they are the doctor/patient
-DROP POLICY IF EXISTS "appointments_select_policy" ON public.appointments;
-CREATE POLICY "appointments_select_policy" ON public.appointments
-  FOR SELECT
-  USING (
-    clinic_id IN (
-      SELECT clinic_id FROM public.clinic_members WHERE user_id = auth.uid()
-    )
-    OR doctor_id = auth.uid()
-    OR patient_id IN (
-      SELECT id FROM public.patients WHERE primary_doctor_id = auth.uid()
-    )
-  );
+DO $$
+BEGIN
+  -- Policy: Users can view appointments from their clinic or where they are the doctor/patient
+  DROP POLICY IF EXISTS "appointments_select_policy" ON public.appointments;
+  CREATE POLICY "appointments_select_policy" ON public.appointments
+    FOR SELECT
+    USING (
+      clinic_id IN (
+        SELECT clinic_id
+        FROM public.clinic_user_relationships
+        WHERE user_id = auth.uid()
+          AND is_active = true
+      )
+      OR doctor_id = auth.uid()
+      OR patient_id IN (
+        SELECT id FROM public.patients WHERE primary_doctor_id = auth.uid()
+      )
+    );
 
--- Policy: Users can insert appointments in their clinic or as a doctor
-DROP POLICY IF EXISTS "appointments_insert_policy" ON public.appointments;
-CREATE POLICY "appointments_insert_policy" ON public.appointments
-  FOR INSERT
-  WITH CHECK (
-    clinic_id IN (
-      SELECT clinic_id FROM public.clinic_members WHERE user_id = auth.uid()
-    )
-    OR doctor_id = auth.uid()
-  );
+  -- Policy: Users can insert appointments in their clinic or as a doctor
+  DROP POLICY IF EXISTS "appointments_insert_policy" ON public.appointments;
+  CREATE POLICY "appointments_insert_policy" ON public.appointments
+    FOR INSERT
+    WITH CHECK (
+      clinic_id IN (
+        SELECT clinic_id
+        FROM public.clinic_user_relationships
+        WHERE user_id = auth.uid()
+          AND is_active = true
+      )
+      OR doctor_id = auth.uid()
+    );
 
--- Policy: Users can update appointments from their clinic or where they are the doctor
-DROP POLICY IF EXISTS "appointments_update_policy" ON public.appointments;
-CREATE POLICY "appointments_update_policy" ON public.appointments
-  FOR UPDATE
-  USING (
-    clinic_id IN (
-      SELECT clinic_id FROM public.clinic_members WHERE user_id = auth.uid()
-    )
-    OR doctor_id = auth.uid()
-  );
+  -- Policy: Users can update appointments from their clinic or where they are the doctor
+  DROP POLICY IF EXISTS "appointments_update_policy" ON public.appointments;
+  CREATE POLICY "appointments_update_policy" ON public.appointments
+    FOR UPDATE
+    USING (
+      clinic_id IN (
+        SELECT clinic_id
+        FROM public.clinic_user_relationships
+        WHERE user_id = auth.uid()
+          AND is_active = true
+      )
+      OR doctor_id = auth.uid()
+    );
 
--- Policy: Only clinic admins and doctors can delete appointments
-DROP POLICY IF EXISTS "appointments_delete_policy" ON public.appointments;
-CREATE POLICY "appointments_delete_policy" ON public.appointments
-  FOR DELETE
-  USING (
-    doctor_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM public.clinic_members
-      WHERE user_id = auth.uid()
-        AND clinic_id = appointments.clinic_id
-        AND role IN ('admin', 'owner')
-    )
-  );
+  -- Policy: Only clinic admins and doctors can delete appointments
+  DROP POLICY IF EXISTS "appointments_delete_policy" ON public.appointments;
+  CREATE POLICY "appointments_delete_policy" ON public.appointments
+    FOR DELETE
+    USING (
+      doctor_id = auth.uid()
+      OR EXISTS (
+        SELECT 1
+        FROM public.clinic_user_relationships
+        WHERE user_id = auth.uid()
+          AND clinic_id = appointments.clinic_id
+          AND role_in_clinic IN ('admin', 'owner')
+          AND is_active = true
+      )
+    );
+END $$;
 
 -- =====================================================
 -- 6. CREATE HELPER FUNCTIONS

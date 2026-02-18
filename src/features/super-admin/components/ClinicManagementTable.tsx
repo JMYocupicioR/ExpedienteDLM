@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Building, Users, CheckCircle, Eye, Trash2 } from 'lucide-react';
+import { Building, Users, CheckCircle, Eye, Trash2, Plus } from 'lucide-react';
 import type { Database } from '@/lib/database.types';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
+import { useNavigate } from 'react-router-dom';
+import CreateClinicModal from './CreateClinicModal';
 
 type Clinic = Database['public']['Tables']['clinics']['Row'] & {
   doctor_count?: number;
+  logo_url?: string | null;
 };
 
 export default function ClinicManagementTable() {
+  const navigate = useNavigate();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -16,6 +20,7 @@ export default function ClinicManagementTable() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [clinicToDelete, setClinicToDelete] = useState<Clinic | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
     loadClinics();
@@ -28,7 +33,8 @@ export default function ClinicManagementTable() {
         .from('clinics')
         .select(`
           *,
-          clinic_user_relationships(count)
+          clinic_user_relationships(count),
+          clinic_configurations(logo_url)
         `);
 
       if (error) throw error;
@@ -36,12 +42,18 @@ export default function ClinicManagementTable() {
       // Query type definition
       type ClinicResponse = Clinic & {
         clinic_user_relationships: { count: number }[] | null;
+        clinic_configurations: { logo_url: string | null }[] | null;
       };
 
-      const clinicsWithCounts = ((data as unknown as ClinicResponse[]) || []).map((clinic) => ({
-        ...clinic,
-        doctor_count: clinic.clinic_user_relationships?.[0]?.count || 0 
-      }));
+      const clinicsWithCounts = ((data as unknown as ClinicResponse[]) || []).map((clinic) => {
+        const cfgLogo = clinic.clinic_configurations?.[0]?.logo_url;
+        const clinicLogo = (clinic as Record<string, unknown>).logo_url as string | undefined;
+        return {
+          ...clinic,
+          doctor_count: clinic.clinic_user_relationships?.[0]?.count || 0,
+          logo_url: cfgLogo || clinicLogo || null
+        };
+      });
 
       setClinics(clinicsWithCounts);
     } catch (error) {
@@ -54,6 +66,11 @@ export default function ClinicManagementTable() {
   const handleDeleteClick = (clinic: Clinic) => {
     setClinicToDelete(clinic);
     setDeleteModalOpen(true);
+  };
+
+  const handleClinicCreated = async (createdClinic: Clinic) => {
+    await loadClinics();
+    navigate(`/super-admin/clinic/${createdClinic.id}`);
   };
 
   const handleConfirmDelete = async () => {
@@ -98,8 +115,17 @@ export default function ClinicManagementTable() {
               Supervisa todas las clínicas registradas y su estado de suscripción.
             </p>
           </div>
-          <div className="bg-cyan-500/10 text-cyan-400 px-4 py-2 rounded-lg text-sm font-medium">
-            Total: {clinics.length} Clínicas
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Nueva Clínica
+            </button>
+            <div className="bg-cyan-500/10 text-cyan-400 px-4 py-2 rounded-lg text-sm font-medium">
+              Total: {clinics.length} Clínicas
+            </div>
           </div>
         </div>
 
@@ -118,8 +144,27 @@ export default function ClinicManagementTable() {
               {clinics.map((clinic) => (
                 <tr key={clinic.id} className="hover:bg-gray-800/50 transition-colors">
                   <td className="p-4">
-                    <div className="font-medium text-white">{clinic.name}</div>
-                    <div className="text-xs text-gray-500">{clinic.id}</div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0 w-9 h-9 rounded-lg border border-gray-700 bg-[#11151F] overflow-hidden flex items-center justify-center">
+                        {clinic.logo_url ? (
+                          <img
+                            src={clinic.logo_url}
+                            alt=""
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              const next = (e.target as HTMLImageElement).nextElementSibling;
+                              if (next) (next as HTMLElement).classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <Building className={`h-4 w-4 text-gray-500 flex items-center justify-center ${!clinic.logo_url ? '' : 'hidden'}`} aria-hidden />
+                      </div>
+                      <div>
+                        <div className="font-medium text-white">{clinic.name}</div>
+                        <div className="text-xs text-gray-500">{clinic.id}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="p-4 text-gray-400 text-sm max-w-xs truncate">
                     {clinic.address || 'Sin dirección'}
@@ -138,7 +183,11 @@ export default function ClinicManagementTable() {
                   </td>
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <button className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-700 rounded-lg">
+                      <button
+                        onClick={() => navigate(`/super-admin/clinic/${clinic.id}`)}
+                        className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-700 rounded-lg"
+                        title="Ver y gestionar clínica"
+                      >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button 
@@ -165,6 +214,12 @@ export default function ClinicManagementTable() {
         message="Esta acción eliminará la clínica y TODOS sus datos asociados (incluyendo pacientes, citas y relaciones de usuarios). No podrás recuperar esta información."
         itemName={clinicToDelete?.name}
         loading={isDeleting}
+      />
+
+      <CreateClinicModal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onCreated={handleClinicCreated}
       />
     </>
   );

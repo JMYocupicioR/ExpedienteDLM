@@ -38,7 +38,7 @@ export function useSimpleClinic(): SimpleClinicHook {
         return;
       }
 
-      console.log('🔍 Loading clinic for user:', user.id);
+      // Debug log removed for production;
 
       // Obtener relación usuario-clínica aprobada
       const { data: relationship, error: relError } = await supabase
@@ -58,12 +58,12 @@ export function useSimpleClinic(): SimpleClinicHook {
       }
 
       if (!relationship) {
-        console.log('⚠️ No approved clinic relationships found');
+        // Debug log removed for production;
         setActiveClinic(null);
         return;
       }
 
-      console.log('✅ Found relationship:', relationship);
+      // Debug log removed for production;
 
       // Obtener datos de la clínica
       const { data: clinic, error: clinicError } = await supabase
@@ -78,7 +78,7 @@ export function useSimpleClinic(): SimpleClinicHook {
         return;
       }
 
-      console.log('✅ Clinic loaded:', clinic.name);
+      // Debug log removed for production;
       setActiveClinic(clinic);
 
     } catch (err: any) {

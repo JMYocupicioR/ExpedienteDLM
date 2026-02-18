@@ -27,22 +27,26 @@ export interface PrescriptionTemplateData {
 }
 
 export interface PrescriptionTemplateRow {
-  style_definition: PrescriptionTemplateData;
+  style_definition?: PrescriptionTemplateData;
+  // prescription_layouts columns
+  template_elements?: any[];
+  canvas_settings?: any;
+  print_settings?: any;
   logo_url?: string | null;
   user_id?: string;
   doctor_id?: string;
 }
 
-function normalizeTemplate(data: PrescriptionTemplateRow | null): PrescriptionTemplateData | null {
+function normalizeFromLayout(data: any): PrescriptionTemplateData | null {
   if (!data) return null;
-  const def = (data.style_definition || {}) as PrescriptionTemplateData;
-  // If visualTemplate present, lift to canonical fields
-  const templateElements = def.template_elements || def.visualTemplate?.elements || [];
-  const canvasSettings = def.canvas_settings || def.visualTemplate?.canvasSettings || {};
+  // prescription_layouts stores fields at the top level, not nested in style_definition
+  const templateElements = data.template_elements || data.style_definition?.template_elements || [];
+  const canvasSettings = data.canvas_settings || data.style_definition?.canvas_settings || {};
+  const rawPrint = data.print_settings || data.style_definition?.print_settings || {};
   const printSettings: PrescriptionPrintSettings = {
-    paperSize: (def.print_settings?.paperSize || (def.paperSize?.toLowerCase?.() || 'a4')) as any,
-    orientation: (def.print_settings?.orientation || (def.orientation?.toLowerCase?.() || 'portrait')) as any,
-    margins: def.print_settings?.margins || def.margins || 'normal'
+    paperSize: (rawPrint.paperSize || rawPrint.page_size || 'a4').toLowerCase() as any,
+    orientation: (rawPrint.orientation || rawPrint.page_orientation || 'portrait').toLowerCase() as any,
+    margins: rawPrint.margins || rawPrint.pageMargins || 'normal'
   };
   return {
     template_elements: templateElements,
@@ -68,31 +72,41 @@ function denormalizeTemplate(data: PrescriptionTemplateData): PrescriptionTempla
 }
 
 export async function getOrCreateTemplateForUser(userId: string): Promise<PrescriptionTemplateData> {
-  // Try user_id
-  let row: PrescriptionTemplateRow | null = null;
+  // Try to get the doctor's default layout from prescription_layouts
   try {
     const { data, error } = await supabase
-      .from('prescription_templates')
-      .select('style_definition, logo_url, user_id, doctor_id')
-      .eq('user_id', userId)
-      .single();
-    if (error && error.code !== 'PGRST116') throw error;
-    row = data as any;
-  } catch (_) {
-    // fallback doctor_id
-    const { data, error } = await supabase
-      .from('prescription_templates')
-      .select('style_definition, logo_url, user_id, doctor_id')
+      .from('prescription_layouts')
+      .select('*')
       .eq('doctor_id', userId)
+      .eq('is_default', true)
       .single();
-    if (error && error.code !== 'PGRST116') throw error;
-    row = data as any;
+
+    if (!error && data) {
+      const normalized = normalizeFromLayout(data);
+      if (normalized) return normalized;
+    }
+  } catch (_) {
+    // Continue to fallback
   }
 
-  const normalized = normalizeTemplate(row);
-  if (normalized) return normalized;
+  // Fallback: get any predefined/public layout
+  try {
+    const { data } = await supabase
+      .from('prescription_layouts')
+      .select('*')
+      .eq('is_predefined', true)
+      .limit(1)
+      .single();
 
-  // Create default
+    if (data) {
+      const normalized = normalizeFromLayout(data);
+      if (normalized) return normalized;
+    }
+  } catch (_) {
+    // Continue to default
+  }
+
+  // Return a default template if nothing found
   const defaultTemplate: PrescriptionTemplateData = {
     template_elements: [],
     canvas_settings: {
@@ -108,47 +122,38 @@ export async function getOrCreateTemplateForUser(userId: string): Promise<Prescr
     }
   };
 
-  // Persist default (try user_id, fallback doctor_id)
-  try {
-    const payload = { user_id: userId, style_definition: denormalizeTemplate(defaultTemplate), updated_at: new Date().toISOString() };
-    const { error: upErr } = await supabase
-      .from('prescription_templates')
-      .upsert(payload, { onConflict: 'user_id' });
-    if (upErr) {
-      await supabase
-        .from('prescription_templates')
-        .upsert({ doctor_id: userId, style_definition: denormalizeTemplate(defaultTemplate), updated_at: new Date().toISOString() }, { onConflict: 'doctor_id' });
-    }
-  } catch (_) {}
-
   return defaultTemplate;
 }
 
 export async function saveTemplateForUser(userId: string, template: PrescriptionTemplateData): Promise<PrescriptionTemplateData> {
   const payload = denormalizeTemplate(template);
-  // Try user_id first
-  try {
-    const { data, error } = await supabase
-      .from('prescription_templates')
-      .upsert({ user_id: userId, style_definition: payload, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-      .select('style_definition, logo_url')
-      .single();
-    if (error) throw error;
-    return normalizeTemplate(data as any)!;
-  } catch (e) {
-    const { data, error } = await supabase
-      .from('prescription_templates')
-      .upsert({ doctor_id: userId, style_definition: payload, updated_at: new Date().toISOString() }, { onConflict: 'doctor_id' })
-      .select('style_definition, logo_url')
-      .single();
-    if (error) throw error;
-    return normalizeTemplate(data as any)!;
-  }
+
+  // First, unset any existing defaults
+  await supabase
+    .from('prescription_layouts')
+    .update({ is_default: false })
+    .eq('doctor_id', userId);
+
+  // Upsert the layout
+  const { data, error } = await supabase
+    .from('prescription_layouts')
+    .upsert({
+      doctor_id: userId,
+      name: 'Mi plantilla personalizada',
+      template_elements: payload.template_elements || [],
+      canvas_settings: payload.canvas_settings || {},
+      print_settings: payload.print_settings || {},
+      is_default: true,
+      updated_at: new Date().toISOString()
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return normalizeFromLayout(data)!;
 }
 
 export async function getActiveTemplateSnapshotForUser(userId: string): Promise<PrescriptionTemplateData | null> {
   const tpl = await getOrCreateTemplateForUser(userId);
   return tpl;
 }
-
-

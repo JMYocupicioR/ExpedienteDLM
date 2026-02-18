@@ -13,6 +13,10 @@ export default function Auth() {
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
   const [hcaptchaToken, setHcaptchaToken] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState<string | null>(null);
   const loginCaptchaRef = useRef<HCaptcha>(null);
   const signupCaptchaRef = useRef<HCaptcha>(null);
   const navigate = useNavigate();
@@ -327,6 +331,35 @@ export default function Auth() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setForgotPasswordMessage(null);
+
+    const normalizedEmail = forgotPasswordEmail.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setForgotPasswordMessage('Ingresa tu correo electrónico para continuar.');
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+
+      if (error) throw error;
+      setForgotPasswordMessage(
+        'Te enviamos un correo con instrucciones para restablecer tu contraseña.'
+      );
+    } catch (err: any) {
+      setForgotPasswordMessage(
+        err?.message || 'No se pudo enviar el correo de recuperación. Intenta nuevamente.'
+      );
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
   return (
     <div className='min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4'>
       {/* Background decoration */}
@@ -368,6 +401,7 @@ export default function Auth() {
                       id='email-login'
                       type='email'
                       name='email'
+                      autoComplete='username'
                       placeholder='ejemplo@deepluxmed.com'
                       required
                       className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all'
@@ -388,6 +422,7 @@ export default function Auth() {
                       id='password-login'
                       type='password'
                       name='password'
+                      autoComplete='current-password'
                       placeholder='••••••••'
                       required
                       className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all'
@@ -411,10 +446,50 @@ export default function Auth() {
               </div>
 
               <div className='text-right'>
-                <a href='#' className='text-sm text-cyan-400 hover:text-cyan-300 transition-colors'>
+                <button
+                  type='button'
+                  onClick={() => {
+                    setShowForgotPassword(prev => !prev);
+                    setForgotPasswordMessage(null);
+                  }}
+                  className='text-sm text-cyan-400 hover:text-cyan-300 transition-colors'
+                >
                   ¿Olvidaste tu contraseña?
-                </a>
+                </button>
               </div>
+
+              {showForgotPassword && (
+                <div className='rounded-lg border border-cyan-700/70 bg-cyan-950/30 p-4 space-y-3'>
+                  <p className='text-sm text-cyan-100'>
+                    Escribe tu correo y te enviaremos un enlace para crear una nueva contraseña.
+                  </p>
+                  <form onSubmit={handleForgotPassword} className='space-y-3'>
+                    <div className='relative'>
+                      <input
+                        type='email'
+                        name='recoveryEmail'
+                        autoComplete='email'
+                        value={forgotPasswordEmail}
+                        onChange={e => setForgotPasswordEmail(e.target.value)}
+                        placeholder='ejemplo@deepluxmed.com'
+                        required
+                        className='w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 pr-12 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all'
+                      />
+                      <Mail className='absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
+                    </div>
+                    <button
+                      type='submit'
+                      disabled={forgotPasswordLoading}
+                      className='w-full py-2 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
+                    >
+                      {forgotPasswordLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
+                    </button>
+                  </form>
+                  {forgotPasswordMessage && (
+                    <p className='text-xs text-cyan-200'>{forgotPasswordMessage}</p>
+                  )}
+                </div>
+              )}
 
               <button
                 type='submit'
@@ -472,6 +547,7 @@ export default function Auth() {
                       id='email-register'
                       type='email'
                       name='email'
+                      autoComplete='email'
                       placeholder='ejemplo@correo.com'
                       required
                       disabled={checkingEmail}
@@ -504,6 +580,7 @@ export default function Auth() {
                       id='password-register'
                       type={showRegisterPassword ? 'text' : 'password'}
                       name='password'
+                      autoComplete='new-password'
                       placeholder='••••••••'
                       required
                       minLength={6}
@@ -542,6 +619,7 @@ export default function Auth() {
                       id='confirm-password-register'
                       type={showRegisterConfirmPassword ? 'text' : 'password'}
                       name='confirmPassword'
+                      autoComplete='new-password'
                       placeholder='••••••••'
                       required
                       minLength={6}

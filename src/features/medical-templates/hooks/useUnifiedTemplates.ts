@@ -95,7 +95,7 @@ export function useUnifiedTemplates() {
     type?: string;
     search?: string;
     specialty?: string;
-    includePhysicalExam?: boolean;
+    includeLegacy?: boolean; // Cambiado de includePhysicalExam
   } = {}) => {
     try {
       setLoading(true);
@@ -103,37 +103,39 @@ export function useUnifiedTemplates() {
 
       const results: UnifiedTemplate[] = [];
 
-      // Obtener plantillas médicas estándar
-      if (!params.type || ['interrogatorio', 'exploracion', 'prescripcion'].includes(params.type)) {
-        const medicalTemplatesResult = await medicalTemplatesHook.searchTemplates({
-          type: params.type as any,
-          search: params.search,
-          specialty: params.specialty
-        });
-        
-        results.push(
-          ...medicalTemplatesResult.templates.map(convertMedicalTemplate)
-        );
-      }
+      // Obtener plantillas médicas estándar (incluyendo las migradas)
+      const medicalTemplatesResult = await medicalTemplatesHook.searchTemplates({
+        type: (params.type === 'physical_exam' ? 'exploracion' : params.type) as any,
+        search: params.search,
+        specialty: params.specialty
+      });
+      
+      results.push(
+        ...medicalTemplatesResult.templates.map(convertMedicalTemplate)
+      );
 
-      // Obtener plantillas de exploración física
-      if (params.includePhysicalExam !== false && (!params.type || params.type === 'physical_exam' || params.type === 'exploracion')) {
-        const physicalExamTemplates = await fetchPhysicalExamTemplates();
-        
-        results.push(
-          ...physicalExamTemplates
-            .filter(template => {
-              if (params.search) {
-                return template.name.toLowerCase().includes(params.search.toLowerCase());
-              }
-              return true;
-            })
-            .map(convertPhysicalExamTemplate)
-        );
+      // Obtener plantillas de legado SOLO si se solicita explícitamente (ahora están migradas)
+      if (params.includeLegacy) {
+        if (!params.type || params.type === 'physical_exam' || params.type === 'exploracion') {
+          const physicalExamTemplates = await fetchPhysicalExamTemplates();
+          
+          results.push(
+            ...physicalExamTemplates
+              .filter(template => {
+                if (params.search) {
+                  return template.name.toLowerCase().includes(params.search.toLowerCase());
+                }
+                return true;
+              })
+              // Evitar duplicados si ya están en medical_templates (por nombre)
+              .filter(legacy => !results.some(r => r.name === legacy.name && r.source === 'medical_templates'))
+              .map(convertPhysicalExamTemplate)
+          );
+        }
       }
 
       // Ordenar por fecha de actualización (más recientes primero)
-      results.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      results.sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
 
       setUnifiedTemplates(results);
       return results;

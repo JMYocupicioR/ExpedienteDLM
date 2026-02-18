@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, Save, Plus, Trash2, GripVertical, 
   Type, TextCursor, List, RadioIcon as Radio, 
   CheckSquare, Hash, Calendar, Clock,
-  Eye, EyeOff, Settings, Tag
+  Eye, EyeOff, Settings, Tag,
+  Dumbbell, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { 
   MedicalTemplate, 
   TemplateFormData, 
   TemplateSection, 
   TemplateField,
-  TemplateCategory 
+  TemplateCategory,
+  Exercise
 } from '@/lib/database.types';
 
 interface TemplateEditorProps {
@@ -60,11 +62,13 @@ export default function TemplateEditor({
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [loading, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [forcePhysiotherapyMode, setForcePhysiotherapyMode] = useState(false);
 
   // Inicializar datos cuando se abre el editor
   useEffect(() => {
     if (isOpen) {
       if (template) {
+        const initialSections = template.content.sections || [];
         setFormData({
           name: template.name,
           description: template.description || '',
@@ -75,7 +79,12 @@ export default function TemplateEditor({
           is_public: template.is_public,
           category_id: template.category_id || ''
         });
-        setSections(template.content.sections || []);
+        setSections(initialSections);
+        setActiveSection(initialSections[0]?.id || null);
+        const hasExercises = initialSections.some(section => (section.exercises?.length || 0) > 0);
+        const specialty = (template.specialty || '').toLowerCase().trim();
+        const looksPhysioSpecialty = specialty.includes('fisioterapia') || specialty.includes('terapia fisica') || specialty.includes('terapia física') || specialty.includes('rehabilitación');
+        setForcePhysiotherapyMode(hasExercises || looksPhysioSpecialty);
       } else {
         // Nuevo template
         const newSection: TemplateSection = {
@@ -95,6 +104,7 @@ export default function TemplateEditor({
         });
         setSections([newSection]);
         setActiveSection('section-1');
+        setForcePhysiotherapyMode(false);
       }
     }
   }, [template, isOpen]);
@@ -118,6 +128,35 @@ export default function TemplateEditor({
       return;
     }
 
+    // Validaciones específicas de fisioterapia
+    if (isPhysiotherapyMode) {
+      const hasExercises = sections.some(s => (s.exercises?.length || 0) > 0);
+      if (!hasExercises) {
+        alert('Las plantillas de fisioterapia deben tener al menos un ejercicio');
+        return;
+      }
+
+      // Validar campos mínimos por ejercicio
+      for (const section of sections) {
+        if (!section.exercises) continue;
+        for (let i = 0; i < section.exercises.length; i++) {
+          const ex = section.exercises[i];
+          if (!ex.name.trim()) {
+            alert(`El ejercicio ${i + 1} en "${section.title}" requiere un nombre`);
+            return;
+          }
+          if (!ex.repetitions.trim()) {
+            alert(`El ejercicio "${ex.name}" en "${section.title}" requiere repeticiones`);
+            return;
+          }
+          if (!ex.frequency.trim()) {
+            alert(`El ejercicio "${ex.name}" en "${section.title}" requiere frecuencia`);
+            return;
+          }
+        }
+      }
+    }
+
     setSaving(true);
     try {
       await onSave(formData);
@@ -133,8 +172,11 @@ export default function TemplateEditor({
   const addSection = () => {
     const newSection: TemplateSection = {
       id: `section-${Date.now()}`,
-      title: `Nueva Sección ${sections.length + 1}`,
-      fields: []
+      title: isPhysiotherapyMode 
+        ? `Grupo de Ejercicios ${sections.length + 1}` 
+        : `Nueva Sección ${sections.length + 1}`,
+      fields: isPhysiotherapyMode ? undefined : [],
+      exercises: isPhysiotherapyMode ? [] : undefined
     };
     setSections(prev => [...prev, newSection]);
     setActiveSection(newSection.id);
@@ -209,6 +251,102 @@ export default function TemplateEditor({
       tags: prev.tags.filter(tag => tag !== tagToRemove)
     }));
   };
+
+  // --- Detección de modo fisioterapia ---
+  const isPhysiotherapyMode = useMemo(() => {
+    const sp = (formData.specialty || '').toLowerCase().trim();
+    const hasExercisesInAnySection = sections.some(section => (section.exercises?.length || 0) > 0);
+    return formData.type === 'prescripcion' && (
+      forcePhysiotherapyMode ||
+      hasExercisesInAnySection ||
+      sp.includes('fisioterapia') ||
+      sp.includes('terapia física') ||
+      sp.includes('terapia fisica') ||
+      sp.includes('rehabilitación')
+    );
+  }, [formData.type, formData.specialty, sections, forcePhysiotherapyMode]);
+
+  const togglePhysiotherapyMode = (enabled: boolean) => {
+    setForcePhysiotherapyMode(enabled);
+    if (!enabled) return;
+
+    setFormData(prev => ({
+      ...prev,
+      specialty: prev.specialty?.trim() ? prev.specialty : 'Fisioterapia'
+    }));
+
+    setSections(prev => {
+      if (prev.length === 0) {
+        const firstSection: TemplateSection = {
+          id: `section-${Date.now()}`,
+          title: 'Grupo de Ejercicios 1',
+          description: '',
+          exercises: []
+        };
+        setActiveSection(firstSection.id);
+        return [firstSection];
+      }
+
+      return prev.map(section => ({
+        ...section,
+        exercises: section.exercises || []
+      }));
+    });
+  };
+
+  // --- CRUD de ejercicios ---
+  const addExercise = (sectionId: string) => {
+    const newExercise: Exercise = {
+      name: '',
+      description: '',
+      repetitions: '',
+      frequency: '',
+      duration: '',
+      intensity: '',
+      precautions: []
+    };
+
+    setSections(prev => prev.map(section =>
+      section.id === sectionId
+        ? { ...section, exercises: [...(section.exercises || []), newExercise] }
+        : section
+    ));
+  };
+
+  const updateExercise = (sectionId: string, exerciseIndex: number, updates: Partial<Exercise>) => {
+    setSections(prev => prev.map(section =>
+      section.id === sectionId
+        ? {
+            ...section,
+            exercises: section.exercises?.map((ex, i) =>
+              i === exerciseIndex ? { ...ex, ...updates } : ex
+            ) || []
+          }
+        : section
+    ));
+  };
+
+  const deleteExercise = (sectionId: string, exerciseIndex: number) => {
+    setSections(prev => prev.map(section =>
+      section.id === sectionId
+        ? { ...section, exercises: section.exercises?.filter((_, i) => i !== exerciseIndex) || [] }
+        : section
+    ));
+  };
+
+  const moveExercise = (sectionId: string, fromIndex: number, direction: 'up' | 'down') => {
+    setSections(prev => prev.map(section => {
+      if (section.id !== sectionId || !section.exercises) return section;
+      const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+      if (toIndex < 0 || toIndex >= section.exercises.length) return section;
+      const newExercises = [...section.exercises];
+      [newExercises[fromIndex], newExercises[toIndex]] = [newExercises[toIndex], newExercises[fromIndex]];
+      return { ...section, exercises: newExercises };
+    }));
+  };
+
+  // Conteo total de ejercicios
+  const totalExercises = sections.reduce((total, section) => total + (section.exercises?.length || 0), 0);
 
   const currentSection = sections.find(s => s.id === activeSection);
 
@@ -303,6 +441,18 @@ export default function TemplateEditor({
                     />
                   </div>
 
+                  {formData.type === 'prescripcion' && (
+                    <label className="flex items-center justify-between rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-3 py-2">
+                      <span className="text-sm text-emerald-300">Plantilla de fisioterapia (ejercicios)</span>
+                      <input
+                        type="checkbox"
+                        checked={isPhysiotherapyMode}
+                        onChange={(e) => togglePhysiotherapyMode(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-600 text-emerald-500 focus:ring-emerald-400"
+                      />
+                    </label>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Categoría
@@ -325,7 +475,7 @@ export default function TemplateEditor({
 
                   {/* Tags */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center">
+                    <label className="text-sm font-medium text-gray-300 mb-2 flex items-center">
                       <Tag className="h-4 w-4 mr-1" />
                       Etiquetas
                     </label>
@@ -414,7 +564,10 @@ export default function TemplateEditor({
                         </div>
                         <div className="flex items-center space-x-1">
                           <span className="text-xs bg-gray-600 px-2 py-1 rounded">
-                            {section.fields?.length || 0} campos
+                            {isPhysiotherapyMode
+                              ? `${section.exercises?.length || 0} ejercicio${(section.exercises?.length || 0) !== 1 ? 's' : ''}`
+                              : `${section.fields?.length || 0} campos`
+                            }
                           </span>
                           {sections.length > 1 && (
                             <button
@@ -440,70 +593,127 @@ export default function TemplateEditor({
           <div className="flex-1 p-6 overflow-y-auto">
             {currentSection ? (
               <div className="space-y-6">
+                {/* Indicador de modo fisioterapia */}
+                {isPhysiotherapyMode && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-emerald-900/30 border border-emerald-700/50 rounded-lg">
+                    <Dumbbell className="h-4 w-4 text-emerald-400" />
+                    <span className="text-sm text-emerald-300">
+                      Modo Fisioterapia: edita ejercicios, repeticiones, frecuencia e intensidad por sección
+                    </span>
+                  </div>
+                )}
+
                 {/* Configuración de sección */}
                 <div className="bg-gray-700/50 rounded-lg p-4">
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Título de la sección
+                        {isPhysiotherapyMode ? 'Nombre del grupo de ejercicios' : 'Título de la sección'}
                       </label>
                       <input
                         type="text"
                         value={currentSection.title}
                         onChange={(e) => updateSection(currentSection.id, { title: e.target.value })}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        placeholder={isPhysiotherapyMode ? 'Ej: Ejercicios de estiramiento lumbar' : ''}
                       />
                     </div>
                     
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Descripción de la sección
+                        {isPhysiotherapyMode ? 'Instrucciones generales' : 'Descripción de la sección'}
                       </label>
                       <textarea
                         value={currentSection.description || ''}
                         onChange={(e) => updateSection(currentSection.id, { description: e.target.value })}
                         rows={2}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                        placeholder="Descripción opcional"
+                        placeholder={isPhysiotherapyMode ? 'Ej: Realizar en superficie firme, detener si hay dolor agudo' : 'Descripción opcional'}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Campos de la sección */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-medium text-white">Campos</h4>
-                    <button
-                      onClick={() => addField(currentSection.id)}
-                      className="flex items-center space-x-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Agregar Campo</span>
-                    </button>
-                  </div>
+                {/* Ejercicios (modo fisioterapia) */}
+                {isPhysiotherapyMode ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-medium text-white flex items-center gap-2">
+                        <Dumbbell className="h-5 w-5 text-emerald-400" />
+                        Ejercicios
+                      </h4>
+                      <button
+                        onClick={() => addExercise(currentSection.id)}
+                        className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Agregar Ejercicio</span>
+                      </button>
+                    </div>
 
-                  <div className="space-y-4">
-                    {currentSection.fields?.map((field, fieldIndex) => (
-                      <FieldEditor
-                        key={field.id}
-                        field={field}
-                        onUpdate={(updates) => updateField(currentSection.id, field.id, updates)}
-                        onDelete={() => deleteField(currentSection.id, field.id)}
-                      />
-                    )) || (
-                      <div className="text-center py-12 border-2 border-dashed border-gray-600 rounded-lg">
-                        <p className="text-gray-400 mb-4">Esta sección no tiene campos</p>
-                        <button
-                          onClick={() => addField(currentSection.id)}
-                          className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
-                        >
-                          Agregar primer campo
-                        </button>
-                      </div>
-                    )}
+                    <div className="space-y-4">
+                      {currentSection.exercises && currentSection.exercises.length > 0 ? (
+                        currentSection.exercises.map((exercise, exIndex) => (
+                          <ExerciseEditor
+                            key={exIndex}
+                            exercise={exercise}
+                            index={exIndex}
+                            total={currentSection.exercises?.length || 0}
+                            onUpdate={(updates) => updateExercise(currentSection.id, exIndex, updates)}
+                            onDelete={() => deleteExercise(currentSection.id, exIndex)}
+                            onMove={(dir) => moveExercise(currentSection.id, exIndex, dir)}
+                          />
+                        ))
+                      ) : (
+                        <div className="text-center py-12 border-2 border-dashed border-emerald-800/50 rounded-lg">
+                          <Dumbbell className="h-10 w-10 text-gray-600 mx-auto mb-3" />
+                          <p className="text-gray-400 mb-4">Esta sección no tiene ejercicios</p>
+                          <button
+                            onClick={() => addExercise(currentSection.id)}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+                          >
+                            Agregar primer ejercicio
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Campos de la sección (modo estándar) */
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-medium text-white">Campos</h4>
+                      <button
+                        onClick={() => addField(currentSection.id)}
+                        className="flex items-center space-x-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Agregar Campo</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {currentSection.fields?.map((field) => (
+                        <FieldEditor
+                          key={field.id}
+                          field={field}
+                          onUpdate={(updates) => updateField(currentSection.id, field.id, updates)}
+                          onDelete={() => deleteField(currentSection.id, field.id)}
+                        />
+                      )) || (
+                        <div className="text-center py-12 border-2 border-dashed border-gray-600 rounded-lg">
+                          <p className="text-gray-400 mb-4">Esta sección no tiene campos</p>
+                          <button
+                            onClick={() => addField(currentSection.id)}
+                            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
+                          >
+                            Agregar primer campo
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-12">
@@ -516,8 +726,11 @@ export default function TemplateEditor({
         {/* Footer */}
         <div className="border-t border-gray-700 px-6 py-4 flex items-center justify-between">
           <div className="text-gray-400">
-            {sections.length} sección{sections.length !== 1 ? 'es' : ''}, {' '}
-            {sections.reduce((total, section) => total + (section.fields?.length || 0), 0)} campos
+            {sections.length} sección{sections.length !== 1 ? 'es' : ''}
+            {isPhysiotherapyMode
+              ? `, ${totalExercises} ejercicio${totalExercises !== 1 ? 's' : ''}`
+              : `, ${sections.reduce((total, section) => total + (section.fields?.length || 0), 0)} campos`
+            }
           </div>
           
           <div className="flex space-x-3">
@@ -643,6 +856,207 @@ function FieldEditor({ field, onUpdate, onDelete }: FieldEditorProps) {
             />
             <span className="text-sm text-gray-300">Campo requerido</span>
           </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Componente para editar un ejercicio individual
+interface ExerciseEditorProps {
+  exercise: Exercise;
+  index: number;
+  total: number;
+  onUpdate: (updates: Partial<Exercise>) => void;
+  onDelete: () => void;
+  onMove: (direction: 'up' | 'down') => void;
+}
+
+function ExerciseEditor({ exercise, index, total, onUpdate, onDelete, onMove }: ExerciseEditorProps) {
+  const [precautionInput, setPrecautionInput] = useState('');
+
+  const addPrecaution = () => {
+    if (precautionInput.trim()) {
+      onUpdate({ precautions: [...(exercise.precautions || []), precautionInput.trim()] });
+      setPrecautionInput('');
+    }
+  };
+
+  const removePrecaution = (precautionIndex: number) => {
+    onUpdate({
+      precautions: (exercise.precautions || []).filter((_, i) => i !== precautionIndex)
+    });
+  };
+
+  const hasMinimumFields = exercise.name.trim() && exercise.repetitions.trim() && exercise.frequency.trim();
+
+  return (
+    <div className={`bg-gray-700/30 rounded-lg p-4 border ${hasMinimumFields ? 'border-gray-600' : 'border-amber-700/50'}`}>
+      {/* Header del ejercicio */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-2">
+          <Dumbbell className="h-4 w-4 text-emerald-400" />
+          <span className="text-sm font-medium text-emerald-400">
+            Ejercicio {index + 1}
+          </span>
+          {!hasMinimumFields && (
+            <span className="flex items-center gap-1 text-xs text-amber-400">
+              <AlertCircle className="h-3 w-3" />
+              Campos requeridos incompletos
+            </span>
+          )}
+        </div>
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={() => onMove('up')}
+            disabled={index === 0}
+            className="p-1 rounded text-gray-400 hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Mover arriba"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => onMove('down')}
+            disabled={index === total - 1}
+            className="p-1 rounded text-gray-400 hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Mover abajo"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1 rounded text-red-400 hover:text-red-300 hover:bg-red-400/10"
+            title="Eliminar ejercicio"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Nombre */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Nombre del ejercicio *
+          </label>
+          <input
+            type="text"
+            value={exercise.name}
+            onChange={(e) => onUpdate({ name: e.target.value })}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            placeholder="Ej: Estiramiento de isquiotibiales"
+          />
+        </div>
+
+        {/* Descripción */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Descripción / Instrucciones
+          </label>
+          <textarea
+            value={exercise.description}
+            onChange={(e) => onUpdate({ description: e.target.value })}
+            rows={2}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            placeholder="Ej: Acostado boca arriba, elevar la pierna recta hasta sentir tensión en la parte posterior del muslo"
+          />
+        </div>
+
+        {/* Repeticiones */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Repeticiones / Series *
+          </label>
+          <input
+            type="text"
+            value={exercise.repetitions}
+            onChange={(e) => onUpdate({ repetitions: e.target.value })}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            placeholder="Ej: 3 series de 10 repeticiones"
+          />
+        </div>
+
+        {/* Frecuencia */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Frecuencia *
+          </label>
+          <input
+            type="text"
+            value={exercise.frequency}
+            onChange={(e) => onUpdate({ frequency: e.target.value })}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            placeholder="Ej: 2 veces al día"
+          />
+        </div>
+
+        {/* Duración */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Duración
+          </label>
+          <input
+            type="text"
+            value={exercise.duration || ''}
+            onChange={(e) => onUpdate({ duration: e.target.value })}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            placeholder="Ej: Mantener 30 segundos"
+          />
+        </div>
+
+        {/* Intensidad */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Intensidad
+          </label>
+          <input
+            type="text"
+            value={exercise.intensity || ''}
+            onChange={(e) => onUpdate({ intensity: e.target.value })}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            placeholder="Ej: Baja-Moderada, sin dolor"
+          />
+        </div>
+
+        {/* Precauciones */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Precauciones
+          </label>
+          {(exercise.precautions?.length || 0) > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {exercise.precautions!.map((precaution, pIdx) => (
+                <span
+                  key={pIdx}
+                  className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40"
+                >
+                  {precaution}
+                  <button
+                    onClick={() => removePrecaution(pIdx)}
+                    className="ml-1 hover:text-amber-200"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex">
+            <input
+              type="text"
+              value={precautionInput}
+              onChange={(e) => setPrecautionInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addPrecaution())}
+              className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-l-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              placeholder="Ej: Evitar si hay dolor agudo"
+            />
+            <button
+              onClick={addPrecaution}
+              className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-r-lg transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

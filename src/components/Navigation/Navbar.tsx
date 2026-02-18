@@ -6,6 +6,7 @@ import {
   ChevronRight, ChevronLeft, Sliders, Shield
 } from 'lucide-react';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { supabase } from '@/lib/supabase';
 import ClinicSwitcher from '@/components/Layout/ClinicSwitcher';
 import NotificationBell from '@/components/NotificationBell';
@@ -27,10 +28,14 @@ interface NavbarProps {
 
 export default function Navbar({ onNewPatientClick }: NavbarProps) {
   const { user, profile, loading, signOut } = useAuth();
+  const { activeClinic, userClinics } = useClinic();
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const currentMembership = activeClinic ? userClinics?.find(m => m.clinic_id === activeClinic.id) : null;
+  const isAssistant = currentMembership?.role === 'administrative_assistant';
 
   // Navigation items based on user role
   const getNavItems = (): NavItem[] => {
@@ -103,8 +108,27 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
       );
     }
 
+    // Items for administrative assistant (reception/coordination)
+    if (isAssistant) {
+      roleSpecificItems.push(
+        {
+          id: 'clinic',
+          label: 'Clínica',
+          icon: Building,
+          href: '/clinic-admin',
+          submenu: [
+            { id: 'clinic-dashboard', label: 'Recepción', icon: Activity, href: '/dashboard' },
+            { id: 'clinic-patients', label: 'Pacientes', icon: Users, href: '/clinic/patients' },
+            { id: 'clinic-schedule', label: 'Agenda', icon: Calendar, href: '/clinic/schedule' },
+            { id: 'clinic-staff', label: 'Personal', icon: Users, href: '/clinic/staff' },
+            { id: 'clinic-settings', label: 'Ajustes', icon: Settings, href: '/clinic/settings' }
+          ]
+        }
+      );
+    }
+
     // Items for health staff
-    if (profile?.role === 'health_staff') {
+    if (profile?.role === 'health_staff' && !isAssistant) {
       roleSpecificItems.push(
         {
           id: 'patients',
@@ -139,10 +163,12 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
           label: 'Clínica',
           icon: Building,
           href: '/clinic-admin',
-          submenu: [
+            submenu: [
+            { id: 'clinic-dashboard', label: 'Panel Admin', icon: Activity, href: '/clinic/dashboard' },
             { id: 'clinic-overview', label: 'Resumen', icon: Activity, href: '/clinic/summary' },
             { id: 'clinic-patients', label: 'Pacientes', icon: Users, href: '/clinic/patients' },
             { id: 'clinic-staff', label: 'Personal', icon: Users, href: '/clinic/staff' },
+            { id: 'clinic-schedule', label: 'Agenda', icon: Calendar, href: '/clinic/schedule' },
             { id: 'clinic-config', label: 'Configuración Clínica', icon: Sliders, href: '/clinic/config' },
             { id: 'clinic-settings', label: 'Ajustes', icon: Settings, href: '/clinic/settings' }
           ]
@@ -248,7 +274,7 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-white truncate">{profile?.full_name || 'Usuario'}</p>
-                <p className="text-sm text-gray-400 truncate">{profile?.role || user?.email}</p>
+                <p className="text-sm text-gray-400 truncate">{isAssistant ? 'Asistente administrativo' : profile?.role || user?.email}</p>
               </div>
             )}
           </Link>

@@ -21,6 +21,9 @@ import { InviteStaffModal } from './clinic-admin/InviteStaffModal';
 
 interface ClinicStaffManagementProps {
   clinicId: string;
+  onMemberClick?: (member: StaffMember) => void;
+  workloadMap?: Record<string, number>;
+  initialStatusFilter?: 'all' | 'pending' | 'approved' | 'rejected';
 }
 
 interface Notification {
@@ -29,7 +32,7 @@ interface Notification {
   id: string;
 }
 
-export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagementProps) {
+export default function ClinicStaffManagement({ clinicId, onMemberClick, workloadMap = {}, initialStatusFilter }: ClinicStaffManagementProps) {
   const [staffOverview, setStaffOverview] = useState<StaffOverview>({
     approvedStaff: [],
     pendingStaff: [],
@@ -37,7 +40,7 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
   });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>(initialStatusFilter || 'all');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -61,6 +64,10 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
   useEffect(() => {
     loadStaff();
   }, [loadStaff]);
+
+  useEffect(() => {
+    if (initialStatusFilter) setStatusFilter(initialStatusFilter);
+  }, [initialStatusFilter]);
 
   // Agregar notificación
   const addNotification = (type: 'success' | 'error' | 'info', message: string) => {
@@ -203,11 +210,18 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
     };
 
     const getRoleLabel = () => {
-      return member.role_in_clinic === 'admin_staff' ? 'Administrador' : 'Doctor';
+      if (member.role_in_clinic === 'admin_staff') return 'Administrador';
+      if (member.role_in_clinic === 'administrative_assistant') return 'Asistente administrativo';
+      return 'Médico';
     };
 
+    const workload = workloadMap[member.id] ?? 0;
     return (
-      <div key={member.id} className={`border-l-4 p-4 rounded-lg ${getStatusColor()}`}>
+      <div
+        key={member.id}
+        className={`border-l-4 p-4 rounded-lg ${getStatusColor()} ${onMemberClick && member.status === 'approved' ? 'cursor-pointer hover:bg-gray-700/30 transition-colors' : ''}`}
+        onClick={() => onMemberClick && member.status === 'approved' && onMemberClick(member)}
+      >
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <div className="flex items-center space-x-3">
@@ -229,6 +243,9 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
                     <span className="text-xs text-gray-500">
                       {new Date(member.created_at).toLocaleDateString()}
                     </span>
+                    {member.status === 'approved' && workload > 0 && (
+                      <span className="text-xs text-cyan-400">· {workload} citas (7d)</span>
+                    )}
                   </div>
               </div>
             </div>
@@ -238,14 +255,14 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
             {member.status === 'pending' && (
               <>
                 <button
-                  onClick={() => handleApprove(member)}
+                  onClick={(e) => { e.stopPropagation(); handleApprove(member); }}
                   className="p-2 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors"
                   title="Aprobar usuario"
                 >
                   <CheckCircle className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => handleReject(member)}
+                  onClick={(e) => { e.stopPropagation(); handleReject(member); }}
                   className="p-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors"
                   title="Rechazar usuario"
                 >
@@ -256,7 +273,7 @@ export default function ClinicStaffManagement({ clinicId }: ClinicStaffManagemen
 
             {member.status === 'pending' && member.permissions_override?.origin === 'invite' && (
               <button
-                onClick={() => handleReject(member)}
+                onClick={(e) => { e.stopPropagation(); handleReject(member); }}
                 className="p-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors"
                 title="Cancelar invitación"
               >

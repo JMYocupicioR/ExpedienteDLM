@@ -65,13 +65,11 @@ export const supabase = createClient<Database>(finalUrl, finalKey, {
   },
   global: {
     fetch: async (url, options = {}) => {
-
       try {
         const response = await fetch(url, options);
 
         return response;
       } catch (error: any) {
-
         throw error;
       }
     },
@@ -125,28 +123,9 @@ export const clearAuthCache = async () => {
   }
 };
 
-// Listener para cambios de estado de autenticación
-supabase.auth.onAuthStateChange((event, session) => {
-  switch (event) {
-    case 'SIGNED_IN':
-      // Sensitive log removed for security;
-      break;
-    case 'SIGNED_OUT':
-      // Sensitive log removed for security;
-      break;
-    case 'TOKEN_REFRESHED':
-      // Sensitive log removed for security;
-      break;
-    case 'USER_UPDATED':
-      // Sensitive log removed for security;
-      break;
-    case 'PASSWORD_RECOVERY':
-      // Sensitive log removed for security;
-      break;
-    default:
-      // Sensitive log removed for security;
-  }
-});
+// NOTE: Global onAuthStateChange listener removed.
+// Auth state is managed exclusively by useAuth hook and App.tsx to avoid
+// duplicate listeners that never get cleaned up and cause cascading re-renders.
 
 // Función para obtener información del usuario actual
 export const getCurrentUser = async () => {

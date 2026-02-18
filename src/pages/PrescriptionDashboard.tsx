@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, FileText, Search, User, Printer, Download, Eye, Clock, AlertTriangle,
   Activity, QrCode, Save, Shield, History, Wifi, WifiOff, CheckCircle, AlertCircle, Loader2,
-  Palette
+  Palette, X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -12,30 +12,24 @@ import { supabase } from '@/lib/supabase';
 import { getOrCreateTemplateForUser, saveTemplateForUser, type PrescriptionTemplateData } from '@/lib/prescriptionTemplates';
 import VisualPrescriptionEditor from '@/components/VisualPrescriptionEditor';
 import VisualPrescriptionRenderer, { renderTemplateElement, TemplateElement } from '@/components/VisualPrescriptionRenderer';
-import { usePrescriptionLayouts } from '@/hooks/usePrescriptionLayouts';
 import PrescriptionPrintService from '@/utils/prescriptionPrint';
+import { usePrescriptions } from '@/features/prescriptions/hooks/usePrescriptions';
 // ===== NUEVAS IMPORTACIONES PARA SISTEMA CENTRALIZADO =====
 import { 
   validateMedication, 
   checkDrugInteractions, 
   calculatePrescriptionExpiry,
-  MEDICATION_CONSTRAINTS,
-  SYSTEM_LIMITS
 } from '@/lib/medicalConfig';
 import { validateJSONBSchema } from '@/lib/validation';
 import { useValidation } from '@/features/medical-records/hooks/useValidation';
-// ===== NUEVAS IMPORTACIONES PARA SISTEMA UNIFICADO =====
-import { useUnifiedPrescriptionSystem } from '@/hooks/useUnifiedPrescriptionSystem';
+import { SYSTEM_LIMITS } from '@/lib/medicalConfig';
 import QuickLayoutSelector from '@/components/QuickLayoutSelector';
 import HorizontalPrescriptionTemplates from '@/components/HorizontalPrescriptionTemplates';
-
-interface Medication {
-  name: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
-  instructions: string;
-}
+import { 
+  PrescriptionForm, 
+  type PrescriptionFormMedication as Medication,
+  type PrescriptionFormPatient as Patient
+} from '@/features/prescriptions/components/PrescriptionForm';
 
 interface Prescription {
   id: string;
@@ -48,22 +42,26 @@ interface Prescription {
   expires_at: string;
   status: 'active' | 'expired' | 'dispensed';
   doctor_signature?: string;
-  visual_layout?: any;
+  visual_layout?: PrescriptionTemplateData;
   patients?: {
     full_name: string;
   };
-}
-
-interface Patient {
-  id: string;
-  full_name: string;
 }
 
 export default function PrescriptionDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'new' | 'visual' | 'history' | 'layouts'>('dashboard');
-  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const {
+    prescriptions: hookPrescriptions,
+    refetchPrescriptions,
+    getDefaultLayout,
+    printSettings,
+    createPrescription: createPrescriptionFromHook,
+    convertHorizontalTemplate,
+    setSelectedLayout,
+  } = usePrescriptions({ autoLoad: true });
+  const prescriptions = hookPrescriptions as Prescription[];
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired' | 'dispensed'>('all');
   const [filterDate, setFilterDate] = useState('');
@@ -77,13 +75,58 @@ export default function PrescriptionDashboard() {
   const [saveMessage, setSaveMessage] = useState('');
   const [prescriptionTemplate, setPrescriptionTemplate] = useState<PrescriptionTemplateData | null>(null);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
+  // Modal state for viewing prescription details
+  const [viewingPrescription, setViewingPrescription] = useState<Prescription | null>(null);
+  // Doctor profile loaded once at dashboard level
+  const [dashboardDoctorProfile, setDashboardDoctorProfile] = useState<{
+    full_name?: string;
+    medical_license?: string;
+    specialty?: string;
+    clinic_name?: string;
+  } | null>(null);
 
-  // New unified system
-  const unifiedSystem = useUnifiedPrescriptionSystem();
-  const { getDefaultLayout, printSettings } = usePrescriptionLayouts();
+  // Load doctor profile once for the whole dashboard
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, specialty, additional_info')
+          .eq('id', user.id)
+          .single();
+        if (profile) {
+          const addInfo = (profile.additional_info || {}) as Record<string, any>;
+          setDashboardDoctorProfile({
+            full_name: profile.full_name || undefined,
+            medical_license: addInfo.medical_license || addInfo.cedula_profesional || undefined,
+            specialty: profile.specialty || addInfo.specialty || undefined,
+            clinic_name: addInfo.clinic_name || undefined,
+          });
+        }
+        // Also try to get clinic name from membership
+        const { data: membership } = await supabase
+          .from('clinic_user_relationships')
+          .select('clinics(name)')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .limit(1)
+          .single();
+        if (membership && (membership as any).clinics?.name) {
+          setDashboardDoctorProfile(prev => ({
+            ...prev,
+            clinic_name: prev?.clinic_name || (membership as any).clinics.name,
+          }));
+        }
+      } catch (_) {
+        // Non-critical
+      }
+    })();
+  }, []);
 
   useEffect(() => {
-    fetchPrescriptions();
+    refetchPrescriptions();
     fetchPatients();
     fetchPrescriptionTemplate();
     
@@ -106,43 +149,6 @@ export default function PrescriptionDashboard() {
       setPatients(data || []);
     } catch (err) {
       // Error log removed for security;
-    }
-  };
-
-  const fetchPrescriptions = async () => {
-    try {
-      setIsLoading(true);
-      
-      const { data, error } = await supabase
-        .from('prescriptions')
-        .select(`
-          id,
-          patient_id,
-          medications,
-          diagnosis,
-          notes,
-          status,
-          created_at,
-          expires_at,
-          visual_layout,
-          patients (
-            full_name
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const formattedPrescriptions = data?.map(p => ({
-        ...p,
-        patient_name: p.patients?.full_name || 'Desconocido'
-      })) || [];
-      
-      setPrescriptions(formattedPrescriptions);
-    } catch (err: any) {
-      setError(err.message || 'Error al cargar las recetas');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -191,7 +197,7 @@ export default function PrescriptionDashboard() {
     }
   };
 
-  const handleSavePrescriptionTemplate = async (styleDefinition: any, newLogoFile?: File) => {
+  const handleSavePrescriptionTemplate = async (styleDefinition: PrescriptionTemplateData, newLogoFile?: File) => {
     try {
       setSaveStatus('saving');
       setSaveMessage('Guardando plantilla...');
@@ -216,7 +222,7 @@ export default function PrescriptionDashboard() {
         logoUrlToSave = urlData.publicUrl;
       }
 
-      const normalized = await saveTemplateForUser(user.id, { ...(styleDefinition as any), logo_url: logoUrlToSave });
+      const normalized = await saveTemplateForUser(user.id, styleDefinition);
       setPrescriptionTemplate(normalized);
       setSaveStatus('success');
       setSaveMessage('Plantilla guardada exitosamente.');
@@ -228,10 +234,17 @@ export default function PrescriptionDashboard() {
     }
   };
 
-  // ===== NUEVA VALIDACIÓN ROBUSTA USANDO SISTEMA CENTRALIZADO =====
+  // ===== NUEVA VALIDACIÃ“N ROBUSTA USANDO SISTEMA CENTRALIZADO =====
   const { validateCompleteForm, validateMedicationsField } = useValidation();
 
-  const validatePrescriptionRobust = (prescriptionData: any) => {
+  const validatePrescriptionRobust = (prescriptionData: {
+    patient_id: string;
+    medications: Medication[];
+    diagnosis: string;
+    notes?: string;
+    created_at: string;
+    expires_at: string;
+  }) => {
     // Usar el sistema de validación centralizado
     const validation = validateCompleteForm(prescriptionData, 'prescription', {
       patientAllergies: [], // Se pasaría desde props o estado
@@ -295,81 +308,50 @@ export default function PrescriptionDashboard() {
     return user.id; // Return user_id to be used as doctor_id
   };
 
-  const handleNewPrescription = async (prescriptionData: any) => {
+  const handleNewPrescription = async (prescriptionData: {
+    patient_id: string;
+    medications: Medication[];
+    diagnosis: string;
+    notes?: string;
+    created_at: string;
+    expires_at: string;
+  }) => {
     setSaveStatus('saving');
     setSaveMessage('Guardando receta...');
     setError(null);
 
     try {
       setIsLoading(true);
-      
-      const doctorId = await checkPermissions();
-      validatePrescriptionRobust(prescriptionData); // Usar nueva validación
+      await checkPermissions();
+      validatePrescriptionRobust(prescriptionData);
 
-      // Verificar que el paciente existe
       const { data: patient, error: patientError } = await supabase
         .from('patients')
         .select('id')
         .eq('id', prescriptionData.patient_id)
         .single();
-        
       if (patientError || !patient) {
-        // Error log removed for security;
         throw new Error('Paciente no encontrado o error al verificar paciente.');
       }
-      
-      // Obtener snapshot del layout visual actual del médico
-      let visualLayoutToSave: any = null;
-      {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: tpl } = await supabase
-            .from('prescription_templates')
-            .select('style_definition')
-            .eq('user_id', user.id)
-            .single();
-          if (tpl?.style_definition) {
-            visualLayoutToSave = tpl.style_definition;
-          }
-        }
-      }
 
-      const { data, error: insertError } = await supabase
-        .from('prescriptions')
-        .insert({
-          ...prescriptionData,
-          doctor_id: doctorId, 
-          status: 'active',
-          visual_layout: visualLayoutToSave || null
-        })
-        .select();
+      const defaultLayout = getDefaultLayout();
+      const consultationId = searchParams.get('consulta') ?? undefined;
 
-      if (insertError) throw insertError;
+      await createPrescriptionFromHook({
+        patient_id: prescriptionData.patient_id,
+        medications: prescriptionData.medications,
+        diagnosis: prescriptionData.diagnosis,
+        notes: prescriptionData.notes ?? undefined,
+        status: 'active',
+        layout_id: defaultLayout?.id,
+        consultation_id: consultationId,
+      });
 
-      // Si hay consulta activa, asociar la receta
-      const consultationId = searchParams.get('consulta');
-      if (consultationId && data?.[0]?.id) {
-        const { error: consultationPrescriptionError } = await supabase
-          .from('consultation_prescriptions')
-          .insert({
-            consultation_id: consultationId,
-            prescription_id: data[0].id
-          });
-        if (consultationPrescriptionError) {
-          // Error log removed for security;
-          // Decide if this should be a critical error or just a warning
-          setSaveMessage('Receta creada, pero hubo un problema al asociarla con la consulta.');
-        }
-      }
-
-      await fetchPrescriptions();
+      await refetchPrescriptions();
       setActiveTab('dashboard');
-      
       setSaveStatus('success');
       setSaveMessage('Receta creada exitosamente');
-      // alert('Receta creada exitosamente'); // Replaced with saveMessage
     } catch (err: any) {
-      // Error log removed for security;
       setError(err.message || 'Error al crear la receta');
       setSaveStatus('error');
       setSaveMessage(err.message || 'Error al crear la receta');
@@ -379,26 +361,7 @@ export default function PrescriptionDashboard() {
   };
 
   const handleViewPrescription = (prescription: Prescription) => {
-    // Por ahora, mostrar los detalles en un alert
-    // En el futuro, implementar un modal
-    const details = `
-    Paciente: ${prescription.patient_name}
-    Diagnóstico: ${prescription.diagnosis}
-    
-    Medicamentos:
-    ${prescription.medications.map(m => 
-      `- ${m.name} ${m.dosage}
-      Frecuencia: ${m.frequency} por ${m.duration}
-      ${m.instructions ? `Instrucciones: ${m.instructions}` : ''}`
-    ).join('\n')}
-    
-    ${prescription.notes ? `Notas: ${prescription.notes}` : ''}
-    
-    Fecha: ${format(new Date(prescription.created_at), 'dd/MM/yyyy HH:mm')}
-    Estado: ${prescription.status}
-    `;
-    
-    alert(details);
+    setViewingPrescription(prescription);
   };
 
   const handlePrintPrescription = async (prescription: Prescription) => {
@@ -406,11 +369,11 @@ export default function PrescriptionDashboard() {
       // Get user's layout preference
       let layout = getDefaultLayout();
 
-      // Use visual layout from prescription if exists
       if (prescription.visual_layout) {
+        const visualLayout = prescription.visual_layout;
         layout = {
-          template_elements: prescription.visual_layout.template_elements || [],
-          canvas_settings: prescription.visual_layout.canvas_settings || {
+          template_elements: visualLayout.template_elements || [],
+          canvas_settings: visualLayout.canvas_settings || {
             backgroundColor: '#ffffff',
             backgroundImage: null,
             canvasSize: { width: 794, height: 1123 },
@@ -441,9 +404,9 @@ export default function PrescriptionDashboard() {
       // Prepare prescription data
       const prescriptionData = {
         patientName: prescription.patient_name || prescription.patients?.full_name,
-        doctorName: 'Dr. Nombre Apellido', // This should come from user profile
-        doctorLicense: '12345678', // This should come from user profile
-        clinicName: 'Clínica Médica', // This should come from user profile
+        doctorName: dashboardDoctorProfile?.full_name || 'Dr.',
+        doctorLicense: dashboardDoctorProfile?.medical_license || '',
+        clinicName: dashboardDoctorProfile?.clinic_name || '',
         diagnosis: prescription.diagnosis,
         medications: prescription.medications,
         notes: prescription.notes,
@@ -488,16 +451,15 @@ export default function PrescriptionDashboard() {
       notas: prescription.notes,
       estado: prescription.status,
       medico: {
-        nombre: 'Dr. Juan Médico',
-        cedula: '12345678',
-        especialidad: 'Medicina General'
+        nombre: dashboardDoctorProfile?.full_name || 'Dr.',
+        cedula: dashboardDoctorProfile?.medical_license || '',
+        especialidad: dashboardDoctorProfile?.specialty || ''
       }
     };
     
     const dataStr = JSON.stringify(prescriptionData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `receta_${prescription.patient_name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.json`;
+    const exportFileDefaultName = `receta_${prescription.patient_name?.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.json`;
     
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
@@ -519,7 +481,7 @@ export default function PrescriptionDashboard() {
     return matchesSearch && matchesStatus && matchesDate;
   });
 
-  // Calcular estadísticas
+  // Calcular estadÃ­sticas
   const stats = {
     active: prescriptions.filter(p => p.status === 'active').length,
     expired: prescriptions.filter(p => p.status === 'expired').length,
@@ -635,7 +597,7 @@ export default function PrescriptionDashboard() {
               onClick={() => setError(null)}
               className="ml-auto text-red-400 hover:text-red-300"
             >
-              ×
+              Ã—
             </button>
           </div>
         )}
@@ -650,7 +612,7 @@ export default function PrescriptionDashboard() {
         {/* Panel Principal */}
         {activeTab === 'dashboard' && !isLoading && (
           <div className="space-y-6">
-            {/* Estadísticas */}
+            {/* EstadÃ­sticas */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="dark-card p-5">
                 <div className="flex items-center">
@@ -709,7 +671,7 @@ export default function PrescriptionDashboard() {
                       Recetas por Vencer
                     </h3>
                     <p className="mt-1 text-sm text-yellow-200">
-                      Tienes {stats.expiringSoon} receta(s) que vencerán en los próximos 7 días.
+                      Tienes {stats.expiringSoon} receta(s) que vencerÃ¡n en los prÃ³ximos 7 dÃ­as.
                     </p>
                   </div>
                 </div>
@@ -721,7 +683,7 @@ export default function PrescriptionDashboard() {
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-100">
-                    Últimas Recetas Emitidas
+                    Ãšltimas Recetas Emitidas
                   </h3>
                   <button
                     onClick={() => setActiveTab('new')}
@@ -735,7 +697,7 @@ export default function PrescriptionDashboard() {
                 {prescriptions.length === 0 ? (
                   <div className="text-center py-8">
                     <FileText className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                    <p className="text-gray-400">No hay recetas registradas aún</p>
+                    <p className="text-gray-400">No hay recetas registradas aÃºn</p>
                     <button
                       onClick={() => setActiveTab('new')}
                       className="mt-3 text-cyan-400 hover:text-cyan-300"
@@ -752,7 +714,7 @@ export default function PrescriptionDashboard() {
                             Paciente
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                            Diagnóstico
+                            DiagnÃ³stico
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
                             Medicamentos
@@ -834,7 +796,7 @@ export default function PrescriptionDashboard() {
 
         {/* Nueva Receta */}
         {activeTab === 'new' && (
-          <EnhancedPrescriptionForm
+          <PrescriptionForm
             patientId={selectedPatientId}
             patientName={selectedPatientName}
             onSave={handleNewPrescription}
@@ -845,6 +807,7 @@ export default function PrescriptionDashboard() {
             saveMessage={saveMessage}
             visualTemplate={prescriptionTemplate}
             onOpenVisualEditor={() => setActiveTab('visual')}
+            doctorProfileFallback={dashboardDoctorProfile}
           />
         )}
 
@@ -878,11 +841,9 @@ export default function PrescriptionDashboard() {
                 <QuickLayoutSelector
                   onLayoutSelect={(option, template) => {
                     if (template) {
-                      // Convert horizontal template to unified layout
-                      const unifiedLayout = unifiedSystem.convertHorizontalTemplate(template);
-                      unifiedSystem.setSelectedLayout(unifiedLayout);
+                      const unifiedLayout = convertHorizontalTemplate(template);
+                      setSelectedLayout(unifiedLayout);
                     }
-                    // Switch to editor or new prescription tab
                     setActiveTab('new');
                   }}
                   onOpenAdvancedEditor={() => setActiveTab('visual')}
@@ -895,8 +856,8 @@ export default function PrescriptionDashboard() {
               <div className="px-4 py-5 sm:p-6">
                 <HorizontalPrescriptionTemplates
                   onTemplateSelect={(template) => {
-                    const unifiedLayout = unifiedSystem.convertHorizontalTemplate(template);
-                    unifiedSystem.setSelectedLayout(unifiedLayout);
+                    const unifiedLayout = convertHorizontalTemplate(template);
+                    setSelectedLayout(unifiedLayout);
                     setActiveTab('new');
                   }}
                   showPreview={true}
@@ -966,13 +927,13 @@ export default function PrescriptionDashboard() {
                           Paciente
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                          Diagnóstico
+                          DiagnÃ³stico
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
                           Medicamentos
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                          Fecha Emisión
+                          Fecha EmisiÃ³n
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
                           Vencimiento
@@ -1057,1003 +1018,89 @@ export default function PrescriptionDashboard() {
 
         
       </div>
-    </div>
-  );
-}
 
-// Componente del formulario mejorado
-interface EnhancedPrescriptionFormProps {
-  patientId: string;
-  patientName: string;
-  onSave: (prescription: any) => void;
-  previousPrescriptions?: any[];
-  patients?: Patient[];
-  onPatientChange?: (patientId: string) => void;
-  saveStatus?: 'idle' | 'saving' | 'success' | 'error';
-  saveMessage?: string;
-  visualTemplate?: PrescriptionTemplateData | null;
-  onOpenVisualEditor?: () => void;
-}
-
-// ===== MEDICAMENTOS COMUNES USANDO CONFIGURACIÓN CENTRALIZADA =====
-const commonMedications = Object.keys(MEDICATION_CONSTRAINTS).map(name => {
-  const constraint = MEDICATION_CONSTRAINTS[name];
-  return {
-    name: name.charAt(0).toUpperCase() + name.slice(1),
-    dosages: [`${constraint.minDosage}mg`, `${constraint.maxDosage}mg`],
-    frequencies: constraint.allowedFrequencies.map(freq => 
-      freq.charAt(0).toUpperCase() + freq.slice(1)
-    ),
-    maxDuration: constraint.maxDurationDays,
-    controlled: constraint.controlledSubstance || false,
-    requiresSpecialist: constraint.requiresSpecialist || false,
-    // Información adicional para autocompletado inteligente
-    category: name.includes('amoxicilina') || name.includes('ciprofloxacino') ? 'antibiótico' :
-             name.includes('ibuprofeno') || name.includes('paracetamol') ? 'analgésico' :
-             name.includes('losartan') || name.includes('atorvastatina') ? 'cardiovascular' :
-             name.includes('tramadol') ? 'controlado' : 'general'
-  };
-});
-
-// Verificador de interacciones medicamentosas (simulado)
-const drugInteractions: { [key: string]: string[] } = {
-  'Warfarina': ['Aspirina', 'Ibuprofeno', 'Amoxicilina'],
-  'Metformina': ['Alcohol', 'Contrastes yodados'],
-  'Losartán': ['Potasio', 'Espironolactona'],
-  'Atorvastatina': ['Gemfibrozilo', 'Eritromicina']
-};
-
-function EnhancedPrescriptionForm({ 
-  patientId, 
-  patientName, 
-  onSave,
-  previousPrescriptions = [],
-  patients = [],
-  onPatientChange,
-  saveStatus = 'idle',
-  saveMessage = '',
-  visualTemplate = null,
-  onOpenVisualEditor
-}: EnhancedPrescriptionFormProps) {
-  const navigate = useNavigate();
-  const [medications, setMedications] = useState<Medication[]>([{
-    name: '',
-    dosage: '',
-    frequency: '',
-    duration: '',
-    instructions: ''
-  }]);
-  const [diagnosis, setDiagnosis] = useState('');
-  const [notes, setNotes] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
-  const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const [signatureData, setSignatureData] = useState<string | null>(null);
-  const [drugAlerts, setDrugAlerts] = useState<string[]>([]);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [doctorProfile, setDoctorProfile] = useState<{ full_name?: string; medical_license?: string; specialty?: string; clinic?: { name?: string; address?: string; phone?: string; email?: string } } | null>(null);
-  const [medicationTemplates, setMedicationTemplates] = useState<any[]>([]);
-  const [formTopErrors, setFormTopErrors] = useState<string[]>([]);
-  const [draftRecovered, setDraftRecovered] = useState(false);
-  const [draftSaving, setDraftSaving] = useState(false);
-
-  // Detectar estado de conexión
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // Cargar perfil de médico y plantillas de medicamentos
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, medical_license, specialty, clinic_info')
-            .eq('id', user.id)
-            .single();
-          if (profile) {
-            setDoctorProfile({
-              full_name: profile.full_name,
-              medical_license: profile.medical_license,
-              specialty: profile.specialty,
-              clinic: profile.clinic_info || {}
-            });
-          }
-
-          const { data: tpl } = await supabase
-            .from('medication_templates')
-            .select('id, name, medications, diagnosis, notes, usage_count')
-            .or(`doctor_id.eq.${user.id},is_public.eq.true`)
-            .order('usage_count', { ascending: false });
-          setMedicationTemplates(tpl || []);
-        }
-      } catch (e) {
-        // no-op
-      }
-    })();
-  }, []);
-
-  // Resumen de errores superior
-  useEffect(() => {
-    const errs: string[] = [];
-    if (!patientId) errs.push('Seleccione un paciente');
-    if (!diagnosis) errs.push('Ingrese un diagnóstico');
-    if (medications.filter(m => m.name).length === 0) errs.push('Agregue al menos un medicamento');
-    setFormTopErrors(errs);
-  }, [patientId, diagnosis, medications]);
-
-  // Autosave de borrador por paciente (diagnóstico/meds/notas)
-  useEffect(() => {
-    const loadDraft = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const key = `rx_draft_${user?.id || 'anon'}_${patientId || 'none'}`;
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const draft = JSON.parse(raw);
-          if (draft?.diagnosis) setDiagnosis(draft.diagnosis);
-          if (Array.isArray(draft?.medications)) setMedications(draft.medications);
-          if (typeof draft?.notes === 'string') setNotes(draft.notes);
-          setDraftRecovered(true);
-        } else {
-          setDraftRecovered(false);
-        }
-      } catch (_) {}
-    };
-    loadDraft();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId]);
-
-  useEffect(() => {
-    const handler = setTimeout(async () => {
-      try {
-        setDraftSaving(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        const key = `rx_draft_${user?.id || 'anon'}_${patientId || 'none'}`;
-        const payload = {
-          diagnosis,
-          medications,
-          notes,
-          updated_at: Date.now()
-        };
-        localStorage.setItem(key, JSON.stringify(payload));
-      } finally {
-        setDraftSaving(false);
-      }
-    }, 600);
-    return () => clearTimeout(handler);
-  }, [patientId, diagnosis, medications, notes]);
-
-  const clearDraft = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const key = `rx_draft_${user?.id || 'anon'}_${patientId || 'none'}`;
-      localStorage.removeItem(key);
-      setDraftRecovered(false);
-    } catch (_) {}
-  };
-
-  // Generar código QR
-  useEffect(() => {
-    const generateQR = async () => {
-      const prescriptionData = {
-        id: Date.now().toString(),
-        patient: patientName,
-        date: new Date().toISOString(),
-        medications: medications.filter(m => m.name),
-        doctor: 'Dr. Juan Médico'
-      };
-
-      try {
-        const url = await QRCode.toDataURL(JSON.stringify(prescriptionData), {
-          width: 150,
-          margin: 1
-        });
-        setQrCodeUrl(url);
-      } catch (err) {
-        // Error log removed for security;
-      }
-    };
-
-    if (medications.some(m => m.name)) {
-      generateQR();
-    }
-  }, [medications, patientName]);
-
-  // ===== VERIFICACIÓN DE INTERACCIONES USANDO SISTEMA CENTRALIZADO =====
-  useEffect(() => {
-    const alerts: string[] = [];
-    
-    // Obtener nombres de medicamentos válidos
-    const medicationNames = medications
-      .filter(med => med.name && med.name.trim())
-      .map(med => med.name.trim());
-    
-    if (medicationNames.length >= 2) {
-      // Usar función centralizada de verificación de interacciones
-      const interactions = checkDrugInteractions(medicationNames);
-      interactions.forEach(interaction => {
-        alerts.push(`⚠️ ${interaction}`);
-      });
-    }
-
-    // Validaciones adicionales de medicamentos individuales
-    medications.forEach((med, index) => {
-      if (!med.name || !med.dosage || !med.frequency || !med.duration) return;
-
-      // Extraer dosificación numérica para validación
-      const dosageMatch = med.dosage.match(/(\d+(?:\.\d+)?)/);
-      const dosageNum = dosageMatch ? parseFloat(dosageMatch[1]) : 0;
-      
-      // Extraer duración numérica
-      const durationMatch = med.duration.match(/(\d+)/);
-      const durationNum = durationMatch ? parseInt(durationMatch[1]) : 0;
-
-      // Validar medicamento usando configuración centralizada
-      const validation = validateMedication(med.name.toLowerCase(), dosageNum, med.frequency.toLowerCase(), durationNum);
-      
-      if (!validation.isValid) {
-        validation.errors.forEach(error => {
-          alerts.push(`❌ ${med.name}: ${error}`);
-        });
-      }
-
-      validation.warnings.forEach(warning => {
-        alerts.push(`⚠️ ${med.name}: ${warning}`);
-      });
-    });
-
-    // Verificar límite máximo de medicamentos
-    if (medications.filter(m => m.name).length > SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION) {
-      alerts.push(`❌ Excede el límite máximo de ${SYSTEM_LIMITS.MAX_MEDICATIONS_PER_PRESCRIPTION} medicamentos por receta`);
-    }
-    
-    setDrugAlerts(Array.from(new Set(alerts)));
-  }, [medications]);
-
-  // Autocompletado de medicamentos
-  const handleMedicationNameChange = (index: number, value: string) => {
-    const updatedMeds = [...medications];
-    updatedMeds[index].name = value;
-    setMedications(updatedMeds);
-
-    if (value.length > 2) {
-      const filtered = commonMedications.filter(med => 
-        med.name.toLowerCase().includes(value.toLowerCase())
-      );
-      setSuggestions(filtered);
-      setActiveSuggestionIndex(index);
-    } else {
-      setSuggestions([]);
-      setActiveSuggestionIndex(-1);
-    }
-  };
-
-  // Seleccionar sugerencia
-  const selectSuggestion = (suggestion: any, index: number) => {
-    const updatedMeds = [...medications];
-    updatedMeds[index].name = suggestion.name;
-    if (suggestion.dosages.length > 0) {
-      updatedMeds[index].dosage = suggestion.dosages[0];
-    }
-    if (suggestion.frequencies.length > 0) {
-      updatedMeds[index].frequency = suggestion.frequencies[0];
-    }
-    setMedications(updatedMeds);
-    setSuggestions([]);
-    setActiveSuggestionIndex(-1);
-  };
-
-  // Agregar medicamento
-  const addMedication = () => {
-    setMedications([...medications, {
-      name: '',
-      dosage: '',
-      frequency: '',
-      duration: '',
-      instructions: ''
-    }]);
-  };
-
-  // Eliminar medicamento
-  const removeMedication = (index: number) => {
-    setMedications(medications.filter((_, i) => i !== index));
-  };
-
-  // Actualizar medicamento
-  const updateMedication = (index: number, field: keyof Medication, value: string) => {
-    const updatedMeds = [...medications];
-    updatedMeds[index][field] = value;
-    setMedications(updatedMeds);
-  };
-
-  // Firma digital - Iniciar dibujo
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true);
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-  };
-
-  // Firma digital - Dibujar
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.stroke();
-  };
-
-  // Firma digital - Terminar dibujo
-  const stopDrawing = () => {
-    setIsDrawing(false);
-    const canvas = canvasRef.current;
-    if (canvas) {
-      setSignatureData(canvas.toDataURL());
-    }
-  };
-
-  // Limpiar firma
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setSignatureData(null);
-  };
-
-  // Guardar receta
-  const handleSave = () => {
-    const prescriptionData = {
-      patient_id: patientId,
-      medications: medications.filter(m => m.name),
-      diagnosis,
-      notes,
-      created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-    };
-
-    // Si está offline, guardar en localStorage
-    if (isOffline) {
-      const offlinePrescriptions = JSON.parse(localStorage.getItem('offline_prescriptions') || '[]');
-      offlinePrescriptions.push(prescriptionData);
-      localStorage.setItem('offline_prescriptions', JSON.stringify(offlinePrescriptions));
-    }
-
-    onSave(prescriptionData);
-  };
-
-  // Imprimir receta
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handlePrintPreview = (prescription: Prescription) => {
-    // This function could open a print preview modal
-    // For now, it just calls the regular print function
-    handlePrintPrescription(prescription);
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Indicador de estado offline */}
-      {isOffline && (
-        <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-3 flex items-center">
-          <WifiOff className="h-5 w-5 text-yellow-400 mr-2" />
-          <span className="text-yellow-300 text-sm">Modo offline: Las recetas se guardarán localmente</span>
-        </div>
-      )}
-
-      {/* Save status message */}
-      {saveMessage && (
-        <div 
-          className={`p-3 rounded-md text-sm 
-            ${saveStatus === 'success' ? 'bg-green-900/30 border border-green-500 text-green-300' : ''}
-            ${saveStatus === 'error' ? 'bg-red-900/30 border border-red-500 text-red-300' : ''}
-            ${saveStatus === 'saving' ? 'bg-blue-900/30 border border-blue-500 text-blue-300' : ''}
-          `}
-        >
-          {saveMessage}
-        </div>
-      )}
-
-      {/* Resumen de errores */}
-      {formTopErrors.length > 0 && (
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-3 text-sm text-red-300 mb-2">
-          <ul className="list-disc pl-5 space-y-1">
-            {formTopErrors.map((err, idx) => (
-              <li key={idx}>{err}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Aviso de borrador recuperado / guardando */}
-      {(draftRecovered || draftSaving) && (
-        <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-2 text-xs text-yellow-200 mb-2 flex items-center justify-between">
-          <span>{draftRecovered ? 'Borrador recuperado automáticamente.' : 'Guardando borrador...'}</span>
-          <button onClick={clearDraft} className="text-yellow-300 hover:text-yellow-100">Limpiar</button>
-        </div>
-      )}
-
-      {/* Selector de paciente */}
-      <div className="dark-card p-4">
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Paciente <span className="text-red-400">*</span>
-        </label>
-        <div className="flex gap-3">
-          <select
-            value={patientId}
-            onChange={(e) => onPatientChange && onPatientChange(e.target.value)}
-            className="flex-1 dark-input"
-            required
-          >
-            <option value="">Seleccione un paciente</option>
-            {patients.map((patient) => (
-              <option key={patient.id} value={patient.id}>
-                {patient.full_name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => navigate('/patients?action=new')}
-            className="px-4 py-2 dark-button-secondary text-sm"
-            title="Registrar nuevo paciente"
-          >
-            + Nuevo
-          </button>
-        </div>
-        {!patientId && (
-          <p className="mt-1 text-xs text-yellow-400">Debe seleccionar un paciente para continuar</p>
-        )}
-      </div>
-
-      {/* Alertas de interacciones medicamentosas */}
-      {drugAlerts.length > 0 && (
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
-          <div className="flex items-start">
-            <AlertCircle className="h-5 w-5 text-red-400 mt-0.5 mr-2" />
-            <div>
-              <h4 className="text-red-300 font-medium mb-2">Alertas de Interacciones</h4>
-              <ul className="text-red-200 text-sm space-y-1">
-                {drugAlerts.map((alert, index) => (
-                  <li key={index}>{alert}</li>
-                ))}
-              </ul>
+      {/* Modal de detalle de prescripciÃ³n */}
+      {viewingPrescription && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewingPrescription(null)}>
+          <div className="bg-gray-800 rounded-xl border border-gray-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-gray-700">
+              <h2 className="text-xl font-bold text-gray-100">Detalle de Receta</h2>
+              <button onClick={() => setViewingPrescription(null)} className="text-gray-400 hover:text-gray-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Historial de recetas anteriores */}
-      {previousPrescriptions.length > 0 && (
-        <div className="dark-card p-4">
-          <div className="flex items-center mb-3">
-            <History className="h-5 w-5 text-cyan-400 mr-2" />
-            <h3 className="text-gray-100 font-medium">Recetas Anteriores del Paciente</h3>
-          </div>
-          <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
-            {previousPrescriptions.slice(0, 3).map((rx, index) => (
-              <div key={index} className="text-sm text-gray-300 bg-gray-800/30 p-2 rounded">
-                <span className="text-gray-400">{format(new Date(rx.created_at), 'dd/MM/yyyy')}</span>
-                <span className="mx-2">•</span>
-                <span>{rx.diagnosis}</span>
-                <button 
-                  className="ml-2 text-cyan-400 hover:text-cyan-300"
-                  onClick={() => {
-                    setDiagnosis(rx.diagnosis);
-                    setNotes(rx.notes);
-                    setMedications(rx.medications);
-                  }}
-                >
-                  Usar como base
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Formulario principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Columna izquierda - Formulario */}
-        <div className="space-y-4">
-          {/* Plantillas de medicamentos */}
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium text-gray-300">Plantillas de medicamentos</label>
-            <div className="flex gap-2">
-              <select
-                className="dark-input"
-                defaultValue=""
-                onChange={(e) => {
-                  const id = e.target.value;
-                  if (!id) return;
-                  const tpl = medicationTemplates.find(t => t.id === id);
-                  if (tpl) {
-                    if (Array.isArray(tpl.medications)) setMedications(tpl.medications);
-                    if (tpl.diagnosis) setDiagnosis(tpl.diagnosis);
-                    if (tpl.notes) setNotes(tpl.notes);
-                  }
-                  e.currentTarget.value = '';
-                }}
-              >
-                <option value="">Usar plantilla…</option>
-                {medicationTemplates.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-              {previousPrescriptions.length > 0 && (
-                <button
-                  type="button"
-                  className="px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
-                  title="Duplicar última receta"
-                  onClick={() => {
-                    const last = previousPrescriptions[0];
-                    if (!last) return;
-                    if (Array.isArray(last.medications)) setMedications(last.medications);
-                    if (last.diagnosis) setDiagnosis(last.diagnosis);
-                    if (last.notes) setNotes(last.notes);
-                  }}
-                >
-                  Duplicar última
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Diagnóstico */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Diagnóstico <span className="text-red-400">*</span></label>
-            <input
-              type="text"
-              value={diagnosis}
-              onChange={(e) => setDiagnosis(e.target.value)}
-              className="w-full dark-input"
-              placeholder="Ingrese el diagnóstico"
-              required
-            />
-          </div>
-
-          {/* Medicamentos */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-3">Medicamentos <span className="text-red-400">*</span></label>
-            {medications.map((medication, index) => (
-              <div key={index} className="relative mb-4 p-4 border border-gray-700 rounded-lg bg-gray-800/30">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={medication.name}
-                      onChange={(e) => handleMedicationNameChange(index, e.target.value)}
-                      className="w-full dark-input"
-                      placeholder="Nombre del medicamento"
-                      required
-                    />
-                    {/* Sugerencias de autocompletado */}
-                    {suggestions.length > 0 && activeSuggestionIndex === index && (
-                      <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                        {suggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => selectSuggestion(suggestion, index)}
-                            className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-cyan-400"
-                          >
-                            {suggestion.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <input
-                    type="text"
-                    value={medication.dosage}
-                    onChange={(e) => updateMedication(index, 'dosage', e.target.value)}
-                    className="w-full dark-input"
-                    placeholder="Dosis (ej. 500mg)"
-                    required
-                  />
-                  
-                  <input
-                    type="text"
-                    value={medication.frequency}
-                    onChange={(e) => updateMedication(index, 'frequency', e.target.value)}
-                    className="w-full dark-input"
-                    placeholder="Frecuencia"
-                    required
-                  />
-                  
-                  <input
-                    type="text"
-                    value={medication.duration}
-                    onChange={(e) => updateMedication(index, 'duration', e.target.value)}
-                    className="w-full dark-input"
-                    placeholder="Duración"
-                    required
-                  />
-                  
-                  <div className="md:col-span-2">
-                    <input
-                      type="text"
-                      value={medication.instructions}
-                      onChange={(e) => updateMedication(index, 'instructions', e.target.value)}
-                      className="w-full dark-input"
-                      placeholder="Instrucciones especiales"
-                    />
-                  </div>
+            <div className="p-6 space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm text-gray-400">Paciente</p>
+                  <p className="text-lg text-gray-100 font-medium">{viewingPrescription.patient_name || viewingPrescription.patients?.full_name || 'Sin nombre'}</p>
                 </div>
-                
-                {medications.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeMedication(index)}
-                    className="absolute top-2 right-2 text-red-400 hover:text-red-300"
-                  >
-                    ×
-                  </button>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  viewingPrescription.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' :
+                  viewingPrescription.status === 'cancelled' ? 'bg-red-500/20 text-red-400' :
+                  'bg-gray-500/20 text-gray-400'
+                }`}>
+                  {viewingPrescription.status === 'active' ? 'Activa' : viewingPrescription.status === 'cancelled' ? 'Cancelada' : viewingPrescription.status}
+                </span>
+              </div>
+
+              {viewingPrescription.diagnosis && (
+                <div>
+                  <p className="text-sm text-gray-400">DiagnÃ³stico</p>
+                  <p className="text-gray-200">{viewingPrescription.diagnosis}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-sm text-gray-400 mb-2">Medicamentos</p>
+                <div className="space-y-3">
+                  {(viewingPrescription.medications || []).map((med: any, idx: number) => (
+                    <div key={idx} className="bg-gray-900/50 rounded-lg p-3 border border-gray-700/50">
+                      <p className="text-gray-100 font-medium">{med.name} <span className="text-cyan-400">{med.dosage}</span></p>
+                      <p className="text-sm text-gray-400">
+                        {med.frequency} {med.duration ? `por ${med.duration}` : ''}
+                      </p>
+                      {med.instructions && (
+                        <p className="text-sm text-gray-500 mt-1">ðŸ“‹ {med.instructions}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {viewingPrescription.notes && (
+                <div>
+                  <p className="text-sm text-gray-400">Notas</p>
+                  <p className="text-gray-300">{viewingPrescription.notes}</p>
+                </div>
+              )}
+
+              <div className="flex justify-between text-sm text-gray-400 pt-2 border-t border-gray-700">
+                <span>Creada: {format(new Date(viewingPrescription.created_at), 'dd/MM/yyyy HH:mm', { locale: es })}</span>
+                {viewingPrescription.expires_at && (
+                  <span>Vence: {format(new Date(viewingPrescription.expires_at), 'dd/MM/yyyy')}</span>
                 )}
               </div>
-            ))}
-            
-            <button
-              type="button"
-              onClick={addMedication}
-              className="w-full py-2 border-2 border-dashed border-gray-600 text-gray-400 hover:border-cyan-400 hover:text-cyan-400 rounded-lg transition-colors"
-            >
-              + Agregar otro medicamento
-            </button>
-          </div>
-
-          {/* Notas */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Notas adicionales</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="w-full dark-input"
-              placeholder="Recomendaciones adicionales"
-            />
-          </div>
-
-          {/* Firma digital */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Firma Digital</label>
-            <div className="border border-gray-700 rounded-lg p-2 bg-gray-800/30">
-              <canvas
-                ref={canvasRef}
-                width={300}
-                height={100}
-                className="w-full bg-gray-900 rounded cursor-crosshair"
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
-              />
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-700">
               <button
-                type="button"
-                onClick={clearSignature}
-                className="mt-2 text-sm text-gray-400 hover:text-gray-300"
+                onClick={() => { handlePrintPrescription(viewingPrescription); setViewingPrescription(null); }}
+                className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
               >
-                Limpiar firma
+                <Printer className="w-4 h-4" />
+                Imprimir
+              </button>
+              <button
+                onClick={() => setViewingPrescription(null)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
+              >
+                Cerrar
               </button>
             </div>
           </div>
         </div>
-
-      {/* Columna derecha - Vista previa visual + controles */}
-      <div className="lg:sticky lg:top-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-gray-200 font-medium">Vista previa</h3>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPreview(!showPreview)}
-                className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
-                title="Alternar vista previa"
-              >
-                {showPreview ? 'Ocultar' : 'Mostrar'}
-              </button>
-              <button
-                type="button"
-                onClick={onOpenVisualEditor}
-                className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
-                title="Editar plantilla visual"
-              >
-                Editor Visual
-              </button>
-              {visualTemplate?.template_elements?.length ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    // Imprimir vista previa usando el layout visual
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) return;
-                    const layout: any = visualTemplate;
-                    const canvasSettings = layout.canvas_settings || {};
-                    const elementsSource = layout.template_elements || [];
-                    const rawPaper = (layout.print_settings?.paperSize || layout.paperSize || 'a4').toString().toLowerCase();
-                    const orientation = (layout.print_settings?.orientation || layout.orientation || 'portrait').toString().toLowerCase();
-                    const margins = layout.print_settings?.margins || layout.margins || 'normal';
-                    const pageSize = rawPaper === 'a4' ? 'A4' : rawPaper === 'legal' ? 'Legal' : 'Letter';
-                    const marginStr = typeof margins === 'string'
-                      ? (margins === 'narrow' ? '0.5in' : margins === 'wide' ? '1.5in' : '1in')
-                      : `${margins.top} ${margins.right} ${margins.bottom} ${margins.left}`;
-
-                    const container = document.createElement('div');
-                    container.style.position = 'relative';
-                    container.style.width = (canvasSettings?.canvasSize?.width || 794) + 'px';
-                    container.style.height = (canvasSettings?.canvasSize?.height || 1123) + 'px';
-                    container.style.background = canvasSettings?.backgroundColor || '#fff';
-                    if (canvasSettings?.backgroundImage) {
-                      container.style.backgroundImage = `url(${canvasSettings.backgroundImage})`;
-                      container.style.backgroundSize = 'cover';
-                    }
-                    const elementsToRender = elementsSource
-                      .filter((el: TemplateElement) => el.isVisible)
-                      .sort((a: TemplateElement, b: TemplateElement) => a.zIndex - b.zIndex);
-                    for (const element of elementsToRender) {
-                      const elDiv = document.createElement('div');
-                      elDiv.style.position = 'absolute';
-                      elDiv.style.left = element.position.x + 'px';
-                      elDiv.style.top = element.position.y + 'px';
-                      elDiv.style.width = element.size.width + 'px';
-                      elDiv.style.height = element.size.height + 'px';
-                      elDiv.style.fontSize = (element.style.fontSize || 14) + 'px';
-                      elDiv.style.fontFamily = element.style.fontFamily || 'Arial';
-                      elDiv.style.color = element.style.color || '#000';
-                      elDiv.style.fontWeight = (element.style.fontWeight as any) || 'normal';
-                      elDiv.style.fontStyle = (element.style.fontStyle as any) || 'normal';
-                      elDiv.style.textDecoration = (element.style.textDecoration as any) || 'none';
-                      elDiv.style.textAlign = (element.style.textAlign as any) || 'left';
-                      elDiv.style.lineHeight = element.style.lineHeight ? String(element.style.lineHeight) : '1.5';
-                      elDiv.style.zIndex = String(element.zIndex);
-                      elDiv.style.background = (element as any).backgroundColor || 'transparent';
-                      elDiv.style.overflow = 'hidden';
-                      elDiv.style.whiteSpace = 'pre-wrap';
-
-                      let content = element.content;
-                      if (content) {
-                        content = content
-                          .replace(/\[NOMBRE DEL PACIENTE\]/g, patientName || '')
-                          .replace(/\[FECHA\]/g, format(new Date(), 'dd/MM/yyyy', { locale: es }))
-                          .replace(/\[DIAGNÓSTICO\]/g, diagnosis || '')
-                          .replace(/\[NOTAS E INSTRUCCIONES ESPECIALES\]/g, notes || '')
-                          .replace(/\[NOMBRE DEL MÉDICO\]/g, doctorProfile?.full_name || '')
-                          .replace(/\[ESPECIALIDAD\]/g, doctorProfile?.specialty || '')
-                          .replace(/\[NÚMERO\]/g, doctorProfile?.medical_license || '')
-                          .replace(/\[NOMBRE DE LA CLÍNICA\]/g, doctorProfile?.clinic?.name || '')
-                          .replace(/\[DIRECCIÓN\]/g, doctorProfile?.clinic?.address || '')
-                          .replace(/\[TELÉFONO\]/g, doctorProfile?.clinic?.phone || '')
-                          .replace(/\[EMAIL\]/g, doctorProfile?.clinic?.email || '');
-                        if (content.includes('[MEDICAMENTO]')) {
-                          let meds = '';
-                          medications.filter(m => m.name).forEach((med, idx) => {
-                            meds += `${idx + 1}. ${med.name} - ${med.dosage}\n   Frecuencia: ${med.frequency}\n   Duración: ${med.duration}\n   Instrucciones: ${med.instructions || ''}\n`;
-                          });
-                          content = content.replace(/\[MEDICAMENTO\][^\[]*/g, meds);
-                        }
-                      }
-                      elDiv.textContent = content as string;
-                      container.appendChild(elDiv);
-                    }
-
-                    printWindow.document.write(`<!DOCTYPE html><html><head><title>Vista Previa Receta</title><style>@media print { @page { size: ${pageSize} ${orientation}; margin: ${marginStr}; } body { margin: 0; } } body{margin:0;padding:0;background:#fff;} .canvas{position:relative; margin: 0 auto;}</style></head><body><div class="canvas">${container.innerHTML}</div></body></html>`);
-                    printWindow.document.close();
-                    setTimeout(() => printWindow.print(), 250);
-                  }}
-                  className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
-                  title="Imprimir vista previa"
-                >
-                  Imprimir vista previa
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="dark-card p-4 print-friendly" id="prescription-preview">
-            <div className="text-center mb-4 pb-4 border-b border-gray-700">
-              <h2 className="text-xl font-bold text-gray-100 mb-2">RECETA MÉDICA</h2>
-              <p className="text-sm text-gray-400">Dr. Juan Médico</p>
-              <p className="text-xs text-gray-500">CED. PROF. 12345678</p>
-            </div>
-            <div className="space-y-4 text-sm">
-              {/* Vista previa visual si hay plantilla */}
-              {visualTemplate?.template_elements?.length ? (
-                <div className="flex justify-center">
-                  <VisualPrescriptionRenderer
-                    elements={visualTemplate.template_elements as any}
-                    canvasSettings={visualTemplate.canvas_settings as any}
-                    prescriptionData={{
-                      patientName: patientName || 'Por seleccionar',
-                      doctorName: doctorProfile?.full_name || 'Dr. (sin nombre)',
-                      doctorLicense: doctorProfile?.medical_license || '',
-                      doctorSpecialty: doctorProfile?.specialty || '',
-                      clinicName: doctorProfile?.clinic?.name || 'Clínica',
-                      clinicAddress: doctorProfile?.clinic?.address || '',
-                      clinicPhone: doctorProfile?.clinic?.phone || '',
-                      clinicEmail: doctorProfile?.clinic?.email || '',
-                      diagnosis,
-                      medications: medications.filter(m => m.name),
-                      notes,
-                      date: format(new Date(), 'dd/MM/yyyy', { locale: es })
-                    }}
-                  />
-                </div>
-              ) : (
-                // Fallback simple cuando no hay plantilla visual
-                <div className="space-y-4 text-sm">
-                  <div>
-                    <span className="text-gray-400">Paciente:</span>
-                    <span className="ml-2 text-gray-200">{patientName || 'Por seleccionar'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Fecha:</span>
-                    <span className="ml-2 text-gray-200">{format(new Date(), 'dd/MM/yyyy', { locale: es })}</span>
-                  </div>
-                  {diagnosis && (
-                    <div>
-                      <span className="text-gray-400">Diagnóstico:</span>
-                      <span className="ml-2 text-gray-200">{diagnosis}</span>
-                    </div>
-                  )}
-                  {medications.filter(m => m.name).length > 0 && (
-                    <div>
-                      <h3 className="text-gray-300 font-medium mb-2">Medicamentos:</h3>
-                      <div className="space-y-2">
-                        {medications.filter(m => m.name).map((med, index) => (
-                          <div key={index} className="pl-4 border-l-2 border-cyan-400">
-                            <div className="font-medium text-gray-200">{med.name} - {med.dosage}</div>
-                            <div className="text-gray-400 text-xs">
-                              {med.frequency} por {med.duration}
-                              {med.instructions && <span className="block">Instrucciones: {med.instructions}</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {notes && (
-                    <div>
-                      <h3 className="text-gray-300 font-medium mb-1">Notas:</h3>
-                      <p className="text-gray-400 text-xs">{notes}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Botones de acción */}
-          <div className="mt-4 flex space-x-3">
-            <button
-              onClick={handleSave}
-              disabled={!patientId || !diagnosis || medications.filter(m => m.name).length === 0 || saveStatus === 'saving'}
-              className={`flex-1 flex items-center justify-center ${
-                !patientId || !diagnosis || medications.filter(m => m.name).length === 0 || saveStatus === 'saving'
-                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  : 'dark-button-primary'
-              }`}
-              title={
-                !patientId ? 'Seleccione un paciente' :
-                !diagnosis ? 'Ingrese un diagnóstico' :
-                medications.filter(m => m.name).length === 0 ? 'Agregue al menos un medicamento' :
-                'Guardar receta'
-              }
-            >
-              {saveStatus === 'saving' ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Guardando...</>
-              ) : (
-                <><Save className="h-4 w-4 mr-2" /> Guardar</>
-              )}
-            </button>
-            
-            <button
-              onClick={handlePrint}
-              disabled={!patientId || !diagnosis || medications.filter(m => m.name).length === 0}
-              className={`flex-1 flex items-center justify-center ${
-                !patientId || !diagnosis || medications.filter(m => m.name).length === 0
-                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  : 'dark-button-secondary'
-              }`}
-            >
-              <Printer className="h-4 w-4 mr-2" />
-              Imprimir
-            </button>
-          </div>
-
-          {/* Indicadores de seguridad */}
-          <div className="mt-4 flex items-center justify-center space-x-4 text-xs text-gray-500">
-            <div className="flex items-center">
-              <Shield className="h-3 w-3 mr-1" />
-              <span>Receta segura</span>
-            </div>
-            <div className="flex items-center">
-              <CheckCircle className="h-3 w-3 mr-1" />
-              <span>Verificable</span>
-            </div>
-            {isOffline ? (
-              <div className="flex items-center text-yellow-500">
-                <WifiOff className="h-3 w-3 mr-1" />
-                <span>Offline</span>
-              </div>
-            ) : (
-              <div className="flex items-center text-green-500">
-                <Wifi className="h-3 w-3 mr-1" />
-                <span>Online</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Estilos de impresión */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #prescription-preview, #prescription-preview * {
-            visibility: visible;
-          }
-          #prescription-preview {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background: white !important;
-            color: black !important;
-            padding: 40px !important;
-          }
-          .dark-card {
-            border: none !important;
-            box-shadow: none !important;
-          }
-          .text-gray-100, .text-gray-200, .text-gray-300 {
-            color: black !important;
-          }
-          .text-gray-400, .text-gray-500 {
-            color: #666 !important;
-          }
-          .border-gray-700 {
-            border-color: #ccc !important;
-          }
-          .bg-gray-800\\/30 {
-            background: transparent !important;
-          }
-        }
-      `}</style>
+      )}
     </div>
   );
-} 
+}
+

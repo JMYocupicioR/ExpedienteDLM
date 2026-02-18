@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  User, Calendar, Activity, FileText, Settings, ArrowLeft, Clock, Heart, Brain, Dna, Pill
+  User, Calendar, Activity, FileText, Settings, ArrowLeft, Clock, Heart, Brain, Dna, Pill, LayoutDashboard
 } from 'lucide-react';
 
 interface PatientRecordSidebarProps {
@@ -25,6 +25,12 @@ export default function PatientRecordSidebar({
   const navigate = useNavigate();
 
   const sections = [
+    {
+      id: 'dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      badgeColor: 'bg-blue-500'
+    },
     {
       id: 'paciente',
       icon: User,
@@ -55,6 +61,11 @@ export default function PatientRecordSidebar({
       icon: Clock,
       label: 'Consultas',
       badge: consultationsCount
+    },
+    {
+      id: 'escalas',
+      icon: Activity,
+      label: 'Escalas Médicas'
     },
     {
       id: 'recetas',

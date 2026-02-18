@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Search, UserPlus, X, Shield, Stethoscope, Check, Loader2 } from 'lucide-react';
-import ClinicStaffService from '../../lib/services/clinic-staff-service';
+import { Search, UserPlus, X, Check, Loader2 } from 'lucide-react';
+import ClinicStaffService, { RoleInClinic } from '../../lib/services/clinic-staff-service';
+import { INVITABLE_CLINIC_ROLES, CLINIC_ROLE_LABELS } from '../../lib/roles';
 
 interface InviteStaffModalProps {
   isOpen: boolean;
@@ -27,6 +28,9 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [invitedUsers, setInvitedUsers] = useState<Set<string>>(new Set());
+  const [selectedRoleByUserId, setSelectedRoleByUserId] = useState<Record<string, RoleInClinic>>({});
+  const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -53,9 +57,16 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({
     }
   };
 
-  const handleInvite = async (user: SearchResult, role: 'doctor' | 'admin_staff') => {
+  const getRoleForUser = (userId: string): RoleInClinic =>
+    selectedRoleByUserId[userId] ?? 'doctor';
+
+  const handleInvite = async (user: SearchResult) => {
+    const role = getRoleForUser(user.id);
+    setInvitingUserId(user.id);
+    setRowErrors(prev => ({ ...prev, [user.id]: '' }));
+    setError(null);
+
     try {
-      // Usar origin: 'invite' para distinguir de solicitudes directas
       const result = await ClinicStaffService.createUserRelationship(
         clinicId,
         user.id,
@@ -65,12 +76,18 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({
 
       if (result.success) {
         setInvitedUsers(prev => new Set(prev).add(user.id));
-        // Opcional: Notificar éxito
+        setRowErrors(prev => {
+          const next = { ...prev };
+          delete next[user.id];
+          return next;
+        });
       } else {
-        setError(result.message || 'Error al invitar usuario');
+        setRowErrors(prev => ({ ...prev, [user.id]: result.message || 'Error al invitar' }));
       }
     } catch (err) {
-      setError('Ocurrió un error inesperado al invitar al usuario.');
+      setRowErrors(prev => ({ ...prev, [user.id]: 'Error inesperado al invitar' }));
+    } finally {
+      setInvitingUserId(null);
     }
   };
 
@@ -86,7 +103,10 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({
               Invitar Personal
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Busca usuarios por nombre o correo electrónico para añadirlos a tu clínica.
+              Busca usuarios por nombre o correo electrónico para añadirlos a tu clínica. Elige el rol (Médico, Administrador o Asistente administrativo) antes de invitar.
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+              Asistente administrativo: agenda, pendientes, notas, cobro/caja y listado básico de pacientes.
             </p>
           </div>
           <button 
@@ -159,21 +179,36 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({
                       <span className="font-medium">Invitado</span>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleInvite(user, 'doctor')}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium transition-colors border border-blue-200 dark:border-blue-800"
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                      <select
+                        value={getRoleForUser(user.id)}
+                        onChange={(e) =>
+                          setSelectedRoleByUserId(prev => ({
+                            ...prev,
+                            [user.id]: e.target.value as RoleInClinic,
+                          }))
+                        }
+                        className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
                       >
-                        <Stethoscope className="w-4 h-4" />
-                        Como Doctor
-                      </button>
+                        {INVITABLE_CLINIC_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {CLINIC_ROLE_LABELS[r]}
+                          </option>
+                        ))}
+                      </select>
                       <button
-                        onClick={() => handleInvite(user, 'admin_staff')}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-medium transition-colors border border-purple-200 dark:border-purple-800"
+                        onClick={() => handleInvite(user)}
+                        disabled={!!invitingUserId}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Shield className="w-4 h-4" />
-                        Como Admin
+                        {invitingUserId === user.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : null}
+                        Invitar
                       </button>
+                      {rowErrors[user.id] && (
+                        <span className="text-red-500 text-xs">{rowErrors[user.id]}</span>
+                      )}
                     </div>
                   )}
                 </div>

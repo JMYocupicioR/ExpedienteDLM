@@ -137,6 +137,8 @@ export interface Database {
           is_active: boolean
           profile_completed: boolean
           additional_info: Json
+          accepts_appointments: boolean | null
+          physical_presence_schedule: Json | null
         }
         Insert: {
           id: string
@@ -157,6 +159,8 @@ export interface Database {
           is_active?: boolean
           profile_completed?: boolean
           additional_info?: Json
+          accepts_appointments?: boolean | null
+          physical_presence_schedule?: Json | null
         }
         Update: {
           id?: string
@@ -177,6 +181,8 @@ export interface Database {
           is_active?: boolean
           profile_completed?: boolean
           additional_info?: Json
+          accepts_appointments?: boolean | null
+          physical_presence_schedule?: Json | null
         }
       }
       clinic_user_relationships: {
@@ -184,7 +190,7 @@ export interface Database {
           id: string
           clinic_id: string
           user_id: string
-          role_in_clinic: 'doctor' | 'admin_staff'
+          role_in_clinic: 'doctor' | 'admin_staff' | 'administrative_assistant'
           start_date: string
           end_date: string | null
           is_active: boolean
@@ -202,7 +208,7 @@ export interface Database {
           id?: string
           clinic_id: string
           user_id: string
-          role_in_clinic: 'doctor' | 'admin_staff'
+          role_in_clinic: 'doctor' | 'admin_staff' | 'administrative_assistant'
           start_date?: string
           end_date?: string | null
           is_active?: boolean
@@ -233,6 +239,76 @@ export interface Database {
           rejected_at?: string | null
           created_at?: string
           updated_at?: string
+        }
+      }
+      clinic_rooms: {
+        Row: {
+          id: string
+          clinic_id: string
+          room_number: string
+          room_name: string | null
+          floor: string | null
+          capacity: number
+          equipment: string[]
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          room_number: string
+          room_name?: string | null
+          floor?: string | null
+          capacity?: number
+          equipment?: string[]
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          room_number?: string
+          room_name?: string | null
+          floor?: string | null
+          capacity?: number
+          equipment?: string[]
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      room_assignments: {
+        Row: {
+          id: string
+          room_id: string
+          staff_id: string
+          clinic_id: string
+          is_primary: boolean
+          valid_from: string | null
+          valid_to: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          staff_id: string
+          clinic_id: string
+          is_primary?: boolean
+          valid_from?: string | null
+          valid_to?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          staff_id?: string
+          clinic_id?: string
+          is_primary?: boolean
+          valid_from?: string | null
+          valid_to?: string | null
+          created_at?: string
         }
       }
       patients: {
@@ -731,6 +807,7 @@ export interface Database {
           status: 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show'
           type: 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
           location: string | null
+          room_id: string | null
           notes: string | null
           reminder_sent: boolean
           external_calendar_event_id: string | null
@@ -752,6 +829,7 @@ export interface Database {
           status?: 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show'
           type?: 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
           location?: string | null
+          room_id?: string | null
           notes?: string | null
           reminder_sent?: boolean
           external_calendar_event_id?: string | null
@@ -773,6 +851,7 @@ export interface Database {
           status?: 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show'
           type?: 'consultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
           location?: string | null
+          room_id?: string | null
           notes?: string | null
           reminder_sent?: boolean
           external_calendar_event_id?: string | null
@@ -1284,15 +1363,18 @@ export interface MedicalSpecialty {
 export interface Clinic {
   id: string
   name: string
-  type: 'hospital' | 'clinic' | 'private_practice' | 'other'
+  type: 'hospital' | 'clinic' | 'private_practice' | 'consultorio_personal' | 'general' | 'other'
   address?: string
   phone?: string
   email?: string
   website?: string
+  description?: string
   license_number?: string
+  logo_url?: string
+  tax_id?: string
   director_name?: string
   director_license?: string
-  settings: Record<string, unknown>
+  settings?: Record<string, unknown>
   is_active: boolean
   created_at: string
   updated_at: string
@@ -1649,8 +1731,8 @@ export interface ConsultationWithStructuredData {
 // SISTEMA DE CITAS MEJORADO - NUEVOS TIPOS
 // =====================================================
 
-export type AppointmentStatus = 'scheduled' | 'confirmed_by_patient' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show';
-export type AppointmentType = 'consultation' | 'teleconsultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency';
+export type AppointmentStatus = 'scheduled' | 'confirmed' | 'confirmed_by_patient' | 'in_progress' | 'completed' | 'cancelled_by_clinic' | 'cancelled_by_patient' | 'no_show';
+export type AppointmentType = 'consultation' | 'teleconsultation' | 'follow_up' | 'check_up' | 'procedure' | 'emergency' | 'other';
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export interface EnhancedAppointment {
@@ -1706,6 +1788,7 @@ export interface CreateAppointmentPayload {
   duration?: number;
   type: AppointmentType;
   location?: string;
+  room_id?: string | null;
   notes?: string;
 }
 

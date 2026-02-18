@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Link as LinkIcon, Copy, ListChecks, Clock } from 'lucide-react';
+import { X, Link as LinkIcon, Copy, ListChecks, Clock, CheckSquare, MessageSquare, QrCode, Send, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import PatientSelector from '@/components/PatientSelector';
+import { fetchActiveMedicalScalesSafe } from '@/lib/services/medical-scales-service';
+import QRCode from 'qrcode';
 
 type ScaleRow = {
   id: string;
@@ -10,57 +12,230 @@ type ScaleRow = {
   description?: string | null;
 };
 
+type ExerciseRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+};
+
+type CustomTaskDraft = {
+  title: string;
+  description: string;
+  scheduledDate: string;
+};
+
+type InvitationResult = {
+  link: string;
+  token: string;
+  whatsappUrl: string;
+  emailUrl: string;
+  qrDataUrl: string | null;
+  assignedTasks: number;
+};
+
+type InvitationTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  allowedSections: string[];
+  createConversation: boolean;
+  messageTemplate: string;
+  expiryAmount: number;
+  expiryUnit: 'hours' | 'days';
+  customTasks: CustomTaskDraft[];
+};
+
 interface GenerateInvitationLinkModalProps {
   isOpen: boolean;
   onClose: () => void;
+  preselectedPatientId?: string;
 }
 
-function generateSecureToken(length = 48) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+function generateReadableToken(length = 5) {
+  // Exclude ambiguous characters: 0, 1, O, I, l
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
   const array = new Uint8Array(length);
   (window.crypto || (window as any).msCrypto).getRandomValues(array);
   return Array.from(array).map(n => alphabet[n % alphabet.length]).join('');
 }
 
-export default function GenerateInvitationLinkModal({ isOpen, onClose }: GenerateInvitationLinkModalProps) {
+function isDuplicateTokenError(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    error?.code === '23505'
+    || message.includes('duplicate key')
+    || message.includes('patient_registration_tokens_token_key')
+    || message.includes('already exists')
+  );
+}
+
+const sectionOptions = [
+  { id: 'personal', label: 'Información personal' },
+  { id: 'pathological', label: 'Antecedentes patológicos' },
+  { id: 'non_pathological', label: 'Antecedentes no patológicos' },
+  { id: 'hereditary', label: 'Antecedentes heredofamiliares' },
+  { id: 'emergency_contact', label: 'Contacto de emergencia' },
+  { id: 'lifestyle', label: 'Hábitos y estilo de vida' },
+];
+
+const defaultCustomTask = (): CustomTaskDraft => ({
+  title: '',
+  description: '',
+  scheduledDate: new Date().toISOString().slice(0, 10),
+});
+
+const invitationTemplates: InvitationTemplate[] = [
+  {
+    id: 'first_consultation',
+    name: 'Primera consulta',
+    description: 'Registro completo con bienvenida y tarea inicial.',
+    allowedSections: ['personal', 'pathological', 'non_pathological', 'hereditary', 'emergency_contact', 'lifestyle'],
+    createConversation: true,
+    messageTemplate: 'Hola, bienvenido(a). Completa tu registro inicial y revisa tus tareas asignadas.',
+    expiryAmount: 72,
+    expiryUnit: 'hours',
+    customTasks: [
+      {
+        title: 'Completar historial médico',
+        description: 'Llena todas las secciones del registro inicial.',
+        scheduledDate: new Date().toISOString().slice(0, 10),
+      },
+    ],
+  },
+  {
+    id: 'follow_up',
+    name: 'Seguimiento',
+    description: 'Actualización breve con escalas y contacto.',
+    allowedSections: ['personal', 'pathological', 'non_pathological'],
+    createConversation: true,
+    messageTemplate: 'Seguimiento activo: por favor completa las escalas solicitadas hoy.',
+    expiryAmount: 7,
+    expiryUnit: 'days',
+    customTasks: [],
+  },
+  {
+    id: 'post_surgery',
+    name: 'Postquirúrgico',
+    description: 'Escalas prioritarias y monitoreo frecuente.',
+    allowedSections: ['personal', 'pathological', 'emergency_contact', 'lifestyle'],
+    createConversation: true,
+    messageTemplate: 'Comparte tus avances postquirúrgicos y responde las escalas priorizadas.',
+    expiryAmount: 5,
+    expiryUnit: 'days',
+    customTasks: [
+      {
+        title: 'Reporte de evolución',
+        description: 'Describe dolor, movilidad y cualquier signo de alarma.',
+        scheduledDate: new Date().toISOString().slice(0, 10),
+      },
+    ],
+  },
+];
+
+export default function GenerateInvitationLinkModal({ isOpen, onClose, preselectedPatientId }: GenerateInvitationLinkModalProps) {
   const { user, profile } = useAuth();
   const [scales, setScales] = useState<ScaleRow[]>([]);
+  const [exercises, setExercises] = useState<ExerciseRow[]>([]);
   const [selectedScaleIds, setSelectedScaleIds] = useState<string[]>([]);
-  const [assignedPatientId, setAssignedPatientId] = useState<string>('');
-  const [allowedSections, setAllowedSections] = useState<string[]>(['personal','pathological','non_pathological','hereditary']);
+  const [requiredScaleIds, setRequiredScaleIds] = useState<string[]>([]);
+  const [selectedExerciseIds, setSelectedExerciseIds] = useState<string[]>([]);
+  const [customTasks, setCustomTasks] = useState<CustomTaskDraft[]>([]);
+  const [assignedPatientId, setAssignedPatientId] = useState<string>(preselectedPatientId || '');
+  const [allowedSections, setAllowedSections] = useState<string[]>(['personal', 'pathological', 'non_pathological', 'hereditary']);
+  const [createConversation, setCreateConversation] = useState<boolean>(true);
+  const [messageTemplate, setMessageTemplate] = useState<string>('Hola, este es tu canal para resolver dudas y recibir seguimiento clínico.');
+  const [activeTemplate, setActiveTemplate] = useState<string>('first_consultation');
   const [expiryAmount, setExpiryAmount] = useState<number>(72);
   const [expiryUnit, setExpiryUnit] = useState<'hours' | 'days'>('hours');
-  const [loading, setLoading] = useState(false);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resultLink, setResultLink] = useState<string | null>(null);
+  const [result, setResult] = useState<InvitationResult | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen && preselectedPatientId) {
+      setAssignedPatientId(preselectedPatientId);
+    }
+  }, [isOpen, preselectedPatientId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setResult(null);
+    setError(null);
+    setCopyFeedback(null);
+    applyTemplate(activeTemplate);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
     (async () => {
       try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from('medical_scales')
+        setLoadingCatalog(true);
+        const rows = await fetchActiveMedicalScalesSafe();
+        const mapped = rows
+          .map((row) => ({ id: row.id, name: row.name, description: row.description }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setScales(mapped);
+        const { data: exerciseRows, error: exerciseError } = await supabase
+          .from('exercise_library')
           .select('id, name, description')
           .eq('is_active', true)
-          .order('name');
-        if (error) throw error;
-        setScales(data || []);
+          .order('name', { ascending: true });
+        if (exerciseError) throw exerciseError;
+        setExercises((exerciseRows || []) as ExerciseRow[]);
       } catch (e: any) {
-        // Error log removed for security;
         setError(e?.message || 'No se pudieron cargar las escalas');
       } finally {
-        setLoading(false);
+        setLoadingCatalog(false);
       }
     })();
   }, [isOpen]);
 
   const toggleScale = (id: string) => {
-    setSelectedScaleIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedScaleIds((prev) => {
+      if (prev.includes(id)) {
+        setRequiredScaleIds((requiredPrev) => requiredPrev.filter((item) => item !== id));
+        return prev.filter((item) => item !== id);
+      }
+      return [...prev, id];
+    });
+  };
+
+  const toggleRequiredScale = (id: string) => {
+    setRequiredScaleIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const toggleExercise = (id: string) => {
+    setSelectedExerciseIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
   const toggleSection = (id: string) => {
-    setAllowedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setAllowedSections((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const addCustomTask = () => {
+    setCustomTasks((prev) => [...prev, defaultCustomTask()]);
+  };
+
+  const removeCustomTask = (index: number) => {
+    setCustomTasks((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const updateCustomTask = (index: number, key: keyof CustomTaskDraft, value: string) => {
+    setCustomTasks((prev) => prev.map((task, idx) => (idx === index ? { ...task, [key]: value } : task)));
+  };
+
+  const applyTemplate = (templateId: string) => {
+    const template = invitationTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    setActiveTemplate(template.id);
+    setAllowedSections(template.allowedSections);
+    setCreateConversation(template.createConversation);
+    setMessageTemplate(template.messageTemplate);
+    setExpiryAmount(template.expiryAmount);
+    setExpiryUnit(template.expiryUnit);
+    setCustomTasks(template.customTasks);
   };
 
   const canGenerate = useMemo(() => !!user && !!profile?.clinic_id, [user, profile]);
@@ -72,44 +247,186 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
     }
     try {
       setError(null);
-      setLoading(true);
-      const token = generateSecureToken(64);
+      setGenerating(true);
+      setCopyFeedback(null);
       const ms = (expiryUnit === 'hours' ? expiryAmount * 60 * 60 * 1000 : expiryAmount * 24 * 60 * 60 * 1000);
       const expiresAt = new Date(Date.now() + ms).toISOString();
+      const today = new Date().toISOString().slice(0, 10);
+      const uniqueRequiredScaleIds = requiredScaleIds.filter((id) => selectedScaleIds.includes(id));
 
-      const { data, error } = await supabase
-        .from('patient_registration_tokens')
-        .insert({
-          token,
+      let data: any = null;
+      const maxTokenAttempts = 10;
+      for (let attempt = 1; attempt <= maxTokenAttempts; attempt += 1) {
+        const token = generateReadableToken(5);
+        const { data: insertedData, error } = await supabase
+          .from('patient_registration_tokens')
+          .insert({
+            token,
+            doctor_id: user!.id,
+            clinic_id: profile!.clinic_id as string,
+            selected_scale_ids: selectedScaleIds.length ? selectedScaleIds : null,
+            required_scale_ids: uniqueRequiredScaleIds,
+            selected_exercise_ids: selectedExerciseIds,
+            custom_tasks: customTasks.filter((task) => task.title.trim().length > 0),
+            allowed_sections: allowedSections,
+            assigned_patient_id: assignedPatientId || null,
+            create_conversation: createConversation,
+            message_template: messageTemplate || null,
+            invitation_template: activeTemplate,
+            expires_at: expiresAt,
+            status: 'pending',
+          } as any)
+          .select()
+          .single();
+
+        if (!error && insertedData) {
+          data = insertedData;
+          break;
+        }
+
+        if (isDuplicateTokenError(error) && attempt < maxTokenAttempts) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('No se pudo generar un código único de invitación. Intenta de nuevo.');
+      }
+
+      const scaleById = new Map(scales.map((scale) => [scale.id, scale]));
+      const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+      let assignedTasks = 0;
+      let assignedTaskIds: string[] = [];
+
+      if (assignedPatientId) {
+        const cleanedCustomTasks = customTasks.filter((task) => task.title.trim().length > 0);
+
+        const scaleTasks = selectedScaleIds.map((scaleId) => ({
+          patient_id: assignedPatientId,
           doctor_id: user!.id,
           clinic_id: profile!.clinic_id as string,
-          selected_scale_ids: selectedScaleIds.length ? selectedScaleIds : null,
-          allowed_sections: allowedSections,
-          assigned_patient_id: assignedPatientId || null,
-          expires_at: expiresAt,
-          status: 'pending'
-        })
-        .select()
-        .single();
-      if (error) throw error;
+          task_type: 'scale',
+          title: uniqueRequiredScaleIds.includes(scaleId) ? 'Escala médica obligatoria' : 'Escala médica asignada',
+          description: scaleById.get(scaleId)?.name || 'Completa esta escala médica.',
+          scale_id: scaleId,
+          scheduled_date: today,
+          priority: uniqueRequiredScaleIds.includes(scaleId) ? 'high' : 'normal',
+        }));
+
+        const exerciseTasks = selectedExerciseIds.map((exerciseId) => ({
+          patient_id: assignedPatientId,
+          doctor_id: user!.id,
+          clinic_id: profile!.clinic_id as string,
+          task_type: 'exercise',
+          title: 'Ejercicio asignado',
+          description: exerciseById.get(exerciseId)?.name || 'Completa tu rutina asignada.',
+          exercise_id: exerciseId,
+          scheduled_date: today,
+          priority: 'normal',
+        }));
+
+        const customTaskRows = cleanedCustomTasks.map((task) => ({
+          patient_id: assignedPatientId,
+          doctor_id: user!.id,
+          clinic_id: profile!.clinic_id as string,
+          task_type: 'custom',
+          title: task.title.trim(),
+          description: task.description.trim() || null,
+          scheduled_date: task.scheduledDate || today,
+          priority: 'normal',
+        }));
+
+        const allTasks = [...scaleTasks, ...exerciseTasks, ...customTaskRows];
+        if (allTasks.length > 0) {
+          const { data: taskRows, error: taskError } = await supabase
+            .from('patient_tasks')
+            .insert(allTasks as any)
+            .select('id');
+          if (taskError) throw taskError;
+          assignedTasks = taskRows?.length || 0;
+          assignedTaskIds = (taskRows || []).map((task) => task.id as string).filter(Boolean);
+        }
+
+        if (createConversation) {
+          const { data: existingConversation } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('patient_id', assignedPatientId)
+            .eq('doctor_id', user!.id)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          let conversationId = existingConversation?.id || null;
+          if (!conversationId) {
+            const { data: newConversation, error: conversationError } = await supabase
+              .from('conversations')
+              .insert({
+                patient_id: assignedPatientId,
+                doctor_id: user!.id,
+                clinic_id: profile!.clinic_id as string,
+                is_active: true,
+              } as any)
+              .select('id')
+              .single();
+            if (conversationError) throw conversationError;
+            conversationId = newConversation?.id || null;
+          }
+
+          if (conversationId && messageTemplate.trim().length > 0) {
+            await supabase.from('messages').insert({
+              conversation_id: conversationId,
+              sender_type: 'system',
+              sender_id: user!.id,
+              patient_id: assignedPatientId,
+              doctor_id: user!.id,
+              content: messageTemplate.trim(),
+            } as any);
+          }
+        }
+      }
+
+      if (assignedTaskIds.length > 0) {
+        await supabase
+          .from('patient_registration_tokens')
+          .update({ assigned_task_ids: assignedTaskIds } as any)
+          .eq('id', data.id);
+      }
 
       const origin = window.location.origin;
       const link = `${origin}/register/patient/${encodeURIComponent(data.token)}`;
-      setResultLink(link);
+      const shareMessage = [
+        'Hola, este es tu acceso para el proceso de registro.',
+        `Registro web: ${link}`,
+        `Código para app Paciente (5 caracteres): ${data.token}`,
+        'Si aún no tienes cuenta, regístrate en la app Pacientes con ese código.',
+      ].join('\n');
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareMessage)}`;
+      const emailUrl = `mailto:?subject=${encodeURIComponent('Invitación de registro de paciente')}&body=${encodeURIComponent(shareMessage)}`;
+      const qrDataUrl = await QRCode.toDataURL(link, { width: 240, margin: 1 });
+
+      setResult({
+        link,
+        token: data.token,
+        whatsappUrl,
+        emailUrl,
+        qrDataUrl,
+        assignedTasks,
+      });
     } catch (e: any) {
-      // Error log removed for security;
       setError(e?.message || 'No se pudo generar el enlace');
     } finally {
-      setLoading(false);
+      setGenerating(false);
     }
   };
 
-  const handleCopy = async () => {
-    if (!resultLink) return;
+  const handleCopy = async (value: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(resultLink);
-    } catch (e) {
-      // Error log removed for security;
+      await navigator.clipboard.writeText(value);
+      setCopyFeedback(`${label} copiado`);
+      window.setTimeout(() => setCopyFeedback(null), 1800);
+    } catch {
+      setCopyFeedback('No se pudo copiar al portapapeles');
     }
   };
 
@@ -117,16 +434,32 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-full max-w-2xl">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h3 className="text-white font-semibold flex items-center"><ListChecks className="h-5 w-5 mr-2" /> Generar enlace de registro</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
         </div>
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 overflow-y-auto">
           {!canGenerate && (
             <div className="text-sm text-red-300">Tu perfil no tiene clínica asociada. Configúrala en Configuración.</div>
           )}
           {error && <div className="text-sm text-red-400">{error}</div>}
+
+          <div>
+            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><Sparkles className="h-4 w-4" /> Plantilla de invitación</div>
+            <select
+              value={activeTemplate}
+              onChange={(e) => applyTemplate(e.target.value)}
+              className="w-full bg-gray-800 text-gray-100 border border-gray-700 rounded px-3 py-2"
+            >
+              {invitationTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} - {template.description}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <div className="text-gray-300 text-sm mb-2">Asignar a un paciente existente (opcional):</div>
             <div className="bg-gray-800/50 border border-gray-700 rounded p-2">
@@ -140,45 +473,149 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
               <div className="text-xs text-gray-400 mt-1">Este enlace actualizará los datos del paciente seleccionado.</div>
             )}
           </div>
+
           <div>
-            <div className="text-gray-300 text-sm mb-2">Selecciona las secciones del registro a completar:</div>
+            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><CheckSquare className="h-4 w-4" /> Historial médico a completar</div>
             <div className="grid grid-cols-2 gap-2 mb-3">
-              {[
-                { id: 'personal', label: 'Información personal' },
-                { id: 'pathological', label: 'Antecedentes patológicos' },
-                { id: 'non_pathological', label: 'Antecedentes no patológicos' },
-                { id: 'hereditary', label: 'Antecedentes heredofamiliares' },
-              ].map(s => (
+              {sectionOptions.map(s => (
                 <label key={s.id} className="flex items-center space-x-2 bg-gray-800/60 border border-gray-700 rounded p-2">
                   <input type="checkbox" checked={allowedSections.includes(s.id)} onChange={() => toggleSection(s.id)} />
                   <span className="text-sm text-gray-200">{s.label}</span>
                 </label>
               ))}
             </div>
-            <div className="text-gray-300 text-sm mb-2">Selecciona las escalas que el paciente debe completar:</div>
+          </div>
+
+          <div>
+            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><ListChecks className="h-4 w-4" /> Escalas médicas</div>
             <div className="max-h-64 overflow-auto space-y-2">
-              {loading ? (
+              {loadingCatalog ? (
                 <div className="text-gray-400">Cargando escalas...</div>
               ) : scales.length === 0 ? (
                 <div className="text-gray-400">No hay escalas activas.</div>
               ) : (
                 scales.map(s => (
-                  <label key={s.id} className="flex items-start space-x-3 p-2 rounded hover:bg-gray-800">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={selectedScaleIds.includes(s.id)}
-                      onChange={() => toggleScale(s.id)}
-                    />
+                  <label key={s.id} className="flex items-start justify-between gap-3 p-2 rounded hover:bg-gray-800 border border-gray-700/60">
                     <div>
-                      <div className="text-white text-sm font-medium">{s.name}</div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={selectedScaleIds.includes(s.id)}
+                          onChange={() => toggleScale(s.id)}
+                        />
+                        <div className="text-white text-sm font-medium">{s.name}</div>
+                      </div>
                       {s.description && <div className="text-xs text-gray-400">{s.description}</div>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">Obligatoria</span>
+                      <input
+                        type="checkbox"
+                        disabled={!selectedScaleIds.includes(s.id)}
+                        checked={requiredScaleIds.includes(s.id)}
+                        onChange={() => toggleRequiredScale(s.id)}
+                      />
                     </div>
                   </label>
                 ))
               )}
             </div>
           </div>
+
+          <div>
+            <div className="text-gray-300 text-sm mb-2">Ejercicios a asignar</div>
+            <div className="max-h-44 overflow-auto space-y-2">
+              {loadingCatalog ? (
+                <div className="text-gray-400">Cargando ejercicios...</div>
+              ) : exercises.length === 0 ? (
+                <div className="text-gray-400">No hay ejercicios activos.</div>
+              ) : (
+                exercises.map((exercise) => (
+                  <label key={exercise.id} className="flex items-start gap-2 rounded border border-gray-700/60 p-2 hover:bg-gray-800">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={selectedExerciseIds.includes(exercise.id)}
+                      onChange={() => toggleExercise(exercise.id)}
+                    />
+                    <div>
+                      <div className="text-sm text-gray-200">{exercise.name}</div>
+                      {exercise.description && <div className="text-xs text-gray-400">{exercise.description}</div>}
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-gray-300 text-sm mb-2">Tareas personalizadas</div>
+            <div className="space-y-2">
+              {customTasks.length === 0 && <div className="text-xs text-gray-400">Sin tareas personalizadas.</div>}
+              {customTasks.map((task, index) => (
+                <div key={`${index}-${task.title}`} className="border border-gray-700 rounded p-2 space-y-2 bg-gray-800/50">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <input
+                      value={task.title}
+                      onChange={(e) => updateCustomTask(index, 'title', e.target.value)}
+                      placeholder="Título de tarea"
+                      className="bg-gray-900 text-gray-200 border border-gray-700 rounded px-2 py-1.5"
+                    />
+                    <input
+                      type="date"
+                      value={task.scheduledDate}
+                      onChange={(e) => updateCustomTask(index, 'scheduledDate', e.target.value)}
+                      className="bg-gray-900 text-gray-200 border border-gray-700 rounded px-2 py-1.5"
+                    />
+                  </div>
+                  <input
+                    value={task.description}
+                    onChange={(e) => updateCustomTask(index, 'description', e.target.value)}
+                    placeholder="Descripción de tarea"
+                    className="w-full bg-gray-900 text-gray-200 border border-gray-700 rounded px-2 py-1.5"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCustomTask(index)}
+                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-gray-200"
+                  >
+                    Eliminar tarea
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={addCustomTask}
+              className="mt-2 px-2.5 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-100"
+            >
+              Agregar tarea personalizada
+            </button>
+          </div>
+
+          <div className="space-y-2 border border-gray-700 rounded p-3 bg-gray-800/40">
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input type="checkbox" checked={createConversation} onChange={(e) => setCreateConversation(e.target.checked)} />
+              Crear canal de mensajería con el paciente
+            </label>
+            <div>
+              <label className="text-xs text-gray-400 flex items-center gap-2"><MessageSquare className="h-3.5 w-3.5" /> Mensaje de bienvenida</label>
+              <textarea
+                rows={2}
+                value={messageTemplate}
+                onChange={(e) => setMessageTemplate(e.target.value)}
+                className="mt-1 w-full bg-gray-900 text-gray-200 border border-gray-700 rounded px-2 py-1.5"
+                placeholder="Mensaje inicial para el paciente"
+              />
+            </div>
+            {!assignedPatientId && (
+              <div className="text-xs text-amber-300">
+                Sin paciente preasignado: las tareas y el canal se aplicarán al momento de vincular la cuenta del paciente con el token.
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 pt-2">
             <span className="text-gray-300 text-sm flex items-center"><Clock className="h-4 w-4 mr-1" /> Vigencia:</span>
             <input
@@ -198,28 +635,107 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose }: Generat
             </select>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
             <button
-              disabled={!canGenerate || loading}
+              disabled={!canGenerate || generating || allowedSections.length === 0}
               onClick={handleGenerate}
               className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded disabled:opacity-50 flex items-center"
             >
-              <LinkIcon className="h-4 w-4 mr-2" /> Generar Link
+              <LinkIcon className="h-4 w-4 mr-2" /> {generating ? 'Generando...' : 'Generar Link'}
             </button>
 
-            {resultLink && (
-              <div className="flex items-center space-x-2">
-                <input
-                  readOnly
-                  value={resultLink}
-                  className="bg-gray-800 text-gray-200 border border-gray-700 rounded px-2 py-1 w-72"
-                />
-                <button onClick={handleCopy} className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded flex items-center">
+            {result && (
+              <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded px-2 py-1.5">
+                <span className="text-xs text-gray-400">Código:</span>
+                <code className="text-sm font-semibold text-cyan-300 tracking-wide">{result.token}</code>
+                <button
+                  onClick={() => handleCopy(result.token, 'Código')}
+                  className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded flex items-center"
+                  title="Copiar código"
+                >
                   <Copy className="h-4 w-4" />
                 </button>
               </div>
             )}
           </div>
+
+          {result && (
+            <div className="border border-cyan-700/40 rounded p-3 space-y-3 bg-cyan-900/10">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-cyan-200 font-medium">Invitación generada</div>
+                <span className="text-xs px-2 py-0.5 rounded bg-emerald-800/40 text-emerald-300">Pendiente</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">Código para app Pacientes (5 caracteres)</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={result.token}
+                      className="bg-gray-800 text-gray-200 border border-gray-700 rounded px-2 py-1 w-full"
+                    />
+                    <button onClick={() => handleCopy(result.token, 'Código')} className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded flex items-center">
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">Link de registro web</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={result.link}
+                      className="bg-gray-800 text-gray-200 border border-gray-700 rounded px-2 py-1 w-full"
+                    />
+                    <button onClick={() => handleCopy(result.link, 'Link')} className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded flex items-center">
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={result.whatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-sm rounded flex items-center gap-1.5"
+                >
+                  <Send className="h-4 w-4" /> WhatsApp
+                </a>
+                <a
+                  href={result.emailUrl}
+                  className="px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-sm rounded"
+                >
+                  Email
+                </a>
+                <button
+                  onClick={() => handleCopy(result.whatsappUrl, 'URL de WhatsApp')}
+                  className="px-2.5 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded"
+                >
+                  Copiar URL de compartir
+                </button>
+              </div>
+
+              {result.qrDataUrl && (
+                <div className="flex items-center gap-4">
+                  <div className="h-24 w-24 rounded bg-white p-1 flex items-center justify-center">
+                    <img src={result.qrDataUrl} alt="QR de invitación" className="h-full w-full object-contain" />
+                  </div>
+                  <div className="text-xs text-gray-300 flex items-center gap-1.5">
+                    <QrCode className="h-4 w-4" />
+                    El paciente puede escanear este QR para abrir el registro.
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-gray-300">
+                Tareas creadas inmediatamente: <span className="text-cyan-300 font-semibold">{result.assignedTasks}</span>
+              </div>
+              {copyFeedback && <div className="text-xs text-emerald-300">{copyFeedback}</div>}
+            </div>
+          )}
         </div>
       </div>
     </div>

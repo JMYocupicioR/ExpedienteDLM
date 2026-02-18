@@ -1,17 +1,27 @@
 import { supabase } from '@/lib/supabase';
-import { addDays, parseISO, format } from 'date-fns';
-import { googleCalendarService } from './google-calendar-service';
-import { 
-  EnhancedAppointment, 
-  CreateAppointmentPayload, 
+import {
+  EnhancedAppointment,
+  CreateAppointmentPayload,
   UpdateAppointmentPayload,
   AppointmentFilters,
-  AppointmentStatus
+  AppointmentStatus,
+  AppointmentType,
+} from '../database.types';
+
+// Re-export types for consumers that import from this service
+export type {
+  EnhancedAppointment,
+  CreateAppointmentPayload,
+  UpdateAppointmentPayload,
+  AppointmentFilters,
+  AppointmentStatus,
+  AppointmentType,
 } from '../database.types';
 
 // Request throttling to prevent API spam
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 500; // 500ms between requests
+let manualInsertMode: 'with_room' | 'without_room' | 'direct_only' = 'direct_only';
 
 function shouldThrottleRequest(): boolean {
   const now = Date.now();
@@ -31,7 +41,6 @@ function shouldThrottleRequest(): boolean {
  * Utiliza Edge Functions para operaciones críticas como creación y verificación de conflictos
  */
 class EnhancedAppointmentService {
-
   /**
    * Crea una nueva cita usando la Edge Function con fallback a inserción directa
    */
@@ -93,8 +102,7 @@ class EnhancedAppointmentService {
       // Generar ID único para la cita
       const appointmentId = crypto.randomUUID();
 
-      // Intentar inserción manual usando función SQL para evitar triggers
-      const { error: manualError } = await supabase.rpc('manual_insert_appointment', {
+      const baseManualPayload = {
         p_id: appointmentId,
         p_doctor_id: data.doctor_id,
         p_patient_id: data.patient_id,
@@ -107,27 +115,93 @@ class EnhancedAppointmentService {
         p_status: 'scheduled',
         p_type: data.type,
         p_location: data.location,
-        p_notes: data.notes
-      });
+        p_notes: data.notes,
+      };
+
+      let manualError: { code?: string; message?: string } | null = null;
+      if (manualInsertMode !== 'direct_only') {
+        if (manualInsertMode === 'with_room') {
+          const result = await supabase.rpc('manual_insert_appointment', {
+            ...baseManualPayload,
+            p_room_id: data.room_id ?? null,
+          });
+          manualError = result.error;
+        } else {
+          const result = await supabase.rpc('manual_insert_appointment', baseManualPayload);
+          manualError = result.error;
+        }
+      } else {
+        manualError = { code: 'SKIP_MANUAL', message: 'manual_insert_appointment disabled for compatibility mode' };
+      }
+
+      // Compatibilidad con esquema antiguo: función sin p_room_id
+      if (
+        manualInsertMode === 'with_room' &&
+        manualError?.code === 'PGRST202' &&
+        (manualError?.message || '').includes('manual_insert_appointment')
+      ) {
+        const retry = await supabase.rpc('manual_insert_appointment', baseManualPayload);
+        manualError = retry.error;
+        if (!manualError) {
+          manualInsertMode = 'without_room';
+        }
+      }
+
+      // Ambiguous overloaded function on some environments: go direct-only to avoid noisy retries
+      if (manualError?.code === 'PGRST203') {
+        manualInsertMode = 'direct_only';
+      }
 
       if (manualError) {
-        console.warn('Manual insert failed, trying direct insert:', manualError.message);
+        if (manualError.code !== 'SKIP_MANUAL') {
+          console.warn('Manual insert failed, trying direct insert:', manualError.message);
+        }
         
         // Si la función manual falla, intentar inserción directa simple
-        const { error: directError } = await supabase
-          .from('appointments')
-          .insert({
-            id: appointmentId,
-            doctor_id: data.doctor_id,
-            patient_id: data.patient_id,
-            clinic_id: data.clinic_id,
-            title: data.title,
-            appointment_date: data.appointment_date,
-            appointment_time: data.appointment_time,
-            duration: data.duration || 30,
-            status: 'scheduled',
-            type: data.type,
-          });
+        const directPayloadWithRoom: Record<string, unknown> = {
+          id: appointmentId,
+          doctor_id: data.doctor_id,
+          patient_id: data.patient_id,
+          clinic_id: data.clinic_id,
+          title: data.title,
+          appointment_date: data.appointment_date,
+          appointment_time: data.appointment_time,
+          duration: data.duration || 30,
+          status: 'scheduled' as const,
+          type: data.type,
+          location: data.location,
+          notes: data.notes,
+          room_id: data.room_id ?? null,
+        };
+
+        let directError: { code?: string; message?: string } | null = null;
+        if (manualInsertMode === 'without_room' || manualInsertMode === 'direct_only') {
+          const { room_id: _roomId, ...directPayloadWithoutRoom } = directPayloadWithRoom;
+          const initialDirect = await supabase
+            .from('appointments')
+            .insert(directPayloadWithoutRoom);
+          directError = initialDirect.error;
+        } else {
+          const initialDirect = await supabase
+            .from('appointments')
+            .insert(directPayloadWithRoom);
+          directError = initialDirect.error;
+        }
+
+        // Compatibilidad con esquema antiguo: appointments sin room_id
+        if (
+          directError?.code === 'PGRST204' &&
+          (directError?.message || '').includes("'room_id' column")
+        ) {
+          const { room_id: _roomId, ...directPayloadWithoutRoom } = directPayloadWithRoom as Record<string, unknown>;
+          const retry = await supabase
+            .from('appointments')
+            .insert(directPayloadWithoutRoom);
+          directError = retry.error;
+          if (!directError) {
+            manualInsertMode = 'direct_only';
+          }
+        }
 
         if (directError) {
           console.error('Direct insert error:', directError);
@@ -135,30 +209,10 @@ class EnhancedAppointmentService {
         }
       }
 
-      // Obtener la cita completa con relaciones
+      // Obtener la cita creada con datos del paciente
       const { data: appointment, error: fetchError } = await supabase
         .from('appointments')
-        .select(`
-          *,
-          patient:patients(
-            id,
-            full_name,
-            phone,
-            email,
-            birth_date
-          ),
-          doctor:profiles!appointments_doctor_id_fkey(
-            id,
-            full_name,
-            specialty,
-            phone
-          ),
-          clinic:clinics(
-            id,
-            name,
-            address
-          )
-        `)
+        .select('*, patient:patients(id, full_name, phone, email)')
         .eq('id', appointmentId)
         .single();
 
@@ -172,6 +226,14 @@ class EnhancedAppointmentService {
       console.error('Error in fallback appointment creation:', error);
       throw error;
     }
+  }
+
+  /**
+   * Sync appointment to Google Calendar (stub - not yet implemented).
+   * Silently no-ops until Google Calendar integration is ready.
+   */
+  private async syncToGoogleCalendar(_action: string, _appointment: EnhancedAppointment): Promise<void> {
+    // Google Calendar integration not yet implemented -- silently skip
   }
 
   /**
@@ -256,7 +318,7 @@ class EnhancedAppointmentService {
       // Buscar citas conflictivas directamente
       let query = supabase
         .from('appointments')
-        .select('id, title, appointment_date, appointment_time, duration, patient:patients(full_name)')
+        .select('id, title, appointment_date, appointment_time, duration, patient_id')
         .eq('doctor_id', doctorId)
         .eq('appointment_date', appointmentDate)
         .not('status', 'in', '(cancelled_by_clinic,cancelled_by_patient,no_show)');
@@ -289,7 +351,7 @@ class EnhancedAppointmentService {
                 id: existing.id,
                 title: existing.title,
                 time: existing.appointment_time,
-                patient: (existing.patient as { full_name?: string })?.full_name
+                patient_id: existing.patient_id
               }
             }
           };
@@ -317,27 +379,7 @@ class EnhancedAppointmentService {
     try {
       let query = supabase
         .from('appointments')
-        .select(`
-          *,
-          patient:patients(
-            id,
-            full_name,
-            phone,
-            email,
-            birth_date
-          ),
-          doctor:profiles!appointments_doctor_id_fkey(
-            id,
-            full_name,
-            specialty,
-            phone
-          ),
-          clinic:clinics(
-            id,
-            name,
-            address
-          )
-        `);
+        .select('*, patient:patients(id, full_name, phone, email)');
 
       // Aplicar filtros
       if (filters.doctor_id) {
@@ -416,27 +458,7 @@ class EnhancedAppointmentService {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select(`
-        *,
-        patient:patients(
-          id,
-          full_name,
-          phone,
-          email,
-          birth_date
-        ),
-        doctor:profiles!appointments_doctor_id_fkey(
-          id,
-          full_name,
-          specialty,
-          phone
-        ),
-        clinic:clinics(
-          id,
-          name,
-          address
-        )
-      `)
+      .select('*, patient:patients(id, full_name, phone, email)')
       .single();
 
     if (error) {
@@ -504,18 +526,10 @@ class EnhancedAppointmentService {
     
     const { data, error } = await supabase
       .from('appointments')
-      .select(`
-        *,
-        patient:patients(
-          id,
-          full_name,
-          phone,
-          email
-        )
-      `)
+      .select('*, patient:patients(id, full_name, phone, email)')
       .eq('doctor_id', doctorId)
       .gte('appointment_date', today)
-      .in('status', ['scheduled', 'confirmed_by_patient'])
+      .in('status', ['scheduled', 'confirmed', 'confirmed_by_patient'])
       .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true })
       .limit(limit);

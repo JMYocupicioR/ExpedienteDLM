@@ -261,23 +261,27 @@ const ClinicSettings: React.FC = () => {
     if (!file || !activeClinic) return;
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${activeClinic.id}/logo.${fileExt}`;
-      const filePath = `clinic-logos/${fileName}`;
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const filePath = `${activeClinic.id}/logo.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('public')
-        .upload(filePath, file, { upsert: true });
+        .from('clinic-assets')
+        .upload(filePath, file, { upsert: true, contentType: file.type });
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('public')
+        .from('clinic-assets')
         .getPublicUrl(filePath);
 
       setFormData(prev => ({ ...prev, logo_url: publicUrl }));
+
+      // Sync to clinics table
+      await supabase
+        .from('clinics')
+        .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', activeClinic.id);
     } catch (error) {
-      // Error log removed for security;
       alert('Error al subir el logo');
     }
   };

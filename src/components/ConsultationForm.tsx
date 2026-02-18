@@ -8,6 +8,7 @@ import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExa
 import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { useSimpleClinic } from '@/hooks/useSimpleClinic';
 import { supabase } from '@/lib/supabase';
+import { fetchMedicalScalesSafe } from '@/lib/services/medical-scales-service';
 import DynamicPhysicalExamForm from '@/components/DynamicPhysicalExamForm';
 import MedicalTranscription from '@/components/MedicalTranscription';
 import ScalePicker from '@/components/ScalePicker';
@@ -23,7 +24,6 @@ import MedicalWidgets from '@/components/MedicalWidgets';
 import AdvancedPrescriptionSystem from '@/components/AdvancedPrescriptionSystem';
 import MedicalSafetyValidator from '@/components/MedicalSafetyValidator';
 import CIE10Integration from '@/components/CIE10Integration';
-import DeepSeekMedicalAssistant from '@/components/DeepSeekMedicalAssistant';
 import RealTimeMedicalGuidance from '@/components/RealTimeMedicalGuidance';
 // ===== NUEVOS COMPONENTES DE PESTAÑAS =====
 import InterrogatorioTabsPanel from '@/components/InterrogatorioTabsPanel';
@@ -89,6 +89,8 @@ interface ConsultationFormData {
     oxygen_saturation: string;
     weight: string;
     height: string;
+    systolic_pressure?: string;
+    diastolic_pressure?: string;
   };
   physical_examination: any;
   diagnosis: string;
@@ -148,8 +150,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       setShowPhysicalExam(!config.general_config.hide_physical_exam);
     }
     if (config?.hpi_config) {
-      setShowSmartAnalyzer(config.hpi_config.enable_autocomplete);
-      // Voice is handled via prop to InterrogatorioTabsPanel
+      // Logic for autocomplete controlled by config
     }
   }, [config]);
 
@@ -193,23 +194,18 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   const [showTreatmentTemplates, setShowTreatmentTemplates] = useState(false);
 
   // ===== NUEVOS ESTADOS PARA SISTEMA AVANZADO =====
-  const [showSmartAnalyzer, setShowSmartAnalyzer] = useState(true);
-  const [showRecommendations, setShowRecommendations] = useState(true);
-  const [showMedicalWidgets, setShowMedicalWidgets] = useState(true);
+  const showSmartAnalyzer = true;
+  const showRecommendations = true;
+  const showMedicalWidgets = true;
   const [showAdvancedPrescription, setShowAdvancedPrescription] = useState(false);
-  const [showSafetyValidator, setShowSafetyValidator] = useState(true);
+  const showSafetyValidator = true;
+  const showRealTimeGuidance = true;
   const [showCIE10Integration, setShowCIE10Integration] = useState(true);
-  const [symptomAnalysis, setSymptomAnalysis] = useState<any>(null);
-  const [suggestedQuestions, setSuggestedQuestions] = useState<any[]>([]);
   const [medicalRecommendations, setMedicalRecommendations] = useState<any>(null);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [selectedCIE10Code, setSelectedCIE10Code] = useState<any>(null);
   const [prescriptionMedications, setPrescriptionMedications] = useState<any[]>([]);
   const [patientData, setPatientData] = useState<any>(null);
-  const [showMedicalAssistant, setShowMedicalAssistant] = useState(true);
-  const [assistantSuggestions, setAssistantSuggestions] = useState<any[]>([]);
-  const [showRealTimeGuidance, setShowRealTimeGuidance] = useState(true);
-  const [guidanceActions, setGuidanceActions] = useState<any[]>([]);
 
   // ===== NUEVOS ESTADOS PARA PESTAÑAS DE INTERROGATORIO Y EXPLORACIÓN =====
   const [interrogatorioStructured, setInterrogatorioStructured] = useState<InterrogatorioStructuredData | null>(null);
@@ -239,9 +235,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
           allergies: [], // Las alergias se obtienen de pathological_histories
           conditions: [] // Las condiciones se obtienen de pathological_histories
         });
-      } catch (error) {
-        console.error('Error loading patient data:', error);
-      }
+      } catch {
+      setError('Error al cargar diagnósticos previos');
+    }
     };
 
     if (patientId) {
@@ -259,7 +255,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
         respiratory_rate: '',
         oxygen_saturation: '',
         weight: '',
-        height: ''
+        height: '',
+        systolic_pressure: '',
+        diastolic_pressure: ''
       },
       physical_examination: {},
       diagnosis: '',
@@ -291,13 +289,18 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   const handleAddScale = async (scaleId: string) => {
     if (!scaleId || pendingScales.some(s => s.scaleId === scaleId)) return;
     try {
-      const { data, error } = await supabase
-        .from('medical_scales')
-        .select('name, definition')
-        .eq('id', scaleId)
-        .single();
-      if (error) throw error;
-      setPendingScales(prev => [...prev, { scaleId, scaleName: data.name, definition: data.definition as ScaleDefinition, answers: {} }]);
+      const rows = await fetchMedicalScalesSafe();
+      const scale = rows.find((row) => row.id === scaleId);
+      if (!scale) return;
+      setPendingScales(prev => [
+        ...prev,
+        {
+          scaleId,
+          scaleName: scale.name,
+          definition: scale.definition as ScaleDefinition,
+          answers: {},
+        },
+      ]);
     } catch (e) {
       // Error log removed for security;
     }
@@ -361,7 +364,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       // Clear saved state after 3 seconds
       setTimeout(() => setSaveState('idle'), 3000);
       
-    } catch (error) {
+    } catch {
       // Error log removed for security;
       setSaveState('error');
     }
@@ -406,7 +409,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
             localStorage.removeItem(`consultation_draft_${patientId}`);
           }
         }
-      } catch (error) {
+      } catch {
         // Error log removed for security;
       }
     };
@@ -492,9 +495,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
         general_observations: data.generalObservations
       });
 
-    } catch (err: unknown) {
+    } catch {
       // Error log removed for security;
-      setError(err instanceof Error ? err.message : 'Error al guardar el examen físico');
+      setError('Error al guardar el examen físico');
     }
   };
 
@@ -514,7 +517,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
         lastSaved: new Date().toISOString()
       }));
       
-    } catch (err: unknown) {
+    } catch {
       // Error log removed for security;
     }
   };
@@ -568,7 +571,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
         if (emitPrescriptionAfterSave && showPrescriptionModule) {
           try {
             await createAndLinkPrescription(maybeId);
-          } catch (e) {
+          } catch {
             // Error log removed for security;
             setError('La consulta se guardó, pero hubo un problema al emitir la receta.');
           } finally {
@@ -588,7 +591,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
                 score: typeof score === 'number' ? score : undefined,
                 severity
               });
-            } catch (e) {
+            } catch {
               // Error log removed for security;
             }
           }
@@ -632,7 +635,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
                   file_size: file.size,
                   uploaded_by: doctorId
                 });
-              } catch (e) {
+              } catch {
                 // Error log removed for security;
               }
             }
@@ -646,9 +649,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       // Marcar como guardada y mostrar opción de agendar cita
       setConsultationSaved(true);
       
-    } catch (err: unknown) {
+    } catch {
       // Error log removed for security;
-      setError(err instanceof Error ? err.message : 'Error al guardar la consulta');
+      setError('Error al guardar la consulta');
     } finally {
       setLoading(false);
     }
@@ -674,12 +677,36 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
     let visualLayoutToSave: any = null;
     const { data: authData } = await supabase.auth.getUser();
     if (authData?.user) {
-      const { data: tpl } = await supabase
-        .from('prescription_templates')
-        .select('style_definition')
-        .eq('user_id', authData.user.id)
+      const { data: layout } = await supabase
+        .from('prescription_layouts')
+        .select('template_elements, canvas_settings, print_settings')
+        .eq('doctor_id', authData.user.id)
+        .eq('is_default', true)
         .single();
-      if (tpl?.style_definition) visualLayoutToSave = tpl.style_definition;
+      
+      if (layout) {
+        visualLayoutToSave = {
+          template_elements: layout.template_elements,
+          canvas_settings: layout.canvas_settings,
+          print_settings: layout.print_settings
+        };
+      } else {
+        // Buscar uno predefinido si no tiene default
+        const { data: publicLayout } = await supabase
+          .from('prescription_layouts')
+          .select('template_elements, canvas_settings, print_settings')
+          .eq('is_predefined', true)
+          .limit(1)
+          .single();
+        
+        if (publicLayout) {
+          visualLayoutToSave = {
+            template_elements: publicLayout.template_elements,
+            canvas_settings: publicLayout.canvas_settings,
+            print_settings: publicLayout.print_settings
+          };
+        }
+      }
     }
 
     const expires = calculatePrescriptionExpiry(filledMeds.map(m => m.name)).toISOString();
@@ -800,45 +827,74 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   // Manejar selección de plantilla de tratamiento
   const handleTreatmentTemplateSelect = (template: MedicalTemplate) => {
     // Extraer contenido de la plantilla y aplicarlo al tratamiento
-    let treatmentText = '';
+    const sectionTexts: string[] = [];
     
-    template.content.sections.forEach(section => {
-      if (section.content) {
-        treatmentText += `${section.title}:\n${section.content}\n\n`;
+    (template.content?.sections || []).forEach(section => {
+      const parts: string[] = [];
+      const sectionTitle = section.title?.trim() || 'Sin título';
+
+      // Contenido de texto libre
+      if (section.content?.trim()) {
+        parts.push(section.content.trim());
       }
       
-      // Si tiene ejercicios (para fisioterapia)
-      if (section.exercises) {
-        treatmentText += `${section.title}:\n`;
-        section.exercises.forEach(exercise => {
-          treatmentText += `• ${exercise.name}: ${exercise.description}\n`;
-          treatmentText += `  Repeticiones: ${exercise.repetitions}, Frecuencia: ${exercise.frequency}\n`;
-          if (exercise.precautions) {
-            treatmentText += `  Precauciones: ${exercise.precautions.join(', ')}\n`;
+      // Ejercicios (fisioterapia) - renderizado defensivo
+      const exercises = (section.exercises || []).filter(ex => ex?.name?.trim());
+      if (exercises.length > 0) {
+        exercises.forEach(exercise => {
+          let exLine = `• ${exercise.name.trim()}`;
+          if (exercise.description?.trim()) {
+            exLine += `: ${exercise.description.trim()}`;
           }
-          treatmentText += '\n';
+          parts.push(exLine);
+
+          const details: string[] = [];
+          if (exercise.repetitions?.trim()) details.push(`Repeticiones: ${exercise.repetitions.trim()}`);
+          if (exercise.frequency?.trim()) details.push(`Frecuencia: ${exercise.frequency.trim()}`);
+          if (exercise.duration?.trim()) details.push(`Duración: ${exercise.duration.trim()}`);
+          if (exercise.intensity?.trim()) details.push(`Intensidad: ${exercise.intensity.trim()}`);
+          if (details.length > 0) {
+            parts.push(`  ${details.join(' | ')}`);
+          }
+
+          const precautions = (exercise.precautions || []).filter(p => p?.trim());
+          if (precautions.length > 0) {
+            parts.push(`  Precauciones: ${precautions.join(', ')}`);
+          }
         });
       }
       
-      // Si tiene categorías de dieta
-      if (section.categories) {
-        treatmentText += `${section.title}:\n`;
-        section.categories.forEach(category => {
-          treatmentText += `• ${category.category}: ${category.servings}\n`;
-          treatmentText += `  Ejemplos: ${category.examples}\n`;
-          if (category.notes) {
-            treatmentText += `  Notas: ${category.notes}\n`;
-          }
-          treatmentText += '\n';
+      // Categorías de dieta - renderizado defensivo
+      const categories = (section.categories || []).filter(c => c?.category?.trim());
+      if (categories.length > 0) {
+        categories.forEach(category => {
+          let catLine = `• ${category.category.trim()}`;
+          if (category.servings?.trim()) catLine += `: ${category.servings.trim()}`;
+          parts.push(catLine);
+          if (category.examples?.trim()) parts.push(`  Ejemplos: ${category.examples.trim()}`);
+          if (category.notes?.trim()) parts.push(`  Notas: ${category.notes.trim()}`);
         });
+      }
+
+      // Solo agregar sección si tiene contenido
+      if (parts.length > 0) {
+        // Agregar descripción de sección si existe
+        let header = `${sectionTitle}:`;
+        if (section.description?.trim()) {
+          header += ` (${section.description.trim()})`;
+        }
+        sectionTexts.push(`${header}\n${parts.join('\n')}`);
       }
     });
 
+    const treatmentText = sectionTexts.join('\n\n');
+
     // Aplicar al campo de tratamiento
     const currentTreatment = watchedData.treatment || '';
+    const templateLabel = template.name?.trim() || 'Plantilla';
     const newTreatment = currentTreatment.trim()
-      ? `${currentTreatment.trim()}\n\n=== ${template.name} ===\n${treatmentText.trim()}`
-      : `=== ${template.name} ===\n${treatmentText.trim()}`;
+      ? `${currentTreatment.trim()}\n\n=== ${templateLabel} ===\n${treatmentText}`
+      : `=== ${templateLabel} ===\n${treatmentText}`;
     
     setValue('treatment', newTreatment, { shouldValidate: true, shouldDirty: true });
     setHasUnsavedChanges(true);
@@ -859,7 +915,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
 
       if (error) throw error;
       setTreatmentTemplates(data || []);
-    } catch (error) {
+    } catch {
       // Error log removed for security;
     }
   };
@@ -939,9 +995,9 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-    } catch (err: unknown) {
+    } catch {
       // Error log removed for security;
-      setError(err instanceof Error ? err.message : 'Error al generar el PDF');
+      setError('Error al generar el PDF');
     }
   };
 
@@ -997,10 +1053,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
     };
   };
 
-  // ===== FUNCIONES DE GUÍAS MÉDICAS EN TIEMPO REAL =====
   const handleGuidanceAction = (action: string, data: any) => {
-    setGuidanceActions(prev => [...prev, { action, data, timestamp: new Date() }]);
-
     // Apply guidance action based on type
     if (action.includes('ECG')) {
       // Suggest adding ECG to studies
@@ -1215,7 +1268,7 @@ ${classicData.therapeutic_plan.physical_therapy}`,
                 onOpenTranscription={config?.hpi_config?.enable_voice ? () => setIsTranscriptionModalOpen(true) : undefined}
                 className="bg-gray-800/50 rounded-lg p-4"
                 unifyView={config?.general_config?.unify_hpi}
-                defaultTab={config?.general_config?.consultation_start_mode === 'free_text' ? 'free' : 'template'}
+                defaultTab={(config?.general_config?.start_mode as string) === 'classic' ? 'free' : 'template'}
               />
               {errors.current_condition && (
                 <p className="mt-2 text-sm text-red-400 flex items-center">
@@ -1228,8 +1281,8 @@ ${classicData.therapeutic_plan.physical_therapy}`,
             {/* ===== NUEVO: SMART SYMPTOM ANALYZER ===== */}
             <SmartSymptomAnalyzer
               currentCondition={watchedData.current_condition || ''}
-              onAnalysisUpdate={setSymptomAnalysis}
-              onSuggestedQuestionsUpdate={setSuggestedQuestions}
+              onAnalysisUpdate={() => {}}
+              onSuggestedQuestionsUpdate={() => {}}
               isVisible={showSmartAnalyzer && !!watchedData.current_condition}
             />
 
@@ -1280,6 +1333,8 @@ ${classicData.therapeutic_plan.physical_therapy}`,
                   setPhysicalExamData(null);
                 }}
                 physicalExamData={physicalExamData}
+                // @ts-expect-error: physical_examination
+                initialData={watchedData.physical_examination}
                 onOpenPhysicalExam={() => setShowPhysicalExam(true)}
                 doctorId={doctorId}
                 className="bg-gray-800/50 rounded-lg p-4"
@@ -2116,7 +2171,7 @@ ${classicData.therapeutic_plan.physical_therapy}`,
           onClose={() => setStepperOpen(false)}
           scaleId={stepperScale.scaleId}
           scaleName={stepperScale.scaleName}
-          definition={{ items: (stepperScale.definition.items || []).map(it => ({ ...it, type: 'select' })), scoring: stepperScale.definition.scoring }}
+          definition={{ items: (stepperScale.definition.items || []).map((it: any) => ({ ...it, type: 'select' })), scoring: stepperScale.definition.scoring }}
           initialAnswers={stepperScale.answers}
           onComplete={({ answers }) => {
             setPendingScales(prev => prev.map(p => p.scaleId === stepperScale.scaleId ? ({ ...p, answers }) : p));
@@ -2124,17 +2179,6 @@ ${classicData.therapeutic_plan.physical_therapy}`,
         />
       )}
 
-      {/* ===== ASISTENTE MÉDICO DEEPSEEK R1 ===== */}
-      <DeepSeekMedicalAssistant
-        medicalContext={getMedicalContext()}
-        patientId={patientId}
-        doctorId={doctorId}
-        consultationId={savedConsultationId}
-        onSuggestionApply={handleAssistantSuggestion}
-        onDiagnosisUpdate={handleDiagnosisFromAssistant}
-        onTreatmentUpdate={handleTreatmentFromAssistant}
-        isVisible={showMedicalAssistant}
-      />
     </>
   );
 }

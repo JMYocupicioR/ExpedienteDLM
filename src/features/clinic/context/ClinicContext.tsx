@@ -68,6 +68,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
           // Sensitive log removed for security;
           setUserClinics([]);
           setActiveClinic(null);
+          setIsIndependentDoctor(false);
           return;
         }
 
@@ -95,7 +96,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
           return;
         }
 
-        console.log('✅ Clinic relationships loaded:', memberships?.length || 0);
+        // Sensitive log removed for security;
 
         // Sensitive log removed for security;
 
@@ -118,7 +119,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
               code: clinicsError.code,
             });
           } else {
-            console.log('✅ Clinics data loaded:', clinicsData?.length || 0);
+            // Sensitive log removed for security;
             clinicsById = (clinicsData || []).reduce((acc: Record<string, Clinic>, c: any) => {
               acc[c.id] = c as Clinic;
               return acc;
@@ -128,17 +129,16 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
           // Sensitive log removed for security;
         }
 
-        // Transform data to match our interface
+        // Transform data to match our interface (admin_staff -> 'admin' for UI consistency)
         const transformedMemberships: ClinicMember[] = (memberships || []).map((membership: any) => ({
           clinic_id: membership.clinic_id,
           user_id: membership.user_id,
-          role: membership.role_in_clinic === 'admin_staff' ? 'admin' : membership.role_in_clinic,
+          role: membership.role_in_clinic === 'admin_staff' ? 'admin' : (membership.role_in_clinic || 'doctor'),
           joined_at: membership.created_at,
           clinic: clinicsById[membership.clinic_id],
         }));
 
-        console.log('✅ Transformed memberships:', transformedMemberships.length);
-        console.log('✅ First membership:', transformedMemberships[0]);
+        // Sensitive log removed for security;
         setUserClinics(transformedMemberships);
 
         // Detect independent doctor when no memberships approved/active
@@ -171,6 +171,20 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
     };
 
     loadUserClinics();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'TOKEN_REFRESHED') {
+        return;
+      }
+
+      void loadUserClinics();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Refresh user clinics
@@ -213,11 +227,7 @@ export const ClinicProvider: React.FC<ClinicProviderProps> = ({ children }) => {
         throw membershipsError;
       }
 
-      console.log(
-        '✅ Refresh: clinic memberships loaded:',
-        memberships?.length || 0,
-        'memberships'
-      );
+      // Sensitive log removed for security;
 
       // Fetch clinic details
       const clinicIds = (memberships || []).map((m: any) => m.clinic_id);
@@ -432,11 +442,6 @@ export const useClinic = (): ClinicContextType => {
     console.error('❌ useClinic called outside ClinicProvider');
     throw new Error('useClinic must be used within a ClinicProvider');
   }
-  
-  // Debug info
-  console.log('useClinic called - activeClinic:', context.activeClinic?.name || 'null');
-  console.log('useClinic called - userClinics:', context.userClinics?.length || 0);
-  console.log('useClinic called - isLoading:', context.isLoading);
   
   return context;
 };

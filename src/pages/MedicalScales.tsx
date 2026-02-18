@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Activity, ListChecks, FileText, Plus, Info } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { fetchActiveMedicalScalesSafe } from '@/lib/services/medical-scales-service';
 
 type ScaleRow = {
   id: string;
@@ -9,10 +9,6 @@ type ScaleRow = {
   specialty?: string | null;
   category?: string | null;
   description?: string | null;
-  functions?: string[] | null;
-  specialties?: string[] | null;
-  anatomy_systems?: string[] | null;
-  tags?: string[] | null;
 };
 
 export default function MedicalScales() {
@@ -26,13 +22,16 @@ export default function MedicalScales() {
     (async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('medical_scales')
-          .select('id, name, specialty, category, description, functions, specialties, anatomy_systems, tags')
-          .eq('is_active', true)
-          .order('name', { ascending: true });
-        if (error) throw error;
-        setScales(data || []);
+        const rows = await fetchActiveMedicalScalesSafe();
+        const mapped: ScaleRow[] = rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          specialty: row.specialty,
+          category: row.category,
+          description: row.description,
+        }));
+        mapped.sort((a, b) => a.name.localeCompare(b.name));
+        setScales(mapped);
       } catch (e) {
         // Error log removed for security;
       } finally {
@@ -43,28 +42,13 @@ export default function MedicalScales() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let out = scales.filter(s => {
-      const matchesText = !q || s.name.toLowerCase().includes(q) ||
+    return scales.filter(s => {
+      return !q || s.name.toLowerCase().includes(q) ||
         (s.specialty || '').toLowerCase().includes(q) ||
         (s.category || '').toLowerCase().includes(q) ||
-        (s.description || '').toLowerCase().includes(q) ||
-        (s.functions || []).some(f => (f || '').toLowerCase().includes(q)) ||
-        (s.specialties || []).some(sp => (sp || '').toLowerCase().includes(q)) ||
-        (s.anatomy_systems || []).some(an => (an || '').toLowerCase().includes(q)) ||
-        (s.tags || []).some(t => (t || '').toLowerCase().includes(q));
-      return matchesText;
+        (s.description || '').toLowerCase().includes(q);
     });
-    if (filters.function) {
-      out = out.filter(s => (s.functions || []).includes(filters.function!));
-    }
-    if (filters.specialty) {
-      out = out.filter(s => (s.specialties || []).includes(filters.specialty!));
-    }
-    if (filters.anatomy) {
-      out = out.filter(s => (s.anatomy_systems || []).includes(filters.anatomy!));
-    }
-    return out;
-  }, [query, scales, filters]);
+  }, [query, scales]);
 
   return (
     <div className="p-4 sm:p-6">
@@ -140,15 +124,7 @@ export default function MedicalScales() {
                 {scale.specialty && <div>Especialidad: {scale.specialty}</div>}
                 {scale.category && <div>Categoría: {scale.category}</div>}
                 {scale.description && <div className="line-clamp-2">{scale.description}</div>}
-                {(scale.specialties && scale.specialties.length > 0) && (
-                  <div className="text-xs">Especialidades: {scale.specialties.join(', ')}</div>
-                )}
-                {(scale.functions && scale.functions.length > 0) && (
-                  <div className="text-xs">Funciones: {scale.functions.join(', ')}</div>
-                )}
-                {(scale.anatomy_systems && scale.anatomy_systems.length > 0) && (
-                  <div className="text-xs">Anatomía: {scale.anatomy_systems.join(', ')}</div>
-                )}
+                <div className="text-xs">ID: {scale.id}</div>
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <button

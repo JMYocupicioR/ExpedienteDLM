@@ -10,10 +10,20 @@ import {
   UpdateAppointmentPayload,
   enhancedAppointmentService,
 } from '@/lib/services/enhanced-appointment-service';
+import { supabase } from '@/lib/supabase';
 import { addMinutes, format, startOfToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { AlertCircle, Calendar, CheckCircle, Clock, FileText, MapPin, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { useClinicRooms } from '@/hooks/useClinicRooms';
+import { useSchedulingConflicts } from '@/hooks/useSchedulingConflicts';
+import { AlertCircle, Calendar, CheckCircle, Clock, DoorOpen, FileText, MapPin, User, X } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+
+interface ClinicStaffForScheduling {
+  staff_id: string;
+  full_name: string;
+  email: string | null;
+  role_in_clinic: string;
+}
 
 interface AppointmentFormProps {
   isOpen: boolean;
@@ -22,6 +32,7 @@ interface AppointmentFormProps {
   appointment?: EnhancedAppointment | null;
   doctorId: string;
   clinicId: string;
+  allowDoctorSelection?: boolean;
   selectedDate?: string;
   selectedTime?: string;
   patients?: Array<{
@@ -47,6 +58,7 @@ interface FormData {
   duration: number;
   type: AppointmentType;
   location: string;
+  room_id: string | null;
   notes: string;
 }
 
@@ -94,13 +106,21 @@ export default function AppointmentForm({
   selectedTime,
   patients = [],
   preSelectedPatient,
+  allowDoctorSelection = false,
 }: AppointmentFormProps) {
-  const { settings: medicalSettings, getAvailableTimeSlots } = useAppointmentSettings(doctorId, clinicId);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(doctorId);
+  const effectiveDoctorId = allowDoctorSelection ? selectedDoctorId : doctorId;
+  const { settings: medicalSettings, getAvailableTimeSlots } = useAppointmentSettings(
+    effectiveDoctorId,
+    clinicId
+  );
   const { messages, addError, addSuccess, addWarning, removeMessage } =
     useValidationNotifications();
   const [loading, setLoading] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const [clinicStaff, setClinicStaff] = useState<ClinicStaffForScheduling[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     patient_id: '',
@@ -111,10 +131,50 @@ export default function AppointmentForm({
     duration: medicalSettings?.default_consultation_duration || 30,
     type: 'consultation',
     location: '',
+    room_id: null,
     notes: '',
   });
 
+  const { rooms } = useClinicRooms(clinicId);
+  const { checkConflicts, clearConflicts } = useSchedulingConflicts();
+
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+
+  // Sync selectedDoctorId when doctorId prop changes (e.g. preselectedStaffId from URL)
+  useEffect(() => {
+    setSelectedDoctorId(doctorId);
+  }, [doctorId]);
+
+  // Fetch clinic staff for doctor selector when assistant/admin
+  const fetchClinicStaff = useCallback(async () => {
+    if (!clinicId || !allowDoctorSelection) return;
+    setStaffLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_clinic_staff_for_scheduling', {
+        p_clinic_id: clinicId,
+      });
+      if (error) throw error;
+      const staff = (data as ClinicStaffForScheduling[]) || [];
+      setClinicStaff(staff);
+      if (staff.length > 0) {
+        setSelectedDoctorId(prev => {
+          const isInList = staff.some(s => s.staff_id === prev);
+          return isInList ? prev : staff[0].staff_id;
+        });
+      }
+    } catch (err) {
+      addError('Error', 'No se pudo cargar la lista de profesionales');
+      setClinicStaff([]);
+    } finally {
+      setStaffLoading(false);
+    }
+  }, [clinicId, allowDoctorSelection, addError]);
+
+  useEffect(() => {
+    if (isOpen && allowDoctorSelection && clinicId) {
+      fetchClinicStaff();
+    }
+  }, [isOpen, allowDoctorSelection, clinicId, fetchClinicStaff]);
 
   // Inicializar formulario cuando se edita una cita
   useEffect(() => {
@@ -128,6 +188,7 @@ export default function AppointmentForm({
         duration: appointment.duration,
         type: appointment.type,
         location: appointment.location || '',
+        room_id: (appointment as { room_id?: string | null }).room_id ?? null,
         notes: appointment.notes || '',
       });
 
@@ -173,12 +234,12 @@ export default function AppointmentForm({
   }, [formData.appointment_date, formData.appointment_time, formData.duration]);
 
   const checkAvailability = async () => {
-    if (!formData.appointment_date || !formData.appointment_time) return;
+    if (!formData.appointment_date || !formData.appointment_time || !effectiveDoctorId) return;
 
     setCheckingAvailability(true);
     try {
       const result = await enhancedAppointmentService.checkAvailability(
-        doctorId,
+        effectiveDoctorId,
         formData.appointment_date,
         formData.appointment_time,
         formData.duration,
@@ -188,9 +249,10 @@ export default function AppointmentForm({
       setIsAvailable(result.available);
 
       if (!result.available) {
-        const conflictMsg = result.conflictDetails
-          ? `Conflicto con cita existente de ${result.conflictDetails.conflicting_time_range.start} a ${result.conflictDetails.conflicting_time_range.end}`
-          : 'Ya existe una cita programada en este horario';
+        const conflictMsg = result.conflictDetails?.message
+          ?? (result.conflictDetails?.conflicting_appointment
+            ? `Conflicto con cita existente a las ${(result.conflictDetails.conflicting_appointment as { time?: string })?.time ?? 'horario ocupado'}`
+            : 'Ya existe una cita programada en este horario');
 
         addWarning('Conflicto de Horario', `${conflictMsg}. Por favor, seleccione otro horario.`);
       }
@@ -202,7 +264,7 @@ export default function AppointmentForm({
     }
   };
 
-  const handleInputChange = (field: keyof FormData, value: string | number) => {
+  const handleInputChange = (field: keyof FormData, value: string | number | null) => {
     setFormData(prev => ({
       ...prev,
       [field]: value,
@@ -280,10 +342,30 @@ export default function AppointmentForm({
 
     if (!validateForm()) return;
 
+    clearConflicts();
+    const conflictList = await checkConflicts(
+      formData.room_id || null,
+      effectiveDoctorId,
+      formData.appointment_date,
+      formData.appointment_time,
+      formData.duration,
+      appointment?.id
+    );
+    if (conflictList.length > 0) {
+      addWarning(
+        'Posible conflicto de horario',
+        `Hay ${conflictList.length} conflicto(s) detectado(s). Revisa el detalle antes de continuar.`
+      );
+      const proceed = window.confirm(
+        `Se detectaron ${conflictList.length} conflicto(s) de horario (mismo consultorio o doctor con citas superpuestas). ¿Deseas crear la cita de todas formas?`
+      );
+      if (!proceed) return;
+    }
+
     setLoading(true);
     try {
       const submitData = {
-        doctor_id: doctorId,
+        doctor_id: effectiveDoctorId,
         patient_id: formData.patient_id,
         clinic_id: clinicId,
         title: formData.title.trim(),
@@ -293,6 +375,7 @@ export default function AppointmentForm({
         duration: formData.duration,
         type: formData.type,
         location: formData.location.trim() || undefined,
+        room_id: formData.room_id || undefined,
         notes: formData.notes.trim() || undefined,
       };
 
@@ -325,6 +408,7 @@ export default function AppointmentForm({
           duration: medicalSettings?.default_consultation_duration || 30,
           type: 'consultation',
           location: '',
+          room_id: null,
           notes: '',
         });
         setSelectedPatient(null);
@@ -412,6 +496,35 @@ export default function AppointmentForm({
         )}
 
         <form onSubmit={handleSubmit} className='p-6 space-y-6'>
+          {/* Selector de Profesional (solo para asistente/admin) */}
+          {allowDoctorSelection && (
+            <div>
+              <label className='block text-sm font-medium text-gray-300 mb-2'>
+                <User className='h-4 w-4 inline mr-1' />
+                Profesional *
+              </label>
+              <select
+                value={selectedDoctorId}
+                onChange={e => setSelectedDoctorId(e.target.value)}
+                disabled={staffLoading}
+                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:opacity-50'
+                required
+              >
+                {staffLoading ? (
+                  <option value=''>Cargando profesionales...</option>
+                ) : clinicStaff.length === 0 ? (
+                  <option value=''>No hay profesionales disponibles</option>
+                ) : (
+                  clinicStaff.map(staff => (
+                    <option key={staff.staff_id} value={staff.staff_id}>
+                      {staff.full_name} ({staff.role_in_clinic})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
+
           {/* Selector de Paciente */}
           <div>
             <label className='block text-sm font-medium text-gray-300 mb-2'>Paciente *</label>
@@ -544,19 +657,34 @@ export default function AppointmentForm({
             </div>
           )}
 
-          {/* Ubicación */}
+          {/* Consultorio / Ubicación */}
           <div>
             <label className='block text-sm font-medium text-gray-300 mb-2'>
-              <MapPin className='h-4 w-4 inline mr-1' />
-              Ubicación
+              <DoorOpen className='h-4 w-4 inline mr-1' />
+              Consultorio
             </label>
-            <input
-              type='text'
-              value={formData.location}
-              onChange={e => handleInputChange('location', e.target.value)}
-              placeholder='Ej. Consultorio 1, Sala de Procedimientos...'
-              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
-            />
+            {rooms.length > 0 ? (
+              <select
+                value={formData.room_id || ''}
+                onChange={e => handleInputChange('room_id', e.target.value || null)}
+                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+              >
+                <option value=''>Sin asignar</option>
+                {rooms.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.room_number} {r.room_name ? `- ${r.room_name}` : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type='text'
+                value={formData.location}
+                onChange={e => handleInputChange('location', e.target.value)}
+                placeholder='Ej. Consultorio 1, Sala de Procedimientos...'
+                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+              />
+            )}
           </div>
 
           {/* Descripción */}

@@ -42,9 +42,7 @@ export default function NewPatientForm({
   const [userHasClinic, setUserHasClinic] = useState<boolean | null>(null);
   const [isIndependentDoctor, setIsIndependentDoctor] = useState(contextIndependentDoctor);
 
-  console.log('NewPatientForm - contextClinic:', contextClinic?.name || 'null');
-  console.log('NewPatientForm - simpleClinic:', simpleClinic?.name || 'null');
-  console.log('NewPatientForm - activeClinic final:', activeClinic?.name || 'null');
+  // Debug logs removed for production;
   const { createPatientMutation } = usePatients();
 
   useEffect(() => {
@@ -207,8 +205,24 @@ export default function NewPatientForm({
       }
 
       // Preparamos el objeto del paciente para la inserción
+      const fullName = formData.full_name.trim();
+      // Heurística simple para separar nombres de apellidos si se ingresó todo junto
+      // Esto evita que queden campos NULL en la base de datos
+      const nameParts = fullName.split(' ');
+      let firstName = fullName;
+      let lastName = '';
+
+      if (nameParts.length > 1) {
+        // Asumimos que la primera palabra es el nombre y el resto apellidos
+        // Esto es una aproximación, idealmente se deberían pedir por separado
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ');
+      }
+
       const patientData: PatientInsert = {
-        full_name: formData.full_name.trim() || null,
+        full_name: fullName || null,
+        first_name: firstName || null,
+        last_name: lastName || null,
         social_security_number: formData.social_security_number?.trim() || null,
         email: formData.email?.trim() || null,
         phone: formData.phone?.trim() || null,
@@ -224,8 +238,7 @@ export default function NewPatientForm({
         is_active: true,
       };
 
-      console.log('Creating patient with data:', patientData);
-      console.log('Is independent doctor:', isIndependentDoctor);
+      // Debug logs removed for production;
 
       // Usamos la mutación de React Query
       createPatientMutation.mutate(patientData, {

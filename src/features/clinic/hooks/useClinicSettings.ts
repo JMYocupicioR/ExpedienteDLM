@@ -112,27 +112,28 @@ export const useClinicSettings = () => {
     if (!activeClinic) return { success: false, error: 'No active clinic' };
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${activeClinic.id}/logo.${fileExt}`;
-      const filePath = `clinic-logos/${fileName}`;
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const filePath = `${activeClinic.id}/logo.${fileExt}`;
 
-      // Upload file
       const { error: uploadError } = await supabase.storage
-        .from('public')
-        .upload(filePath, file, { upsert: true });
+        .from('clinic-assets')
+        .upload(filePath, file, { upsert: true, contentType: file.type });
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
-        .from('public')
+        .from('clinic-assets')
         .getPublicUrl(filePath);
 
-      // Update clinic record
+      // Sync to clinics table
+      await supabase
+        .from('clinics')
+        .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', activeClinic.id);
+
       const result = await updateSettings({ logo_url: publicUrl });
       return result;
     } catch (err: any) {
-      // Error log removed for security;
       return { success: false, error: err.message };
     }
   };

@@ -320,244 +320,242 @@ export default function PatientsList() {
     </div>
   );
 
-  if (loading) {
-    return (
-      <div className='min-h-screen bg-gray-900 flex items-center justify-center'>
-        <div className='text-center'>
-          <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4'></div>
-          <p className='text-gray-400'>Cargando pacientes...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className='min-h-screen bg-gray-900'>
-      <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'>
-        {/* Header */}
-        <div className='flex items-center justify-between mb-8'>
-          <div>
-            <h1 className='text-3xl font-bold text-white mb-2'>Lista de Pacientes</h1>
-            <p className='text-gray-400'>Gestiona y consulta todos tus pacientes registrados</p>
-          </div>
-          <button
-            onClick={handleNewPatient}
-            className='flex items-center px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all shadow-lg'
-          >
-            <Plus className='h-5 w-5 mr-2' />
-            Nuevo Paciente
-          </button>
-        </div>
-
-        {/* Quick Stats */}
-        <div className='grid grid-cols-1 md:grid-cols-4 gap-6 mb-8'>
-          <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
-            <div className='flex items-center'>
-              <div className='p-3 bg-blue-500 rounded-lg'>
-                <Users className='h-6 w-6 text-white' />
-              </div>
-              <div className='ml-4'>
-                <p className='text-gray-400 text-sm'>Total Pacientes</p>
-                <p className='text-2xl font-bold text-white'>{quickStats.total}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
-            <div className='flex items-center'>
-              <div className='p-3 bg-green-500 rounded-lg'>
-                <Clock className='h-6 w-6 text-white' />
-              </div>
-              <div className='ml-4'>
-                <p className='text-gray-400 text-sm'>Consultas Recientes</p>
-                <p className='text-2xl font-bold text-white'>{quickStats.recentConsultations}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
-            <div className='flex items-center'>
-              <div className='p-3 bg-cyan-500 rounded-lg'>
-                <Calendar className='h-6 w-6 text-white' />
-              </div>
-              <div className='ml-4'>
-                <p className='text-gray-400 text-sm'>Citas Programadas</p>
-                <p className='text-2xl font-bold text-white'>{quickStats.upcomingAppointments}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
-            <div className='flex items-center'>
-              <div className='p-3 bg-red-500 rounded-lg'>
-                <AlertTriangle className='h-6 w-6 text-white' />
-              </div>
-              <div className='ml-4'>
-                <p className='text-gray-400 text-sm'>Casos Urgentes</p>
-                <p className='text-2xl font-bold text-white'>{quickStats.urgentCases}</p>
-              </div>
-            </div>
+      {loading ? (
+        <div className='flex items-center justify-center h-screen'>
+          <div className='text-center'>
+            <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4'></div>
+            <p className='text-gray-400'>Cargando pacientes...</p>
           </div>
         </div>
-
-        {/* Search and Filters */}
-        <div className='bg-gray-800 rounded-lg p-6 border border-gray-700 mb-8'>
-          <div className='flex flex-col lg:flex-row lg:items-center space-y-4 lg:space-y-0 lg:space-x-4'>
-            {/* Search */}
-            <div className='flex-1 relative'>
-              <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
-              <input
-                type='text'
-                placeholder='Buscar por nombre, email o teléfono...'
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className='w-full pl-10 pr-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
-              />
+      ) : (
+        <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'>
+          {/* Header */}
+          <div className='flex items-center justify-between mb-8'>
+            <div>
+              <h1 className='text-3xl font-bold text-white mb-2'>Lista de Pacientes</h1>
+              <p className='text-gray-400'>Gestiona y consulta todos tus pacientes registrados</p>
             </div>
-
-            {/* Filter */}
-            <select
-              value={filterBy}
-              onChange={e => setFilterBy(e.target.value as any)}
-              className='px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400'
+            <button
+              onClick={handleNewPatient}
+              className='flex items-center px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all shadow-lg'
             >
-              <option value='all'>Todos los pacientes</option>
-              <option value='recent'>Consultas recientes</option>
-              <option value='upcoming'>Citas programadas</option>
-              <option value='urgent'>Casos urgentes</option>
-            </select>
+              <Plus className='h-5 w-5 mr-2' />
+              Nuevo Paciente
+            </button>
+          </div>
 
-            {/* Sort */}
-            <div className='flex items-center space-x-2'>
-              <span className='text-gray-400 text-sm'>Ordenar por:</span>
-              <div className='flex space-x-1'>
-                <button
-                  onClick={() => toggleSort('name')}
-                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${
-                    sortBy === 'name'
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Nombre{' '}
-                  {sortBy === 'name' &&
-                    (sortDirection === 'asc' ? (
-                      <SortAsc className='inline h-4 w-4' />
-                    ) : (
-                      <SortDesc className='inline h-4 w-4' />
-                    ))}
-                </button>
-                <button
-                  onClick={() => toggleSort('activity')}
-                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${
-                    sortBy === 'activity'
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Actividad{' '}
-                  {sortBy === 'activity' &&
-                    (sortDirection === 'asc' ? (
-                      <SortAsc className='inline h-4 w-4' />
-                    ) : (
-                      <SortDesc className='inline h-4 w-4' />
-                    ))}
-                </button>
-                <button
-                  onClick={() => toggleSort('age')}
-                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${
-                    sortBy === 'age'
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Edad{' '}
-                  {sortBy === 'age' &&
-                    (sortDirection === 'asc' ? (
-                      <SortAsc className='inline h-4 w-4' />
-                    ) : (
-                      <SortDesc className='inline h-4 w-4' />
-                    ))}
-                </button>
+          {/* Quick Stats */}
+          <div className='grid grid-cols-1 md:grid-cols-4 gap-6 mb-8'>
+            <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
+              <div className='flex items-center'>
+                <div className='p-3 bg-blue-500 rounded-lg'>
+                  <Users className='h-6 w-6 text-white' />
+                </div>
+                <div className='ml-4'>
+                  <p className='text-gray-400 text-sm'>Total Pacientes</p>
+                  <p className='text-2xl font-bold text-white'>{quickStats.total}</p>
+                </div>
               </div>
             </div>
 
-            {/* View Mode Toggle */}
-            <div className='flex items-center space-x-1 bg-gray-700 rounded-lg p-1'>
-              <button
-                onClick={() => setViewMode('cards')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'cards' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <Grid className='h-4 w-4' />
-              </button>
-              <button
-                onClick={() => setViewMode('table')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'table' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <List className='h-4 w-4' />
-              </button>
+            <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
+              <div className='flex items-center'>
+                <div className='p-3 bg-green-500 rounded-lg'>
+                  <Clock className='h-6 w-6 text-white' />
+                </div>
+                <div className='ml-4'>
+                  <p className='text-gray-400 text-sm'>Consultas Recientes</p>
+                  <p className='text-2xl font-bold text-white'>{quickStats.recentConsultations}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
+              <div className='flex items-center'>
+                <div className='p-3 bg-cyan-500 rounded-lg'>
+                  <Calendar className='h-6 w-6 text-white' />
+                </div>
+                <div className='ml-4'>
+                  <p className='text-gray-400 text-sm'>Citas Programadas</p>
+                  <p className='text-2xl font-bold text-white'>{quickStats.upcomingAppointments}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className='bg-gray-800 rounded-lg p-6 border border-gray-700'>
+              <div className='flex items-center'>
+                <div className='p-3 bg-red-500 rounded-lg'>
+                  <AlertTriangle className='h-6 w-6 text-white' />
+                </div>
+                <div className='ml-4'>
+                  <p className='text-gray-400 text-sm'>Casos Urgentes</p>
+                  <p className='text-2xl font-bold text-white'>{quickStats.urgentCases}</p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Results */}
-        {error ? (
-          <div className='bg-red-900/50 border border-red-700 text-red-300 p-6 rounded-lg'>
-            <div className='flex items-center'>
-              <AlertTriangle className='h-5 w-5 mr-2' />
-              <span>Error: {error}</span>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className='flex items-center justify-between mb-6'>
-              <h2 className='text-xl font-semibold text-white'>
-                Mostrando {filteredPatients.length} paciente
-                {filteredPatients.length !== 1 ? 's' : ''}
-              </h2>
-            </div>
-
-            {filteredPatients.length === 0 ? (
-              <div className='text-center py-12'>
-                <Users className='h-16 w-16 text-gray-600 mx-auto mb-4' />
-                <h3 className='text-xl font-semibold text-gray-400 mb-2'>
-                  No se encontraron pacientes
-                </h3>
-                <p className='text-gray-500 mb-6'>
-                  {searchTerm || filterBy !== 'all'
-                    ? 'Intenta ajustar tus filtros de búsqueda'
-                    : 'Comienza agregando tu primer paciente'}
-                </p>
-                <button
-                  onClick={handleNewPatient}
-                  className='px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all'
-                >
-                  <Plus className='h-5 w-5 mr-2 inline' />
-                  Agregar Primer Paciente
-                </button>
-              </div>
-            ) : viewMode === 'cards' ? (
-              <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-                {filteredPatients.map(patient => (
-                  <PatientCard key={patient.id} patient={patient} />
-                ))}
-              </div>
-            ) : (
-              <div className='bg-gray-800 rounded-lg border border-gray-700 overflow-hidden'>
-                <PatientTable
-                  patients={filteredPatients}
-                  onPatientClick={handlePatientClick}
-                  loading={false}
+          {/* Search and Filters */}
+          <div className='bg-gray-800 rounded-lg p-6 border border-gray-700 mb-8'>
+            <div className='flex flex-col lg:flex-row lg:items-center space-y-4 lg:space-y-0 lg:space-x-4'>
+              {/* Search */}
+              <div className='flex-1 relative'>
+                <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
+                <input
+                  type='text'
+                  placeholder='Buscar por nombre, email o teléfono...'
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className='w-full pl-10 pr-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
                 />
               </div>
-            )}
-          </>
-        )}
-      </div>
+
+              {/* Filter */}
+              <select
+                value={filterBy}
+                onChange={e => setFilterBy(e.target.value as any)}
+                className='px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400'
+              >
+                <option value='all'>Todos los pacientes</option>
+                <option value='recent'>Consultas recientes</option>
+                <option value='upcoming'>Citas programadas</option>
+                <option value='urgent'>Casos urgentes</option>
+              </select>
+
+              {/* Sort */}
+              <div className='flex items-center space-x-2'>
+                <span className='text-gray-400 text-sm'>Ordenar por:</span>
+                <div className='flex space-x-1'>
+                  <button
+                    onClick={() => toggleSort('name')}
+                    className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                      sortBy === 'name'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Nombre{' '}
+                    {sortBy === 'name' &&
+                      (sortDirection === 'asc' ? (
+                        <SortAsc className='inline h-4 w-4' />
+                      ) : (
+                        <SortDesc className='inline h-4 w-4' />
+                      ))}
+                  </button>
+                  <button
+                    onClick={() => toggleSort('activity')}
+                    className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                      sortBy === 'activity'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Actividad{' '}
+                    {sortBy === 'activity' &&
+                      (sortDirection === 'asc' ? (
+                        <SortAsc className='inline h-4 w-4' />
+                      ) : (
+                        <SortDesc className='inline h-4 w-4' />
+                      ))}
+                  </button>
+                  <button
+                    onClick={() => toggleSort('age')}
+                    className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                      sortBy === 'age'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Edad{' '}
+                    {sortBy === 'age' &&
+                      (sortDirection === 'asc' ? (
+                        <SortAsc className='inline h-4 w-4' />
+                      ) : (
+                        <SortDesc className='inline h-4 w-4' />
+                      ))}
+                  </button>
+                </div>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className='flex items-center space-x-1 bg-gray-700 rounded-lg p-1'>
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`p-2 rounded-lg transition-colors ${
+                    viewMode === 'cards' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Grid className='h-4 w-4' />
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`p-2 rounded-lg transition-colors ${
+                    viewMode === 'table' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <List className='h-4 w-4' />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Results */}
+          {error ? (
+            <div className='bg-red-900/50 border border-red-700 text-red-300 p-6 rounded-lg'>
+              <div className='flex items-center'>
+                <AlertTriangle className='h-5 w-5 mr-2' />
+                <span>Error: {error}</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className='flex items-center justify-between mb-6'>
+                <h2 className='text-xl font-semibold text-white'>
+                  Mostrando {filteredPatients.length} paciente
+                  {filteredPatients.length !== 1 ? 's' : ''}
+                </h2>
+              </div>
+
+              {filteredPatients.length === 0 ? (
+                <div className='text-center py-12'>
+                  <Users className='h-16 w-16 text-gray-600 mx-auto mb-4' />
+                  <h3 className='text-xl font-semibold text-gray-400 mb-2'>
+                    No se encontraron pacientes
+                  </h3>
+                  <p className='text-gray-500 mb-6'>
+                    {searchTerm || filterBy !== 'all'
+                      ? 'Intenta ajustar tus filtros de búsqueda'
+                      : 'Comienza agregando tu primer paciente'}
+                  </p>
+                  <button
+                    onClick={handleNewPatient}
+                    className='px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all'
+                  >
+                    <Plus className='h-5 w-5 mr-2 inline' />
+                    Agregar Primer Paciente
+                  </button>
+                </div>
+              ) : viewMode === 'cards' ? (
+                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+                  {filteredPatients.map(patient => (
+                    <PatientCard key={patient.id} patient={patient} />
+                  ))}
+                </div>
+              ) : (
+                <div className='bg-gray-800 rounded-lg border border-gray-700 overflow-hidden'>
+                  <PatientTable
+                    patients={filteredPatients}
+                    onPatientClick={handlePatientClick}
+                    loading={false}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <NewPatientForm
         isOpen={showNewPatientForm}

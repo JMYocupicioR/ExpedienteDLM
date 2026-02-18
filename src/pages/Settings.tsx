@@ -163,7 +163,7 @@ function ImageUploader({
 export default function Settings() {
   const { user, profile } = useAuth();
   const { theme, setTheme, fontScale, setFontScale, accentPrimary, accentSecondary, setAccentColors, contrastMode, setContrastMode } = useTheme();
-  const { uploadClinicLogo } = useProfilePhotos();
+  const { uploadClinicLogo, uploadProfilePhoto } = useProfilePhotos();
   const { settings: medicalSettings, updateSettings: updateMedicalSettings, loading: medicalLoading, error: medicalSettingsError } = useMedicalPracticeSettings(user?.id, (profile as any)?.clinic_id);
   const [searchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState('profile');
@@ -322,6 +322,9 @@ export default function Settings() {
         clinic_id?: string;
       };
       setIsClinicAdmin((extendedProfile.role || '') === 'admin_staff');
+
+      const legacyLogoUrl = extendedProfile?.additional_info?.clinic_logo_url;
+
       setProfileData({
         full_name: extendedProfile.full_name || '',
         email: extendedProfile.email || '',
@@ -336,8 +339,27 @@ export default function Settings() {
           zip: extendedProfile?.additional_info?.clinic_address?.zip || ''
         },
         photo_url: extendedProfile?.additional_info?.photo_url,
-        clinic_logo_url: extendedProfile?.additional_info?.clinic_logo_url
+        clinic_logo_url: legacyLogoUrl
       });
+
+      // Load clinic logo from clinics table (authoritative source)
+      if (extendedProfile.clinic_id) {
+        supabase
+          .from('clinics')
+          .select('logo_url, name, address')
+          .eq('id', extendedProfile.clinic_id)
+          .single()
+          .then(({ data: clinicData }) => {
+            if (clinicData?.logo_url) {
+              setProfileData(prev => ({
+                ...prev,
+                clinic_logo_url: clinicData.logo_url as string,
+                clinic_name: prev.clinic_name || (clinicData.name as string) || '',
+              }));
+            }
+          })
+          .catch(() => {});
+      }
 
       // Parse notification settings from additional_info if available
       if (extendedProfile.additional_info && typeof extendedProfile.additional_info === 'object' && 'notifications' in extendedProfile.additional_info) {
@@ -515,16 +537,18 @@ export default function Settings() {
 
       // Upload profile picture if selected
       if (profilePictureFile) {
-        newPhotoUrl = await uploadFile(profilePictureFile, 'profile_pictures');
+        const result = await uploadProfilePhoto(profilePictureFile);
+        if (result.error) throw new Error(result.error);
+        newPhotoUrl = result.url || undefined;
       }
 
       // Upload clinic logo if selected (usa bucket clinic-assets)
-      if (clinicLogoFile && ((profile as any)?.role === 'super_admin' || (profile as any)?.role === 'admin_staff')) {
+      if (clinicLogoFile) {
         const cid = (profile as any)?.clinic_id || clinicId;
         if (!cid) throw new Error('No hay clínica asociada para guardar el logo');
         const res = await uploadClinicLogo(cid, clinicLogoFile);
         if (res.error) throw new Error(res.error);
-        newClinicLogoUrl = res.url;
+        newClinicLogoUrl = res.url ?? undefined;
       }
 
 
@@ -753,7 +777,7 @@ export default function Settings() {
                   onFileSelect={setProfilePictureFile}
                   aspectRatio="aspect-square"
                 />
-                {(profile as any)?.role === 'super_admin' || (profile as any)?.role === 'admin_staff' ? (
+                {(profile as any)?.clinic_id ? (
                   <ImageUploader
                     label="Logo de la Clínica"
                     description="Logo que aparecerá en tus recetas y documentos"

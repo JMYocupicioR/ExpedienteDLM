@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { fetchActiveMedicalScalesSafe } from '@/lib/services/medical-scales-service';
 import ScaleStepper from '@/components/ScaleStepper';
 
 type TokenRow = {
@@ -74,6 +75,11 @@ export default function PatientPublicRegistration() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [allowedSections, setAllowedSections] = useState<string[]>(['personal','pathological','non_pathological','hereditary']);
+  const [createPatientAccount, setCreatePatientAccount] = useState(true);
+  const [accountEmail, setAccountEmail] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
+  const [postSubmitMessage, setPostSubmitMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -101,12 +107,8 @@ export default function PatientPublicRegistration() {
 
         const scaleIds = (data.selected_scale_ids || []) as string[];
         if (scaleIds.length > 0) {
-          const { data: defs, error: err2 } = await supabase
-            .from('medical_scales')
-            .select('id, name, definition')
-            .in('id', scaleIds)
-            .eq('is_active', true);
-          if (err2) throw err2;
+          const allActiveScales = await fetchActiveMedicalScalesSafe();
+          const defs = allActiveScales.filter((row) => scaleIds.includes(row.id));
           const map: Record<string, { name: string; definition: ScaleDefinition }> = {};
           (defs || []).forEach((row: { id: string; name: string; definition: unknown }) => { map[row.id] = { name: row.name, definition: row.definition as ScaleDefinition }; });
           setScaleDefs(map);
@@ -137,6 +139,24 @@ export default function PatientPublicRegistration() {
     try {
       setSubmitting(true);
       setError(null);
+
+      if (!personal.full_name?.trim() || !personal.birth_date) {
+        throw new Error('Completa al menos nombre completo y fecha de nacimiento.');
+      }
+
+      const normalizedAccountEmail = (accountEmail || personal.email || '').trim().toLowerCase();
+      if (createPatientAccount) {
+        if (!normalizedAccountEmail) {
+          throw new Error('Para crear cuenta de paciente, captura un correo electrónico.');
+        }
+        if (!accountPassword || accountPassword.length < 6) {
+          throw new Error('La contraseña del paciente debe tener al menos 6 caracteres.');
+        }
+        if (accountPassword !== accountConfirmPassword) {
+          throw new Error('Las contraseñas del paciente no coinciden.');
+        }
+      }
+
       const body = {
         token: tokenRow.token,
         personal,
@@ -147,10 +167,57 @@ export default function PatientPublicRegistration() {
       };
       const { error } = await supabase.functions.invoke('complete-patient-registration', { body });
       if (error) throw new Error(error.message || 'Error al completar registro');
+
+      if (createPatientAccount) {
+        let accountInfoMessage: string | null = null;
+
+        const signUpPayload = {
+          email: normalizedAccountEmail,
+          password: accountPassword,
+          options: {
+            data: {
+              role: 'patient',
+              source_app: 'pacientes',
+              registration_token: tokenRow.token,
+              full_name: personal.full_name?.trim() || undefined,
+            },
+          },
+        };
+
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp(signUpPayload);
+
+        if (signUpError) {
+          const message = signUpError.message || '';
+          const alreadyRegistered = /already registered|already been registered|user already/i.test(message.toLowerCase());
+          if (!alreadyRegistered) {
+            throw new Error(`Se guardó el expediente, pero no se pudo crear la cuenta: ${message}`);
+          }
+
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: normalizedAccountEmail,
+            password: accountPassword,
+          });
+
+          if (signInError) {
+            throw new Error('El expediente se guardó, pero el correo ya existe y la contraseña no coincide. Usa "Recuperar contraseña".');
+          }
+        } else if (!signUpData.session) {
+          accountInfoMessage = 'Cuenta creada. Revisa tu correo para confirmar y luego iniciar sesión.';
+        }
+
+        const { error: linkError } = await supabase.functions.invoke('link-patient-account', {
+          body: { token: tokenRow.token },
+        });
+        if (linkError) {
+          accountInfoMessage = accountInfoMessage || 'La cuenta se creó, pero falta vincularla. Inicia sesión y vuelve a abrir el enlace para completar la vinculación.';
+        }
+
+        setPostSubmitMessage(accountInfoMessage);
+      }
+
       setSubmitted(true);
-    } catch {
-      // Error log removed for security;
-      setError('Error al enviar');
+    } catch (e: any) {
+      setError(e?.message || 'Error al enviar');
     } finally {
       setSubmitting(false);
     }
@@ -181,6 +248,9 @@ export default function PatientPublicRegistration() {
         <div className="bg-gray-800 border border-gray-700 rounded p-6 text-center max-w-md">
           <h1 className="text-white text-lg font-semibold mb-2">Registro enviado</h1>
           <p className="text-gray-300 text-sm">Gracias. Tu información fue enviada correctamente.</p>
+          {postSubmitMessage && (
+            <p className="text-yellow-300 text-xs mt-3">{postSubmitMessage}</p>
+          )}
         </div>
       </div>
     );
@@ -368,6 +438,49 @@ export default function PatientPublicRegistration() {
                 onComplete={(payload) => handleScaleComplete(activeScaleId, payload)}
               />
             )}
+
+            <div className="bg-gray-900 border border-gray-700 rounded p-3 space-y-3">
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={createPatientAccount}
+                  onChange={(e) => setCreatePatientAccount(e.target.checked)}
+                />
+                Crear cuenta para que el paciente pueda iniciar sesión
+              </label>
+
+              {createPatientAccount && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-gray-300">Correo para la cuenta</label>
+                    <input
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      value={accountEmail}
+                      placeholder={personal.email ? `Usar ${personal.email}` : 'paciente@correo.com'}
+                      onChange={(e) => setAccountEmail(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Contraseña</label>
+                    <input
+                      type="password"
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      value={accountPassword}
+                      onChange={(e) => setAccountPassword(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Confirmar contraseña</label>
+                    <input
+                      type="password"
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      value={accountConfirmPassword}
+                      onChange={(e) => setAccountConfirmPassword(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex items-center justify-between">
               <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={() => setStep(Math.max(1, step-1))}>Atrás</button>
