@@ -54,12 +54,9 @@ class NotificationService {
       const { data, error } = await query;
 
       if (error) {
-        // Si la tabla no existe, retornar array vacío en lugar de error
         if (error.message.includes('relation "notifications" does not exist')) {
-          // Warning log removed for security;
           return [];
         }
-        // Error log removed for security;
         throw error;
       }
 

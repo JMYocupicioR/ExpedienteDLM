@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Bell, 
   BellRing, 
@@ -11,7 +12,10 @@ import {
   Clock,
   Calendar,
   User,
-  Settings
+  Settings,
+  Link2,
+  Activity,
+  FileText,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -51,6 +55,11 @@ const entityTypeIcons = {
   patient: User,
   consultation: Clock,
   clinical_rule: AlertCircle,
+  staff_request: User,
+  registration_token: Link2,
+  scale_assessment: Activity,
+  prescription: FileText,
+  error: AlertCircle,
   default: Bell,
 };
 
@@ -385,15 +394,13 @@ export default function NotificationBell() {
           {/* Footer */}
           {notifications.length > 0 && (
             <div className="p-3 border-t border-gray-700 bg-gray-750">
-              <button 
-                onClick={() => {
-                  setIsOpen(false);
-                  // Aquí se podría navegar a una página completa de notificaciones
-                }}
-                className="w-full text-center text-sm text-cyan-400 hover:text-cyan-300"
+              <Link
+                to="/notificaciones"
+                onClick={() => setIsOpen(false)}
+                className="block w-full text-center text-sm text-cyan-400 hover:text-cyan-300"
               >
                 Ver todas las notificaciones
-              </button>
+              </Link>
             </div>
           )}
         </div>

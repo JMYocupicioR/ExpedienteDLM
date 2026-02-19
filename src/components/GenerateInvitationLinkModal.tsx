@@ -405,6 +405,8 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
       const emailUrl = `mailto:?subject=${encodeURIComponent('Invitación de registro de paciente')}&body=${encodeURIComponent(shareMessage)}`;
       const qrDataUrl = await QRCode.toDataURL(link, { width: 240, margin: 1 });
 
+      // Notificaciones creadas por trigger de BD (notify_clinic_staff_on_registration_token) para todo el personal de la clínica
+
       setResult({
         link,
         token: data.token,
@@ -487,38 +489,48 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
           </div>
 
           <div>
-            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><ListChecks className="h-4 w-4" /> Escalas médicas</div>
+            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><ListChecks className="h-4 w-4" /> Escalas médicas (ordenadas por nombre)</div>
             <div className="max-h-64 overflow-auto space-y-2">
               {loadingCatalog ? (
                 <div className="text-gray-400">Cargando escalas...</div>
               ) : scales.length === 0 ? (
                 <div className="text-gray-400">No hay escalas activas.</div>
               ) : (
-                scales.map(s => (
-                  <label key={s.id} className="flex items-start justify-between gap-3 p-2 rounded hover:bg-gray-800 border border-gray-700/60">
-                    <div>
-                      <div className="flex items-center gap-2">
+                scales.map(s => {
+                  const isRequired = requiredScaleIds.includes(s.id);
+                  const isSelected = selectedScaleIds.includes(s.id);
+                  return (
+                    <label key={s.id} className={`flex items-start justify-between gap-3 p-2 rounded hover:bg-gray-800 border ${isRequired ? 'border-amber-600/50 bg-amber-900/20' : 'border-gray-700/60'}`}>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={isSelected}
+                            onChange={() => toggleScale(s.id)}
+                          />
+                          <div className="text-white text-sm font-medium">{s.name}</div>
+                          {isRequired && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-600/40 text-amber-200 font-medium">
+                              Obligatoria
+                            </span>
+                          )}
+                        </div>
+                        {s.description && <div className="text-xs text-gray-400">{s.description}</div>}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-gray-400">Obligatoria</span>
                         <input
                           type="checkbox"
-                          className="mt-1"
-                          checked={selectedScaleIds.includes(s.id)}
-                          onChange={() => toggleScale(s.id)}
+                          disabled={!isSelected}
+                          checked={isRequired}
+                          onChange={() => toggleRequiredScale(s.id)}
+                          title={isSelected ? 'Marcar como obligatoria para el paciente' : 'Selecciona la escala primero'}
                         />
-                        <div className="text-white text-sm font-medium">{s.name}</div>
                       </div>
-                      {s.description && <div className="text-xs text-gray-400">{s.description}</div>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">Obligatoria</span>
-                      <input
-                        type="checkbox"
-                        disabled={!selectedScaleIds.includes(s.id)}
-                        checked={requiredScaleIds.includes(s.id)}
-                        onChange={() => toggleRequiredScale(s.id)}
-                      />
-                    </div>
-                  </label>
-                ))
+                    </label>
+                  );
+                })
               )}
             </div>
           </div>
@@ -633,6 +645,11 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
               <option value="hours">horas</option>
               <option value="days">días</option>
             </select>
+          </div>
+
+          <div className="text-xs text-cyan-300/90 bg-cyan-900/20 border border-cyan-700/40 rounded p-2 mt-2">
+            <LinkIcon className="h-3.5 w-3.5 inline mr-1 align-middle" />
+            Este enlace se guardará en el expediente del paciente y aparecerá el QR y el link en la lista de pendientes de la clínica (Notificaciones → Enlaces pendientes).
           </div>
 
           <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">

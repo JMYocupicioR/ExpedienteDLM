@@ -1,6 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
+import { createNotification } from '@/lib/services/notification-service';
+import { supabase } from '@/lib/supabase';
 import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
 import {
   Users,
@@ -114,6 +117,48 @@ export default function ClinicAdminDashboard() {
       actionLabel: 'Ver pacientes',
     });
   }
+
+  const alertToEntityType: Record<string, string> = {
+    'pending-staff': 'staff_request',
+    'unconfirmed-appointments': 'appointment',
+    'overloaded-staff': 'appointment',
+    'new-patients-info': 'patient',
+  };
+
+  const { user } = useAuth();
+  const notifiedAlertsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user?.id || !clinicId || alerts.length === 0 || isLoading) return;
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    (async () => {
+      for (const alert of alerts) {
+        const entityType = alertToEntityType[alert.id] || 'default';
+        if (notifiedAlertsRef.current.has(`${alert.id}-${clinicId}`)) continue;
+        const { data: existing } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('related_entity_type', entityType)
+          .eq('related_entity_id', clinicId)
+          .gte('created_at', sixHoursAgo)
+          .limit(1)
+          .maybeSingle();
+        if (existing) continue;
+        createNotification({
+          user_id: user.id,
+          title: alert.title,
+          message: alert.description + (alert.count ? ` (${alert.count})` : ''),
+          related_entity_type: entityType,
+          related_entity_id: clinicId,
+          action_url: alert.actionUrl || undefined,
+          priority: alert.type === 'warning' || alert.type === 'danger' ? 'high' : 'normal',
+        }).then(() => {
+          notifiedAlertsRef.current.add(`${alert.id}-${clinicId}`);
+        }).catch(() => {});
+      }
+    })();
+  }, [user?.id, clinicId, alerts, isLoading]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
