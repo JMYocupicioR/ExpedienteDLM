@@ -10,6 +10,7 @@ import QRCode from 'qrcode';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { getOrCreateTemplateForUser, saveTemplateForUser, type PrescriptionTemplateData } from '@/lib/prescriptionTemplates';
+import { useDoctorRecipeProfile } from '@/features/prescriptions/hooks/useDoctorRecipeProfile';
 import VisualPrescriptionEditor from '@/components/VisualPrescriptionEditor';
 import VisualPrescriptionRenderer, { renderTemplateElement, TemplateElement } from '@/components/VisualPrescriptionRenderer';
 import PrescriptionPrintService from '@/utils/prescriptionPrint';
@@ -40,7 +41,7 @@ interface Prescription {
   notes: string;
   created_at: string;
   expires_at: string;
-  status: 'active' | 'expired' | 'dispensed';
+  status: 'active' | 'expired' | 'dispensed' | 'cancelled';
   doctor_signature?: string;
   visual_layout?: PrescriptionTemplateData;
   patients?: {
@@ -63,7 +64,7 @@ export default function PrescriptionDashboard() {
   } = usePrescriptions({ autoLoad: true });
   const prescriptions = hookPrescriptions as Prescription[];
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired' | 'dispensed'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired' | 'dispensed' | 'cancelled'>('all');
   const [filterDate, setFilterDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,53 +78,21 @@ export default function PrescriptionDashboard() {
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
   // Modal state for viewing prescription details
   const [viewingPrescription, setViewingPrescription] = useState<Prescription | null>(null);
-  // Doctor profile loaded once at dashboard level
-  const [dashboardDoctorProfile, setDashboardDoctorProfile] = useState<{
-    full_name?: string;
-    medical_license?: string;
-    specialty?: string;
-    clinic_name?: string;
-  } | null>(null);
 
-  // Load doctor profile once for the whole dashboard
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, specialty, additional_info')
-          .eq('id', user.id)
-          .single();
-        if (profile) {
-          const addInfo = (profile.additional_info || {}) as Record<string, any>;
-          setDashboardDoctorProfile({
-            full_name: profile.full_name || undefined,
-            medical_license: addInfo.medical_license || addInfo.cedula_profesional || undefined,
-            specialty: profile.specialty || addInfo.specialty || undefined,
-            clinic_name: addInfo.clinic_name || undefined,
-          });
-        }
-        // Also try to get clinic name from membership
-        const { data: membership } = await supabase
-          .from('clinic_user_relationships')
-          .select('clinics(name)')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .limit(1)
-          .single();
-        if (membership && (membership as any).clinics?.name) {
-          setDashboardDoctorProfile(prev => ({
-            ...prev,
-            clinic_name: prev?.clinic_name || (membership as any).clinics.name,
-          }));
-        }
-      } catch (_) {
-        // Non-critical
-      }
-    })();
-  }, []);
+  const { profile: dashboardDoctorProfile, toRenderData: toDoctorRenderData } = useDoctorRecipeProfile();
+
+  const doctorProfileFallback = React.useMemo(() => {
+    if (!dashboardDoctorProfile) return null;
+    return {
+      ...dashboardDoctorProfile,
+      clinic: {
+        name: dashboardDoctorProfile.clinic_name,
+        address: dashboardDoctorProfile.clinic_address,
+        phone: dashboardDoctorProfile.clinic_phone,
+        email: dashboardDoctorProfile.clinic_email,
+      },
+    };
+  }, [dashboardDoctorProfile]);
 
   useEffect(() => {
     refetchPrescriptions();
@@ -208,21 +177,30 @@ export default function PrescriptionDashboard() {
       let logoUrlToSave = prescriptionTemplate?.logo_url || null;
 
       if (newLogoFile) {
-        const filePath = `${user.id}/${newLogoFile.name}-${Date.now()}`;
+        const fileExt = newLogoFile.name.split('.').pop()?.toLowerCase() || 'png';
+        const fileName = `prescription-logo.${fileExt}`;
+        const { data: membership } = await supabase
+          .from('clinic_user_relationships')
+          .select('clinic_id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+        const clinicId = (membership as { clinic_id?: string } | null)?.clinic_id;
+        const filePath = clinicId ? `${clinicId}/${fileName}` : `${user.id}/${fileName}`;
+
         const { error: uploadError } = await supabase.storage
-          .from('prescription-icons')
-          .upload(filePath, newLogoFile, {
-            cacheControl: '3600',
-            upsert: true,
-          });
-        
+          .from('clinic-assets')
+          .upload(filePath, newLogoFile, { cacheControl: '3600', upsert: true });
+
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supabase.storage.from('prescription-icons').getPublicUrl(filePath);
+        const { data: urlData } = supabase.storage.from('clinic-assets').getPublicUrl(filePath);
         logoUrlToSave = urlData.publicUrl;
       }
 
-      const normalized = await saveTemplateForUser(user.id, styleDefinition);
+      const templateWithLogo = { ...styleDefinition, logo_url: logoUrlToSave ?? undefined };
+      const normalized = await saveTemplateForUser(user.id, templateWithLogo);
       setPrescriptionTemplate(normalized);
       setSaveStatus('success');
       setSaveMessage('Plantilla guardada exitosamente.');
@@ -366,72 +344,151 @@ export default function PrescriptionDashboard() {
 
   const handlePrintPrescription = async (prescription: Prescription) => {
     try {
-      // Get user's layout preference
-      let layout = getDefaultLayout();
+      type LayoutSource = { template_elements: unknown[]; canvas_settings: Record<string, unknown> };
+      let layout: LayoutSource | null = getDefaultLayout() as unknown as LayoutSource | null;
 
       if (prescription.visual_layout) {
         const visualLayout = prescription.visual_layout;
+        const cs = (visualLayout.canvas_settings || {}) as Record<string, unknown>;
         layout = {
-          template_elements: visualLayout.template_elements || [],
-          canvas_settings: visualLayout.canvas_settings || {
-            backgroundColor: '#ffffff',
-            backgroundImage: null,
-            canvasSize: { width: 794, height: 1123 },
-            pageSize: 'A4',
-            margin: '20mm',
-            showGrid: false,
-            zoom: 1
-          }
-        };
-      }
-
-      // Fallback to default layout if none found
-      if (!layout) {
-        layout = {
-          template_elements: [],
+          template_elements: (visualLayout.template_elements || []).map((el: Record<string, unknown>) => ({
+            ...el,
+            isLocked: (el.isLocked as boolean) ?? false
+          })),
           canvas_settings: {
-            backgroundColor: '#ffffff',
-            backgroundImage: null,
-            canvasSize: { width: 794, height: 1123 },
-            pageSize: 'A4',
-            margin: '20mm',
-            showGrid: false,
-            zoom: 1
+            backgroundColor: (cs.backgroundColor as string) ?? '#ffffff',
+            backgroundImage: (cs.backgroundImage as string | null) ?? null,
+            canvasSize: (cs.canvasSize as { width: number; height: number }) ?? { width: 794, height: 1123 },
+            pageSize: (cs.pageSize as string) ?? 'A4',
+            margin: (cs.margin as string) ?? '20mm',
+            showGrid: (cs.showGrid as boolean) ?? false,
+            zoom: (cs.zoom as number) ?? 1
           }
         };
       }
 
-      // Prepare prescription data
+      // Fallback to predefined template if none found or empty
+      if (!layout || !layout.template_elements?.length) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const fallbackTemplate = user ? await getOrCreateTemplateForUser(user.id) : null;
+        if (fallbackTemplate?.template_elements?.length) {
+          const cs = (fallbackTemplate.canvas_settings || {}) as Record<string, unknown>;
+          layout = {
+            template_elements: (fallbackTemplate.template_elements || []).map((el: Record<string, unknown>) => ({
+              ...el,
+              isLocked: (el.isLocked as boolean) ?? false
+            })),
+            canvas_settings: {
+              backgroundColor: (cs.backgroundColor as string) ?? '#ffffff',
+              backgroundImage: (cs.backgroundImage as string | null) ?? null,
+              canvasSize: (cs.canvasSize as { width: number; height: number }) ?? { width: 794, height: 1123 },
+              pageSize: (cs.pageSize as string) ?? 'A4',
+              margin: (cs.margin as string) ?? '20mm',
+              showGrid: (cs.showGrid as boolean) ?? false,
+              zoom: (cs.zoom as number) ?? 1
+            }
+          };
+        } else {
+          layout = {
+            template_elements: [{
+              id: 'fallback-header',
+              type: 'text',
+              position: { x: 50, y: 50 },
+              size: { width: 694, height: 60 },
+              content: '{{clinicName}}',
+              style: { fontSize: 24, fontFamily: 'Arial', color: '#1f2937', fontWeight: 'bold', textAlign: 'center' },
+              zIndex: 1,
+              isVisible: true,
+              isLocked: false
+            }, {
+              id: 'fallback-doctor',
+              type: 'text',
+              position: { x: 50, y: 120 },
+              size: { width: 400, height: 40 },
+              content: 'Dr. {{doctorName}} - Cédula: {{doctorLicense}}',
+              style: { fontSize: 14, fontFamily: 'Arial', color: '#374151' },
+              zIndex: 1,
+              isVisible: true,
+              isLocked: false
+            }, {
+              id: 'fallback-patient',
+              type: 'text',
+              position: { x: 50, y: 180 },
+              size: { width: 694, height: 300 },
+              content: 'Paciente: {{patientName}}\nDiagnóstico: {{diagnosis}}\n\n{{medications}}',
+              style: { fontSize: 12, fontFamily: 'Arial', color: '#1f2937', lineHeight: 1.8 },
+              zIndex: 1,
+              isVisible: true,
+              isLocked: false
+            }],
+            canvas_settings: {
+              backgroundColor: '#ffffff',
+              backgroundImage: null,
+              canvasSize: { width: 794, height: 1123 },
+              pageSize: 'A4',
+              margin: '20mm',
+              showGrid: false,
+              zoom: 1
+            }
+          };
+        }
+      }
+
+      // Ensure layout satisfies PrintLayout (full canvas_settings + isLocked on elements)
+      const layoutCs = (layout?.canvas_settings || {}) as Record<string, unknown>;
+      const printLayout = {
+        template_elements: (layout?.template_elements || []).map((el: Record<string, unknown>) => ({
+          ...el,
+          isLocked: (el.isLocked as boolean) ?? false
+        })),
+        canvas_settings: {
+          backgroundColor: (layoutCs.backgroundColor as string) ?? '#ffffff',
+          backgroundImage: (layoutCs.backgroundImage as string | null) ?? null,
+          canvasSize: (layoutCs.canvasSize as { width: number; height: number }) ?? { width: 794, height: 1123 },
+          pageSize: (layoutCs.pageSize as string) ?? 'A4',
+          margin: (layoutCs.margin as string) ?? '20mm',
+          showGrid: (layoutCs.showGrid as boolean) ?? false,
+          zoom: (layoutCs.zoom as number) ?? 1
+        }
+      };
+
+      const doctorData = toDoctorRenderData();
       const prescriptionData = {
         patientName: prescription.patient_name || prescription.patients?.full_name,
-        doctorName: dashboardDoctorProfile?.full_name || 'Dr.',
-        doctorLicense: dashboardDoctorProfile?.medical_license || '',
-        clinicName: dashboardDoctorProfile?.clinic_name || '',
+        doctorName: doctorData.doctorName ?? dashboardDoctorProfile?.full_name ?? 'Dr.',
+        doctorLicense: doctorData.doctorLicense ?? dashboardDoctorProfile?.medical_license ?? '',
+        doctorSpecialty: doctorData.doctorSpecialty ?? dashboardDoctorProfile?.specialty ?? '',
+        clinicName: doctorData.clinicName ?? dashboardDoctorProfile?.clinic_name ?? '',
+        clinicAddress: doctorData.clinicAddress ?? dashboardDoctorProfile?.clinic_address ?? '',
+        clinicPhone: doctorData.clinicPhone ?? dashboardDoctorProfile?.clinic_phone ?? '',
+        clinicEmail: doctorData.clinicEmail ?? dashboardDoctorProfile?.clinic_email ?? '',
         diagnosis: prescription.diagnosis,
         medications: prescription.medications,
         notes: prescription.notes,
         date: format(new Date(prescription.created_at), 'dd/MM/yyyy', { locale: es }),
-        patientAge: '', // Could be calculated from patient data if available
-        patientWeight: '', // Could come from patient data if available
+        patientAge: '',
+        patientWeight: '',
         followUpDate: prescription.expires_at ? format(new Date(prescription.expires_at), 'dd/MM/yyyy') : '',
         prescriptionId: prescription.id
       };
 
-      // Use print settings if available
-      const printOptions = printSettings ? {
-        pageSize: printSettings.page_size as 'A4' | 'Letter' | 'Legal',
-        orientation: printSettings.page_orientation,
-        margins: printSettings.page_margins,
-        quality: printSettings.print_quality,
-        colorMode: printSettings.color_mode,
-        scaleFactor: printSettings.scale_factor,
-        includeQRCode: printSettings.include_qr_code,
-        includeDigitalSignature: printSettings.include_digital_signature,
-        watermarkText: printSettings.watermark_text
+      const printOptions: import('@/utils/prescriptionPrint').PrintOptions = printSettings ? {
+        pageSize: (printSettings.page_size ?? printSettings.paperSize) as 'A4' | 'Letter' | 'Legal',
+        orientation: (printSettings.page_orientation ?? printSettings.orientation) as 'portrait' | 'landscape',
+        margins: (printSettings.page_margins ?? printSettings.pageMargins ?? printSettings.margins) as { top: string; right: string; bottom: string; left: string } | undefined,
+        quality: (printSettings.print_quality ?? printSettings.printQuality) as 'draft' | 'normal' | 'high',
+        colorMode: (printSettings.color_mode ?? printSettings.colorMode) as 'color' | 'grayscale' | 'blackwhite',
+        scaleFactor: printSettings.scale_factor ?? printSettings.scaleFactor ?? 1,
+        includeQRCode: printSettings.include_qr_code ?? printSettings.includeQrCode ?? true,
+        includeDigitalSignature: printSettings.include_digital_signature ?? printSettings.includeDigitalSignature ?? true,
+        watermarkText: printSettings.watermark_text ?? printSettings.watermarkText
       } : {};
 
-      // Print using the new service
-      PrescriptionPrintService.printPrescription(layout, prescriptionData, printOptions);
+      await PrescriptionPrintService.printPrescription(
+        printLayout as import('@/utils/prescriptionPrint').PrintLayout,
+        prescriptionData,
+        printOptions
+      );
 
     } catch (error) {
       console.error('Error printing prescription:', error);
@@ -683,7 +740,7 @@ export default function PrescriptionDashboard() {
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-100">
-                    Ãšltimas Recetas Emitidas
+                    Últimas Recetas Emitidas
                   </h3>
                   <button
                     onClick={() => setActiveTab('new')}
@@ -697,7 +754,7 @@ export default function PrescriptionDashboard() {
                 {prescriptions.length === 0 ? (
                   <div className="text-center py-8">
                     <FileText className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                    <p className="text-gray-400">No hay recetas registradas aÃºn</p>
+                    <p className="text-gray-400">No hay recetas registradas aún</p>
                     <button
                       onClick={() => setActiveTab('new')}
                       className="mt-3 text-cyan-400 hover:text-cyan-300"
@@ -807,7 +864,7 @@ export default function PrescriptionDashboard() {
             saveMessage={saveMessage}
             visualTemplate={prescriptionTemplate}
             onOpenVisualEditor={() => setActiveTab('visual')}
-            doctorProfileFallback={dashboardDoctorProfile}
+            doctorProfileFallback={doctorProfileFallback}
           />
         )}
 
@@ -822,11 +879,20 @@ export default function PrescriptionDashboard() {
             ) : (
               <div className="fixed inset-0 z-50">
                 <VisualPrescriptionEditor
-                  patientId={selectedPatientId || 'preview'}
                   patientName={selectedPatientName || 'Vista Previa'}
                   onSave={handleSavePrescriptionTemplate}
                   onClose={() => setActiveTab('dashboard')}
                   existingTemplate={prescriptionTemplate}
+                  initialData={{
+                    patientName: selectedPatientName || 'Vista Previa',
+                    doctorName: doctorProfileFallback?.full_name || 'Dr.',
+                    doctorLicense: doctorProfileFallback?.medical_license || '',
+                    doctorSpecialty: doctorProfileFallback?.specialty,
+                    clinicName: doctorProfileFallback?.clinic_name || doctorProfileFallback?.clinic?.name || '',
+                    clinicAddress: doctorProfileFallback?.clinic_address || doctorProfileFallback?.clinic?.address,
+                    clinicPhone: doctorProfileFallback?.clinic_phone || doctorProfileFallback?.clinic?.phone,
+                    clinicEmail: doctorProfileFallback?.clinic_email || doctorProfileFallback?.clinic?.email,
+                  }}
                 />
               </div>
             )}

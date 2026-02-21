@@ -102,6 +102,16 @@ export interface PrintSettings {
   paperSize?: string;
   orientation?: string;
   margins?: any;
+  // DB snake_case (prescription_print_settings table)
+  page_size?: string;
+  page_orientation?: 'portrait' | 'landscape';
+  page_margins?: Record<string, string>;
+  print_quality?: string;
+  color_mode?: string;
+  scale_factor?: number;
+  include_qr_code?: boolean;
+  include_digital_signature?: boolean;
+  watermark_text?: string;
 }
 
 export interface PrescriptionLayout {

@@ -19,6 +19,8 @@ import { supabase } from '@/lib/supabase';
 
 interface ClinicStatusCardProps {
   onStatusUpdate?: () => void;
+  /** Logo/ imagen de la clínica para mostrar junto al estado (ej. en dashboard de asistente) */
+  logoUrl?: string | null;
 }
 
 interface ClinicStatus {
@@ -63,7 +65,7 @@ const statusConfig = {
   }
 };
 
-export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardProps) {
+export default function ClinicStatusCard({ onStatusUpdate, logoUrl }: ClinicStatusCardProps) {
   const navigate = useNavigate();
   
   // Usar contexto complejo y hook simple como fallback
@@ -232,12 +234,18 @@ export default function ClinicStatusCard({ onStatusUpdate }: ClinicStatusCardPro
   return (
     <div className={`bg-gray-800/50 backdrop-blur-xl rounded-2xl border p-6 ${config.borderColor}`}>
       <div className="flex items-start space-x-4">
-        <div className={`p-3 rounded-lg ${config.bgColor}`}>
-          <StatusIcon className={`h-6 w-6 ${config.color}`} />
-        </div>
+        {logoUrl ? (
+          <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-gray-600 bg-gray-700 flex-shrink-0 shadow-inner">
+            <img src={logoUrl} alt="Logo clínica" className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className={`p-3 rounded-lg ${config.bgColor}`}>
+            <StatusIcon className={`h-6 w-6 ${config.color}`} />
+          </div>
+        )}
         
         <div className="flex-1">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
             <h3 className="text-lg font-semibold text-white">
               Estado en {activeClinic.name}
             </h3>

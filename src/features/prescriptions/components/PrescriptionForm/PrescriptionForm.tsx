@@ -14,6 +14,7 @@ import { validateMedication, checkDrugInteractions, MEDICATION_CONSTRAINTS, SYST
 import VisualPrescriptionRenderer from '@/components/VisualPrescriptionRenderer';
 import type { TemplateElement } from '@/components/VisualPrescriptionRenderer';
 import type { PrescriptionTemplateData } from '@/lib/prescriptionTemplates';
+import PrescriptionPrintService from '@/utils/prescriptionPrint';
 
 export interface PrescriptionFormMedication {
   name: string;
@@ -40,6 +41,11 @@ export interface DoctorProfileFallback {
   medical_license?: string;
   specialty?: string;
   clinic_name?: string;
+  clinic_address?: string;
+  clinic_phone?: string;
+  clinic_email?: string;
+  clinic?: { name?: string; address?: string; phone?: string; email?: string };
+  logo_url?: string | null;
 }
 
 export interface PrescriptionFormProps {
@@ -149,11 +155,12 @@ export function PrescriptionForm({
             .single();
           if (profile) {
             const addInfo = (profile.additional_info || {}) as Record<string, any>;
+            const clinicInfo = addInfo.clinic_info || addInfo.clinic || {};
             setDoctorProfile({
               full_name: profile.full_name,
               medical_license: addInfo.medical_license ?? addInfo.cedula_profesional,
               specialty: profile.specialty ?? addInfo.specialty,
-              clinic: addInfo.clinic_info || addInfo.clinic || {},
+              clinic: typeof clinicInfo === 'object' ? clinicInfo : {},
             });
           }
           const { data: tplRows } = await supabase
@@ -662,95 +669,55 @@ export function PrescriptionForm({
                 <button
                   type="button"
                   onClick={async () => {
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) return;
-                    const layout: any = visualTemplate;
-                    const canvasSettings = layout.canvas_settings || {};
-                    const elementsSource = layout.template_elements || [];
-                    const rawPaper = (layout.print_settings?.paperSize || layout.paperSize || 'a4')
-                      .toString()
-                      .toLowerCase();
-                    const orientation = (layout.print_settings?.orientation ||
-                      layout.orientation ||
-                      'portrait')
-                      .toString()
-                      .toLowerCase();
-                    const margins = layout.print_settings?.margins || layout.margins || 'normal';
-                    const pageSize =
-                      rawPaper === 'a4' ? 'A4' : rawPaper === 'legal' ? 'Legal' : 'Letter';
-                    const marginStr =
+                    const cs = (visualTemplate.canvas_settings || {}) as Record<string, unknown>;
+                    const layout = {
+                      template_elements: (visualTemplate.template_elements || []).map((el: Record<string, unknown>) => ({
+                        ...el,
+                        isLocked: (el.isLocked as boolean) ?? false
+                      })),
+                      canvas_settings: {
+                        backgroundColor: (cs.backgroundColor as string) ?? '#ffffff',
+                        backgroundImage: (cs.backgroundImage as string | null) ?? null,
+                        canvasSize: (cs.canvasSize as { width: number; height: number }) ?? { width: 794, height: 1123 },
+                        pageSize: (cs.pageSize as string) ?? 'A4',
+                        margin: (cs.margin as string) ?? '20mm',
+                        showGrid: (cs.showGrid as boolean) ?? false,
+                        zoom: (cs.zoom as number) ?? 1
+                      },
+                    };
+                    const rawPaper = (visualTemplate.print_settings?.paperSize || visualTemplate.paperSize || 'a4').toString().toLowerCase();
+                    const orientation = (visualTemplate.print_settings?.orientation || visualTemplate.orientation || 'portrait').toString().toLowerCase();
+                    const margins = visualTemplate.print_settings?.margins || visualTemplate.margins || 'normal';
+                    const marginObj =
                       typeof margins === 'string'
                         ? margins === 'narrow'
-                          ? '0.5in'
+                          ? { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
                           : margins === 'wide'
-                            ? '1.5in'
-                            : '1in'
-                        : `${(margins as any).top} ${(margins as any).right} ${(margins as any).bottom} ${(margins as any).left}`;
-                    const container = document.createElement('div');
-                    container.style.position = 'relative';
-                    container.style.width = (canvasSettings?.canvasSize?.width || 794) + 'px';
-                    container.style.height = (canvasSettings?.canvasSize?.height || 1123) + 'px';
-                    container.style.background = canvasSettings?.backgroundColor || '#fff';
-                    if (canvasSettings?.backgroundImage) {
-                      container.style.backgroundImage = `url(${canvasSettings.backgroundImage})`;
-                      container.style.backgroundSize = 'cover';
-                    }
-                    const elementsToRender = (elementsSource as TemplateElement[])
-                      .filter((el) => el.isVisible)
-                      .sort((a, b) => a.zIndex - b.zIndex);
-                    for (const element of elementsToRender) {
-                      const elDiv = document.createElement('div');
-                      elDiv.style.position = 'absolute';
-                      elDiv.style.left = element.position.x + 'px';
-                      elDiv.style.top = element.position.y + 'px';
-                      elDiv.style.width = element.size.width + 'px';
-                      elDiv.style.height = element.size.height + 'px';
-                      elDiv.style.fontSize = (element.style.fontSize || 14) + 'px';
-                      elDiv.style.fontFamily = element.style.fontFamily || 'Arial';
-                      elDiv.style.color = element.style.color || '#000';
-                      Object.assign(elDiv.style, {
-                        fontWeight: element.style.fontWeight || 'normal',
-                        fontStyle: element.style.fontStyle || 'normal',
-                        textDecoration: element.style.textDecoration || 'none',
-                        textAlign: element.style.textAlign || 'left',
-                        lineHeight: element.style.lineHeight ? String(element.style.lineHeight) : '1.5',
-                        zIndex: String(element.zIndex),
-                        background: (element as any).backgroundColor || 'transparent',
-                        overflow: 'hidden',
-                        whiteSpace: 'pre-wrap',
-                      });
-                      let content = element.content;
-                      if (content) {
-                        content = content
-                          .replace(/\[NOMBRE DEL PACIENTE\]/g, patientName || '')
-                          .replace(/\[FECHA\]/g, format(new Date(), 'dd/MM/yyyy', { locale: es }))
-                          .replace(/\[DIAGNÓSTICO\]/g, diagnosis || '')
-                          .replace(/\[NOTAS E INSTRUCCIONES ESPECIALES\]/g, notes || '')
-                          .replace(/\[NOMBRE DEL MÉDICO\]/g, doctorProfile?.full_name || '')
-                          .replace(/\[ESPECIALIDAD\]/g, doctorProfile?.specialty || '')
-                          .replace(/\[NÚMERO\]/g, doctorProfile?.medical_license || '')
-                          .replace(/\[NOMBRE DE LA CLÍNICA\]/g, doctorProfile?.clinic?.name || '')
-                          .replace(/\[DIRECCIÓN\]/g, doctorProfile?.clinic?.address || '')
-                          .replace(/\[TELÉFONO\]/g, doctorProfile?.clinic?.phone || '')
-                          .replace(/\[EMAIL\]/g, doctorProfile?.clinic?.email || '');
-                        if (content.includes('[MEDICAMENTO]')) {
-                          let meds = '';
-                          medications
-                            .filter((m) => m.name)
-                            .forEach((med, idx) => {
-                              meds += `${idx + 1}. ${med.name} - ${med.dosage}\n   Frecuencia: ${med.frequency}\n   Duración: ${med.duration}\n   Instrucciones: ${med.instructions || ''}\n`;
-                            });
-                          content = content.replace(/\[MEDICAMENTO\][^[]*/g, meds);
-                        }
+                            ? { top: '1.5in', right: '1.5in', bottom: '1.5in', left: '1.5in' }
+                            : { top: '1in', right: '1in', bottom: '1in', left: '1in' }
+                        : (margins as { top: string; right: string; bottom: string; left: string });
+                    await PrescriptionPrintService.printPrescription(
+                      layout as import('@/utils/prescriptionPrint').PrintLayout,
+                      {
+                        patientName: patientName || 'Por seleccionar',
+                        doctorName: doctorProfile?.full_name || doctorProfileFallback?.full_name || 'Dr.',
+                        doctorLicense: doctorProfile?.medical_license || doctorProfileFallback?.medical_license || '',
+                        doctorSpecialty: doctorProfile?.specialty || doctorProfileFallback?.specialty || '',
+                        clinicName: doctorProfile?.clinic?.name || doctorProfileFallback?.clinic?.name || doctorProfileFallback?.clinic_name || 'Clínica',
+                        clinicAddress: doctorProfile?.clinic?.address || doctorProfileFallback?.clinic?.address || doctorProfileFallback?.clinic_address || '',
+                        clinicPhone: doctorProfile?.clinic?.phone || doctorProfileFallback?.clinic?.phone || doctorProfileFallback?.clinic_phone || '',
+                        clinicEmail: doctorProfile?.clinic?.email || doctorProfileFallback?.clinic?.email || doctorProfileFallback?.clinic_email || '',
+                        diagnosis,
+                        medications: medications.filter((m) => m.name),
+                        notes,
+                        date: format(new Date(), 'dd/MM/yyyy', { locale: es }),
+                      },
+                      {
+                        pageSize: rawPaper === 'a4' ? 'A4' : rawPaper === 'legal' ? 'Legal' : 'Letter',
+                        orientation: orientation as 'portrait' | 'landscape',
+                        margins: marginObj,
                       }
-                      elDiv.textContent = content as string;
-                      container.appendChild(elDiv);
-                    }
-                    printWindow.document.write(
-                      `<!DOCTYPE html><html><head><title>Vista Previa Receta</title><style>@media print { @page { size: ${pageSize} ${orientation}; margin: ${marginStr}; } body { margin: 0; } } body{margin:0;padding:0;background:#fff;} .canvas{position:relative; margin: 0 auto;}</style></head><body><div class="canvas">${container.innerHTML}</div></body></html>`
                     );
-                    printWindow.document.close();
-                    setTimeout(() => printWindow.print(), 250);
                   }}
                   className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded text-gray-200 hover:text-cyan-300"
                   title="Imprimir vista previa"
@@ -776,13 +743,13 @@ export function PrescriptionForm({
                     layout={visualTemplate}
                     prescriptionData={{
                       patientName: patientName || 'Por seleccionar',
-                      doctorName: doctorProfile?.full_name || 'Dr. (sin nombre)',
-                      doctorLicense: doctorProfile?.medical_license || '',
-                      doctorSpecialty: doctorProfile?.specialty || '',
-                      clinicName: doctorProfile?.clinic?.name || 'Clínica',
-                      clinicAddress: doctorProfile?.clinic?.address || '',
-                      clinicPhone: doctorProfile?.clinic?.phone || '',
-                      clinicEmail: doctorProfile?.clinic?.email || '',
+                      doctorName: doctorProfile?.full_name || doctorProfileFallback?.full_name || 'Dr. (sin nombre)',
+                      doctorLicense: doctorProfile?.medical_license || doctorProfileFallback?.medical_license || '',
+                      doctorSpecialty: doctorProfile?.specialty || doctorProfileFallback?.specialty || '',
+                      clinicName: doctorProfile?.clinic?.name || doctorProfileFallback?.clinic?.name || doctorProfileFallback?.clinic_name || 'Clínica',
+                      clinicAddress: doctorProfile?.clinic?.address || doctorProfileFallback?.clinic?.address || doctorProfileFallback?.clinic_address || '',
+                      clinicPhone: doctorProfile?.clinic?.phone || doctorProfileFallback?.clinic?.phone || doctorProfileFallback?.clinic_phone || '',
+                      clinicEmail: doctorProfile?.clinic?.email || doctorProfileFallback?.clinic?.email || doctorProfileFallback?.clinic_email || '',
                       diagnosis,
                       medications: medications.filter((m) => m.name),
                       notes,

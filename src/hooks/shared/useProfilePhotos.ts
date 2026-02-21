@@ -166,7 +166,7 @@ export const useProfilePhotos = () => {
     }
   }, [user]);
 
-  // Función para subir icono de receta
+  // Función para subir icono de receta (bucket unificado: clinic-assets)
   const uploadPrescriptionIcon = useCallback(async (file: File): Promise<PhotoUploadResult> => {
     if (!user) {
       return { url: null, error: 'Usuario no autenticado' };
@@ -187,40 +187,40 @@ export const useProfilePhotos = () => {
         throw new Error('Solo los doctores pueden subir iconos de recetas');
       }
 
-      // Validar tamaño del archivo (2MB máximo para iconos)
-      if (file.size > 2 * 1024 * 1024) {
-        throw new Error('El icono debe ser menor a 2MB');
+      // Validar tamaño (5MB como clinic logo para consistencia)
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('El icono debe ser menor a 5MB');
       }
 
-      // Validar tipo de archivo
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
       if (!allowedTypes.includes(file.type)) {
         throw new Error('Formato de icono no válido. Use JPG, PNG, WebP o SVG');
       }
 
-      // Crear nombre del archivo
-      const fileExt = file.type === 'image/svg+xml' ? 'svg' : file.name.split('.').pop()?.toLowerCase();
-      const fileName = `icon.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
+      const fileExt = file.type === 'image/svg+xml' ? 'svg' : file.name.split('.').pop()?.toLowerCase() || 'png';
+      const fileName = `prescription-logo.${fileExt}`;
 
-      // Subir archivo a Supabase Storage
+      // Resolve path: clinic-assets/{clinicId}/prescription-logo.* or clinic-assets/{userId}/prescription-logo.*
+      let filePath: string;
+      const { data: membership } = await supabase
+        .from('clinic_user_relationships')
+        .select('clinic_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      const clinicId = (membership as { clinic_id?: string } | null)?.clinic_id;
+      filePath = clinicId ? `${clinicId}/${fileName}` : `${user.id}/${fileName}`;
+
       const { error: uploadError } = await supabase.storage
-        .from('prescription-icons')
-        .upload(filePath, file, { 
-          upsert: true,
-          contentType: file.type 
-        });
+        .from('clinic-assets')
+        .upload(filePath, file, { upsert: true, contentType: file.type });
 
       if (uploadError) throw uploadError;
 
-      // Obtener URL pública
-      const { data: urlData } = supabase.storage
-        .from('prescription-icons')
-        .getPublicUrl(filePath);
-
+      const { data: urlData } = supabase.storage.from('clinic-assets').getPublicUrl(filePath);
       const iconUrl = urlData.publicUrl;
 
-      // Save URL in additional_info JSONB (prescription_icon_url column doesn't exist on profiles)
       const { data: currentProfile } = await supabase
         .from('profiles')
         .select('additional_info')
@@ -237,7 +237,6 @@ export const useProfilePhotos = () => {
         .eq('id', user.id);
 
       return { url: iconUrl, error: null };
-
     } catch (err: any) {
       const errorMessage = err.message || 'Error al subir el icono';
       setError(errorMessage);
@@ -274,45 +273,60 @@ export const useProfilePhotos = () => {
     }
   }, [user]);
 
-  // Función para obtener URL de icono de receta
-  const getPrescriptionIconUrl = useCallback(async (userId?: string): Promise<string | null> => {
+  // Función para obtener URL de icono de receta (clinic-assets primero, fallback prescription-icons)
+  const getPrescriptionIconUrl = useCallback(async (userId?: string, clinicId?: string): Promise<string | null> => {
     const targetUserId = userId || user?.id;
     if (!targetUserId) return null;
 
     try {
-      // Verificar si el bucket existe primero
-      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-      if (bucketsError || !buckets?.some(bucket => bucket.name === 'prescription-icons')) {
-        // Si el bucket no existe, no intentar verificar archivos
-        return null;
-      }
-
-      // Intentar diferentes extensiones
       const extensions = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+      const fileName = 'prescription-logo';
 
-      for (const ext of extensions) {
-        const filePath = `${targetUserId}/icon.${ext}`;
-
-        try {
-          // Verificar si el archivo existe en el bucket
-          const { data: fileExists, error: fileError } = await supabase.storage
-            .from('prescription-icons')
-            .list(targetUserId);
-
-          if (!fileError && fileExists?.some(file => file.name === `icon.${ext}`)) {
+      // 1. Buscar en clinic-assets (bucket unificado)
+      const searchFolders = clinicId ? [clinicId] : [targetUserId];
+      for (const folder of searchFolders) {
+        const { data: files, error } = await supabase.storage
+          .from('clinic-assets')
+          .list(folder);
+        if (!error && files?.length) {
+          const logoFile = files.find((f) =>
+            /^prescription-logo\.(png|jpg|jpeg|webp|svg)$/i.test(f.name)
+          );
+          if (logoFile) {
             const { data } = supabase.storage
-              .from('prescription-icons')
-              .getPublicUrl(filePath);
+              .from('clinic-assets')
+              .getPublicUrl(`${folder}/${logoFile.name}`);
             return data.publicUrl;
           }
-        } catch {
-          continue;
+        }
+      }
+
+      // 2. Fallback: profile additional_info
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('additional_info')
+        .eq('id', targetUserId)
+        .single();
+      const addInfo = profile?.additional_info as Record<string, unknown> | null;
+      if (addInfo?.prescription_icon_url) return addInfo.prescription_icon_url as string;
+
+      // 3. Legacy: prescription-icons (migración suave)
+      const { data: buckets } = await supabase.storage.listBuckets();
+      if (buckets?.some((b) => b.name === 'prescription-icons')) {
+        const { data: files } = await supabase.storage
+          .from('prescription-icons')
+          .list(targetUserId);
+        const legacyFile = files?.find((f) => /^icon\.(png|jpg|jpeg|webp|svg)$/i.test(f.name));
+        if (legacyFile) {
+          const { data } = supabase.storage
+            .from('prescription-icons')
+            .getPublicUrl(`${targetUserId}/${legacyFile.name}`);
+          return data.publicUrl;
         }
       }
 
       return null;
-    } catch (err) {
-      // Error log removed for security;
+    } catch {
       return null;
     }
   }, [user]);
@@ -379,40 +393,45 @@ export const useProfilePhotos = () => {
     try {
       setError(null);
 
-      // Listar todos los archivos del usuario en el bucket
-      const { data: files, error: listError } = await supabase.storage
-        .from('prescription-icons')
-        .list(user.id);
+      const { data: membership } = await supabase
+        .from('clinic_user_relationships')
+        .select('clinic_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      const clinicId = (membership as { clinic_id?: string } | null)?.clinic_id;
 
-      if (listError) throw listError;
-
-      if (files && files.length > 0) {
-        // Eliminar todos los archivos de icono del usuario
-        const filesToDelete = files.map(file => `${user.id}/${file.name}`);
-        
-        const { error: deleteError } = await supabase.storage
-          .from('prescription-icons')
-          .remove(filesToDelete);
-
-        if (deleteError) throw deleteError;
-
-        // Remove URL from additional_info JSONB
-        const { data: currentProfile } = await supabase
-          .from('profiles')
-          .select('additional_info')
-          .eq('id', user.id)
-          .single();
-
-        const additionalInfo = (currentProfile?.additional_info as Record<string, unknown>) || {};
-        const { prescription_icon_url: _removed, ...restInfo } = additionalInfo;
-        await supabase
-          .from('profiles')
-          .update({
-            additional_info: restInfo,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
+      for (const folder of clinicId ? [clinicId, user.id] : [user.id]) {
+        const { data: files } = await supabase.storage.from('clinic-assets').list(folder);
+        const logoFiles = files?.filter((f) => /^prescription-logo\.(png|jpg|jpeg|webp|svg)$/i.test(f.name));
+        if (logoFiles?.length) {
+          const paths = logoFiles.map((f) => `${folder}/${f.name}`);
+          await supabase.storage.from('clinic-assets').remove(paths);
+        }
       }
+
+      const { data: legacyFiles } = await supabase.storage.from('prescription-icons').list(user.id);
+      if (legacyFiles?.length) {
+        const paths = legacyFiles.map((f) => `${user.id}/${f.name}`);
+        await supabase.storage.from('prescription-icons').remove(paths);
+      }
+
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('additional_info')
+        .eq('id', user.id)
+        .single();
+
+      const additionalInfo = (currentProfile?.additional_info as Record<string, unknown>) || {};
+      const { prescription_icon_url: _removed, ...restInfo } = additionalInfo;
+      await supabase
+        .from('profiles')
+        .update({
+          additional_info: restInfo,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
 
       return { success: true, error: null };
 

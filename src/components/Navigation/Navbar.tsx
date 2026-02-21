@@ -47,6 +47,12 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
         href: '/dashboard'
       },
       {
+        id: 'notifications',
+        label: 'Notificaciones',
+        icon: Bell,
+        href: '/notificaciones'
+      },
+      {
         id: 'profile',
         label: 'Mi Perfil',
         icon: User,

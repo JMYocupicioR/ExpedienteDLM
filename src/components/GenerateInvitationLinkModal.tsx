@@ -130,6 +130,17 @@ const invitationTemplates: InvitationTemplate[] = [
       },
     ],
   },
+  {
+    id: 'questionnaire',
+    name: 'Aplicación de cuestionarios',
+    description: 'Envío de escalas y cuestionarios seleccionados. Sin historial médico.',
+    allowedSections: [],
+    createConversation: false,
+    messageTemplate: 'Tu médico te ha enviado cuestionarios clínicos para completar. Por favor respóndelos hoy.',
+    expiryAmount: 7,
+    expiryUnit: 'days',
+    customTasks: [],
+  },
 ];
 
 export default function GenerateInvitationLinkModal({ isOpen, onClose, preselectedPatientId }: GenerateInvitationLinkModalProps) {
@@ -476,17 +487,23 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
             )}
           </div>
 
-          <div>
-            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><CheckSquare className="h-4 w-4" /> Historial médico a completar</div>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              {sectionOptions.map(s => (
-                <label key={s.id} className="flex items-center space-x-2 bg-gray-800/60 border border-gray-700 rounded p-2">
-                  <input type="checkbox" checked={allowedSections.includes(s.id)} onChange={() => toggleSection(s.id)} />
-                  <span className="text-sm text-gray-200">{s.label}</span>
-                </label>
-              ))}
+          {activeTemplate === 'questionnaire' ? (
+            <div className="p-3 bg-cyan-900/20 border border-cyan-700/50 rounded-lg text-cyan-200 text-sm">
+              Esta plantilla no solicita historial médico, solo escalas.
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><CheckSquare className="h-4 w-4" /> Historial médico a completar</div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {sectionOptions.map(s => (
+                  <label key={s.id} className="flex items-center space-x-2 bg-gray-800/60 border border-gray-700 rounded p-2">
+                    <input type="checkbox" checked={allowedSections.includes(s.id)} onChange={() => toggleSection(s.id)} />
+                    <span className="text-sm text-gray-200">{s.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><ListChecks className="h-4 w-4" /> Escalas médicas (ordenadas por nombre)</div>
@@ -654,7 +671,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
 
           <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
             <button
-              disabled={!canGenerate || generating || allowedSections.length === 0}
+              disabled={!canGenerate || generating || (allowedSections.length === 0 && selectedScaleIds.length === 0)}
               onClick={handleGenerate}
               className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded disabled:opacity-50 flex items-center"
             >

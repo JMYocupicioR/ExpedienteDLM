@@ -22,6 +22,7 @@ import {
   type PrescriptionTemplate
 } from '@/lib/medicalConfig';
 import { type PrescriptionTemplateData } from '@/lib/prescriptionTemplates';
+import PrescriptionPrintService from '@/utils/prescriptionPrint';
 
 interface Position {
   x: number;
@@ -63,7 +64,11 @@ interface PrescriptionData {
   patientName: string;
   doctorName: string;
   doctorLicense: string;
+  doctorSpecialty?: string;
   clinicName: string;
+  clinicAddress?: string;
+  clinicPhone?: string;
+  clinicEmail?: string;
   diagnosis: string;
   medications: Array<{
     name: string;
@@ -426,11 +431,15 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
 
 
   const previewData: PrescriptionData = React.useMemo(() => ({
-    patientName: 'Nombre del Paciente de Ejemplo',
-    doctorName: 'Dr. Nombre de Ejemplo',
-    doctorLicense: '12345678',
-    clinicName: 'Clínica de Ejemplo',
-    diagnosis: 'Diagnóstico de ejemplo para visualización.',
+    patientName: initialData?.patientName || 'Nombre del Paciente de Ejemplo',
+    doctorName: initialData?.doctorName || 'Dr. Nombre de Ejemplo',
+    doctorLicense: initialData?.doctorLicense || '12345678',
+    doctorSpecialty: initialData?.doctorSpecialty,
+    clinicName: initialData?.clinicName || 'Clínica de Ejemplo',
+    clinicAddress: initialData?.clinicAddress,
+    clinicPhone: initialData?.clinicPhone,
+    clinicEmail: initialData?.clinicEmail,
+    diagnosis: initialData?.diagnosis || 'Diagnóstico de ejemplo para visualización.',
     medications: [
       {
         name: 'Medicamento A',
@@ -447,14 +456,14 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         instructions: 'Evitar la exposición al sol.',
       },
     ],
-    notes: 'Notas adicionales y recomendaciones para el paciente.',
-    date: new Date().toLocaleDateString(),
-    patientAge: '30',
-    patientWeight: '70kg',
-    patientAllergies: 'Ninguna conocida',
-    followUpDate: '01/01/2025',
-    prescriptionId: `RX-PREVIEW`
-  }), []);
+    notes: initialData?.notes ?? 'Notas adicionales y recomendaciones para el paciente.',
+    date: initialData?.date ?? new Date().toLocaleDateString(),
+    patientAge: initialData?.patientAge ?? '30',
+    patientWeight: initialData?.patientWeight ?? '70kg',
+    patientAllergies: initialData?.patientAllergies ?? 'Ninguna conocida',
+    followUpDate: initialData?.followUpDate ?? '01/01/2025',
+    prescriptionId: initialData?.prescriptionId ?? 'RX-PREVIEW'
+  }), [initialData]);
 
 
   // Estado de la interfaz
@@ -595,13 +604,64 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     const template = getTemplateById(templateId);
     if (!template) return;
 
-    setElements(template.elements);
-    setBackgroundColor(template.canvasSettings.backgroundColor);
-    setBackgroundImage(template.canvasSettings.backgroundImage || null);
-    setCanvasSize(template.canvasSettings.canvasSize);
-    
-    // Limpiar selección
+    // Confirm if canvas already has content
+    if (elements.length > 0) {
+      const confirmed = window.confirm(
+        `¿Deseas reemplazar el canvas actual con la plantilla "${template.name}"?\n\nSe perderán los elementos no guardados.`
+      );
+      if (!confirmed) return;
+    }
+
+    // Inject doctor profile data into placeholders
+    const doctorName = initialData?.doctorName ?? '';
+    const doctorLicense = initialData?.doctorLicense ?? '';
+    const doctorSpecialty = initialData?.doctorSpecialty ?? '';
+    const clinicName = initialData?.clinicName ?? '';
+    const clinicAddress = initialData?.clinicAddress ?? '';
+    const clinicPhone = initialData?.clinicPhone ?? '';
+    const clinicEmail = initialData?.clinicEmail ?? '';
+    const currentLogoPreview = logoPreview;
+
+    const replacePlaceholders = (text: string): string =>
+      text
+        .replace(/\{\{doctorName\}\}/g, doctorName || 'Dr. (sin nombre)')
+        .replace(/\{\{doctorLicense\}\}/g, doctorLicense || '—')
+        .replace(/\{\{doctorSpecialty\}\}/g, doctorSpecialty || 'Especialidad')
+        .replace(/\{\{clinicName\}\}/g, clinicName || 'Nombre de la Clínica')
+        .replace(/\{\{clinicAddress\}\}/g, clinicAddress || 'Dirección de la Clínica')
+        .replace(/\{\{clinicPhone\}\}/g, clinicPhone || 'Teléfono')
+        .replace(/\{\{clinicEmail\}\}/g, clinicEmail || 'correo@clinica.com');
+
+    const processedElements = (template.elements as Element[]).map((el) => {
+      const processed: Element = {
+        ...el,
+        // Unique IDs to avoid conflicts with any prior state
+        id: `${el.id}-${Date.now()}`,
+        content: replacePlaceholders(el.content),
+      };
+      // If this is a logo element, use the profile logo if available
+      if (el.type === 'logo' && currentLogoPreview) {
+        processed.content = currentLogoPreview;
+      }
+      return processed;
+    });
+
+    // Apply canvas settings
+    const cs = template.canvasSettings;
+    setBackgroundColor(cs.backgroundColor);
+    setBackgroundImage(cs.backgroundImage ?? null);
+    setCanvasSize(cs.canvasSize);
+
+    // Apply print settings
+    const ps = template.printSettings;
+    setPaperSize(ps.paperSize);
+    setOrientation(ps.orientation);
+    setMargins(ps.margins);
+
+    // Set elements and clear selection
+    setElements(processedElements);
     setSelectedElement(null);
+    setSelectedElements([]);
   };
 
   const getFilteredTemplates = () => {
@@ -1068,7 +1128,11 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   }, [selectedElements, elements, updateElement]);
 
   // ================= HERRAMIENTAS DE MEDICIÓN =================
-  // Generar QR Code
+  // Keep a stable ref to elements so generateQRCode doesn't recreate on every render
+  const elementsRef = useRef(elements);
+  useEffect(() => { elementsRef.current = elements; }, [elements]);
+
+  // Generar QR Code – stable callback, reads elements via ref
   const generateQRCode = useCallback(async () => {
     try {
       const qrData = {
@@ -1080,8 +1144,8 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       const qrCodeDataURL = await QRCodeLib.toDataURL(JSON.stringify(qrData));
       setQrCodeUrl(qrCodeDataURL);
       
-      // Actualizar elemento QR si existe
-      const qrElement = elements.find(el => el.type === 'qr');
+      // Update QR element if present (via ref to avoid dependency on elements state)
+      const qrElement = elementsRef.current.find(el => el.type === 'qr');
       if (qrElement) {
         updateElement(qrElement.id, { content: qrCodeDataURL });
       }
@@ -1092,20 +1156,22 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
         severity: 'error'
       }]);
     }
-  }, [previewData, elements, updateElement]);
+  // previewData and updateElement are stable enough; elements accessed via ref
+  }, [previewData, updateElement]);
 
   const handleSave = useCallback(async () => {
-    const prescriptionStyleData = {
+    const rawPaper = (paperSize || 'a4').toString().toLowerCase();
+    const prescriptionStyleData: PrescriptionTemplateData = {
       template_elements: elements,
       canvas_settings: {
         backgroundColor,
-        backgroundImage,
+        backgroundImage: backgroundImage ?? null,
         canvasSize,
         zoom
       },
       print_settings: {
-        paperSize,
-        orientation,
+        paperSize: (rawPaper === 'a4' ? 'a4' : rawPaper === 'legal' ? 'legal' : 'letter') as 'a4' | 'letter' | 'legal',
+        orientation: (orientation || 'portrait').toLowerCase() as 'portrait' | 'landscape',
         margins
       },
       // Compatibilidad con consumidores que leen en nivel raíz
@@ -1114,15 +1180,19 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
       margins
     };
 
-    const isValid = validateCompleteForm({
-      patient_id: previewData.patientName, // Fallback if no real ID
-      medications: previewData.medications as any,
-      diagnosis: previewData.diagnosis,
-      created_at: previewData.date,
-      expires_at: previewData.date
-    });
+    const validation = validateCompleteForm(
+      {
+        patient_id: (previewData as { patientId?: string }).patientId ?? previewData.patientName,
+        medications: previewData.medications ?? [],
+        diagnosis: previewData.diagnosis,
+        created_at: previewData.date,
+        expires_at: previewData.date
+      },
+      'prescription',
+      {}
+    );
 
-    if (!isValid && showValidation) {
+    if (!validation.isValid && showValidation) {
       setValidationErrors(prev => [...prev, {
         field: 'form',
         message: 'Por favor complete todos los campos requeridos.',
@@ -1308,7 +1378,15 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   // Efecto para cargar datos al inicio
   useEffect(() => {
     if (existingTemplate && existingTemplate.template_elements) {
-      setElements(existingTemplate.template_elements);
+      let loadedElements = existingTemplate.template_elements;
+      // Sync layout-level logo_url into logo element content for persistence
+      if (existingTemplate.logo_url) {
+        loadedElements = loadedElements.map(el =>
+          el.type === 'logo' ? { ...el, content: existingTemplate.logo_url! } : el
+        );
+        setLogoPreview(existingTemplate.logo_url);
+      }
+      setElements(loadedElements);
       if (existingTemplate.canvas_settings) {
         setBackgroundColor(existingTemplate.canvas_settings.backgroundColor || '#ffffff');
         setBackgroundImage(existingTemplate.canvas_settings.backgroundImage || null);
@@ -1343,9 +1421,14 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
     
     // Cargar todas las plantillas al inicio
     setTemplates(getTemplatesByCategory('all'));
-    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingTemplate]); // generateQRCode is intentionally excluded to avoid infinite re-render loop
+
+  // Generate QR once on mount (after initial data is ready)
+  useEffect(() => {
     generateQRCode();
-  }, [existingTemplate, generateQRCode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run only once on mount
 
   // Efecto para validación automática
   useEffect(() => {
@@ -1362,57 +1445,58 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
   // Funciones de exportación y acciones
 
 
-  const handlePrint = () => {
-    const printContent = canvasRef.current?.innerHTML;
-    if (!printContent) return;
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    // Calcular dimensiones del canvas según papel y orientación
-    const getCanvasSizePx = (paper: string, orient: string) => {
-      const sizes: Record<string, { w: number; h: number }> = {
-        a4: { w: 794, h: 1123 }, // 210x297mm @96dpi aprox
-        letter: { w: 816, h: 1056 }, // 8.5x11in @96dpi
-        legal: { w: 816, h: 1344 } // 8.5x14in @96dpi
-      };
-      const key = (paper || 'a4').toLowerCase();
-      const base = sizes[key] || sizes.a4;
-      const isLandscape = (orient || 'portrait').toLowerCase() === 'landscape';
-      return isLandscape ? { w: base.h, h: base.w } : base;
+  const handlePrint = async () => {
+    const layout = {
+      template_elements: elements.map((el) => ({
+        ...el,
+        isVisible: el.isVisible ?? true,
+        isLocked: el.isLocked ?? false,
+        position: el.position,
+        size: el.size,
+        content: el.content,
+        style: el.style,
+        zIndex: el.zIndex ?? 1,
+        type: el.type
+      })),
+      canvas_settings: {
+        backgroundColor: backgroundColor ?? '#ffffff',
+        backgroundImage: backgroundImage ?? null,
+        canvasSize: canvasSize || { width: 794, height: 1123 },
+        pageSize: paperSize || 'A4',
+        margin: typeof margins === 'object' ? `${margins.top} ${margins.right} ${margins.bottom} ${margins.left}` : (margins || '20mm'),
+        showGrid: false,
+        zoom: zoom ?? 1
+      }
     };
-    const sizePx = getCanvasSizePx(paperSize, orientation);
-    const pageSize = paperSize.toLowerCase() === 'a4' ? 'A4' : paperSize.toLowerCase() === 'legal' ? 'Legal' : 'Letter';
-    const pageMargin = `${margins.top} ${margins.right} ${margins.bottom} ${margins.left}`;
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Receta Médica</title>
-          <style>
-            body { margin: 0; padding: 0; background: #fff; }
-            .canvas { 
-              width: ${sizePx.w}px; 
-              height: ${sizePx.h}px; 
-              position: relative;
-              background: ${backgroundColor};
-              ${backgroundImage ? `background-image: url(${backgroundImage}); background-size: cover;` : ''}
-            }
-            @media print {
-              @page { size: ${pageSize} ${orientation}; margin: ${pageMargin}; }
-              body { margin: 0; background: #fff; }
-              .canvas { page-break-inside: avoid; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="canvas">${printContent}</div>
-        </body>
-      </html>
-    `);
-    
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 250);
+    const marginStr = typeof margins === 'object' ? margins : { top: '1in', right: '1in', bottom: '1in', left: '1in' };
+    const pageSizeOpt = paperSize?.toLowerCase() === 'legal' ? 'Legal' : paperSize?.toLowerCase() === 'letter' ? 'Letter' : 'A4';
+    const orientOpt = (orientation || 'portrait').toLowerCase() as 'portrait' | 'landscape';
+    await PrescriptionPrintService.printPrescription(
+      layout,
+      {
+        patientName: previewData.patientName,
+        doctorName: previewData.doctorName,
+        doctorLicense: previewData.doctorLicense,
+        doctorSpecialty: previewData.doctorSpecialty,
+        clinicName: previewData.clinicName,
+        clinicAddress: previewData.clinicAddress,
+        clinicPhone: previewData.clinicPhone,
+        clinicEmail: previewData.clinicEmail,
+        diagnosis: previewData.diagnosis,
+        medications: previewData.medications || [],
+        notes: previewData.notes,
+        date: previewData.date,
+        patientAge: previewData.patientAge,
+        patientWeight: previewData.patientWeight,
+        followUpDate: previewData.followUpDate,
+        prescriptionId: previewData.prescriptionId
+      },
+      {
+        pageSize: pageSizeOpt,
+        orientation: orientOpt,
+        margins: typeof marginStr === 'object' ? marginStr : undefined
+      }
+    );
   };
 
   const handleBackgroundImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1714,32 +1798,62 @@ const VisualPrescriptionEditor: React.FC<VisualPrescriptionEditorProps> = ({
                     </select>
                   </div>
                   
-                  <div className="max-h-48 overflow-y-auto space-y-2">
-                    {getFilteredTemplates().map((template) => (
-                      <div
-                        key={template.id}
-                        className="p-2 bg-gray-600 rounded hover:bg-gray-500 cursor-pointer"
-                        onClick={() => loadTemplate(template.id)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="text-white text-sm font-medium">{template.name}</h4>
-                            <p className="text-gray-400 text-xs">{template.description}</p>
+                  <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                    {getFilteredTemplates().map((template) => {
+                      const hasLogo = template.elements.some((el: any) => el.type === 'logo');
+                      const hasQR = template.elements.some((el: any) => el.type === 'qr');
+                      const elementCount = template.elements.length;
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          className="w-full text-left p-3 bg-gray-600 rounded-lg hover:bg-gray-500 active:bg-gray-400 transition-colors border border-transparent hover:border-cyan-500/40 group"
+                          onClick={() => loadTemplate(template.id)}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                {template.category === 'pediatric' && <Heart className="h-3.5 w-3.5 text-pink-400 shrink-0" />}
+                                {template.category === 'geriatric' && <User className="h-3.5 w-3.5 text-orange-400 shrink-0" />}
+                                {template.category === 'specialist' && <Stethoscope className="h-3.5 w-3.5 text-blue-400 shrink-0" />}
+                                {template.category === 'emergency' && <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+                                {template.category === 'general' && <FileText className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                                <h4 className="text-white text-sm font-semibold truncate group-hover:text-cyan-300 transition-colors">
+                                  {template.name}
+                                </h4>
+                              </div>
+                              <p className="text-gray-400 text-xs leading-snug">{template.description}</p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <span className="text-cyan-500 text-xs font-medium">{elementCount} elem.</span>
+                            </div>
                           </div>
-                          <div className="flex items-center">
-                            {template.category === 'pediatric' && <Heart className="h-4 w-4 text-pink-400" />}
-                            {template.category === 'geriatric' && <User className="h-4 w-4 text-orange-400" />}
-                            {template.category === 'specialist' && <Stethoscope className="h-4 w-4 text-blue-400" />}
-                            {template.category === 'emergency' && <AlertTriangle className="h-4 w-4 text-red-400" />}
-                            {template.category === 'general' && <FileText className="h-4 w-4 text-gray-400" />}
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-300">
+                              <FileText className="h-2.5 w-2.5" />
+                              {template.printSettings?.paperSize?.toUpperCase() ?? 'A4'}
+                            </span>
+                            {hasLogo && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-300">
+                                <ImageIcon className="h-2.5 w-2.5" />
+                                Logo
+                              </span>
+                            )}
+                            {hasQR && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-300">
+                                <QrCode className="h-2.5 w-2.5" />
+                                QR
+                              </span>
+                            )}
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
-                  
-                  <div className="text-xs text-gray-400 pt-2 border-t border-gray-600">
-                    💡 Haz clic en una plantilla para cargarla en el canvas
+
+                  <div className="text-xs text-gray-400 pt-2 border-t border-gray-600 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-yellow-400" />
+                    Los datos del médico se aplican automáticamente al cargar
                   </div>
                 </div>
               )}

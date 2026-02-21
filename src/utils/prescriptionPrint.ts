@@ -7,7 +7,11 @@ interface PrescriptionData {
   patientName?: string;
   doctorName?: string;
   doctorLicense?: string;
+  doctorSpecialty?: string;
   clinicName?: string;
+  clinicAddress?: string;
+  clinicPhone?: string;
+  clinicEmail?: string;
   diagnosis?: string;
   medications?: Array<{
     name: string;
@@ -24,12 +28,12 @@ interface PrescriptionData {
   prescriptionId?: string;
 }
 
-interface PrintLayout {
+export interface PrintLayout {
   template_elements: LayoutElement[];
   canvas_settings: CanvasSettings;
 }
 
-interface PrintOptions {
+export interface PrintOptions {
   pageSize?: 'A4' | 'Letter' | 'Legal';
   orientation?: 'portrait' | 'landscape';
   margins?: {
@@ -44,6 +48,8 @@ interface PrintOptions {
   includeQRCode?: boolean;
   includeDigitalSignature?: boolean;
   watermarkText?: string;
+  /** Pre-generated QR data URLs by element id for qr elements */
+  qrDataUrls?: Record<string, string>;
 }
 
 export class PrescriptionPrintService {
@@ -70,8 +76,11 @@ export class PrescriptionPrintService {
   ): string {
     const opts = { ...this.defaultOptions, ...options };
 
-    // Generate the prescription content using the renderer
-    const prescriptionContent = this.renderPrescriptionContent(layout, prescriptionData);
+    const prescriptionContent = this.renderPrescriptionContent(
+      layout,
+      prescriptionData,
+      opts.qrDataUrls
+    );
 
     const css = this.generatePrintCSS(layout.canvas_settings, opts);
 
@@ -92,12 +101,25 @@ export class PrescriptionPrintService {
           ${opts.watermarkText ? this.generateWatermark(opts.watermarkText) : ''}
         </div>
         <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-              window.close();
-            }, 250);
-          }
+          (function() {
+            function waitForImages(cb) {
+              var imgs = document.querySelectorAll('.print-container img');
+              if (!imgs.length) { cb(); return; }
+              var left = imgs.length;
+              imgs.forEach(function(img) {
+                if (img.complete) { left--; if (left===0) cb(); }
+                else img.onload = img.onerror = function() { left--; if (left===0) cb(); };
+              });
+            }
+            window.onload = function() {
+              waitForImages(function() {
+                setTimeout(function() {
+                  window.print();
+                  window.close();
+                }, 100);
+              });
+            };
+          })();
         </script>
       </body>
       </html>
@@ -106,7 +128,8 @@ export class PrescriptionPrintService {
 
   private static renderPrescriptionContent(
     layout: PrintLayout,
-    prescriptionData: PrescriptionData
+    prescriptionData: PrescriptionData,
+    qrDataUrls?: Record<string, string>
   ): string {
     const elements = layout.template_elements
       .filter(el => el.isVisible)
@@ -114,11 +137,15 @@ export class PrescriptionPrintService {
 
     return elements.map(element => {
       const content = this.replaceTemplateVariables(element.content, prescriptionData);
-      return this.renderElement(element, content);
+      return this.renderElement(element, content, qrDataUrls);
     }).join('');
   }
 
-  private static renderElement(element: LayoutElement, content: string): string {
+  private static renderElement(
+    element: LayoutElement,
+    content: string,
+    qrDataUrls?: Record<string, string>
+  ): string {
     const baseStyle = `
       position: absolute;
       left: ${element.position.x}px;
@@ -142,10 +169,22 @@ export class PrescriptionPrintService {
       case 'separator':
         return `<div style="${baseStyle} height: 1px; background: ${element.borderColor || '#333'}; border: none;"></div>`;
 
-      case 'qr':
+      case 'logo':
+        if (content.startsWith('http')) {
+          return `<div style="${baseStyle} display: flex; align-items: center; justify-content: center;"><img src="${this.escapeHtml(content)}" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain" /></div>`;
+        }
+        return `<div style="${baseStyle} display: flex; align-items: center; justify-content: center; background:#eee; font-size:12px; color:#666;">Logo</div>`;
+
+      case 'qr': {
+        const qrSize = Math.min(element.size.width, element.size.height);
+        const dataUrl = qrDataUrls?.[element.id];
+        if (dataUrl) {
+          return `<div style="${baseStyle} display: flex; align-items: center; justify-content: center;"><img src="${dataUrl}" alt="QR" style="width:${qrSize}px;height:${qrSize}px" /></div>`;
+        }
         return `<div style="${baseStyle} display: flex; align-items: center; justify-content: center;">
-          <div style="width: ${Math.min(element.size.width, element.size.height)}px; height: ${Math.min(element.size.width, element.size.height)}px; background: #f0f0f0; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px;">QR Code</div>
+          <div style="width: ${qrSize}px; height: ${qrSize}px; background: #f0f0f0; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px;">QR</div>
         </div>`;
+      }
 
       case 'date':
         const currentDate = new Date().toLocaleDateString('es-ES', {
@@ -168,7 +207,7 @@ export class PrescriptionPrintService {
         </div>`;
 
       case 'table':
-        const rows = content.split('\\n').map(row => {
+        const rows = content.split(/\n/).map(row => {
           const cells = row.split('|').map(cell =>
             `<td style="border: 1px solid #ccc; padding: 4px; font-size: inherit;">${this.escapeHtml(cell.trim())}</td>`
           ).join('');
@@ -290,25 +329,44 @@ export class PrescriptionPrintService {
   private static replaceTemplateVariables(content: string, data: PrescriptionData): string {
     if (!content) return '';
 
+    const medsFormatted = this.formatMedications(data.medications);
     const variables: Record<string, string> = {
       '{{patientName}}': data.patientName || 'Nombre del Paciente',
       '{{doctorName}}': data.doctorName || 'Dr. Nombre',
       '{{doctorLicense}}': data.doctorLicense || '00000000',
+      '{{doctorSpecialty}}': data.doctorSpecialty || '',
       '{{clinicName}}': data.clinicName || 'Clínica Médica',
+      '{{clinicAddress}}': data.clinicAddress || '',
+      '{{clinicPhone}}': data.clinicPhone || '',
+      '{{clinicEmail}}': data.clinicEmail || '',
       '{{diagnosis}}': data.diagnosis || 'Diagnóstico',
-      '{{medications}}': this.formatMedications(data.medications),
+      '{{medications}}': medsFormatted,
       '{{notes}}': data.notes || '',
       '{{date}}': data.date || new Date().toLocaleDateString('es-ES'),
       '{{patientAge}}': data.patientAge || '',
       '{{patientWeight}}': data.patientWeight || '',
       '{{followUpDate}}': data.followUpDate || '',
-      '{{prescriptionId}}': data.prescriptionId || ''
+      '{{prescriptionId}}': data.prescriptionId || '',
+      '[NOMBRE DEL PACIENTE]': data.patientName || '',
+      '[NOMBRE DEL MÉDICO]': data.doctorName || '',
+      '[ESPECIALIDAD]': data.doctorSpecialty || '',
+      '[NÚMERO]': data.doctorLicense || '',
+      '[NOMBRE DE LA CLÍNICA]': data.clinicName || '',
+      '[DIRECCIÓN]': data.clinicAddress || '',
+      '[TELÉFONO]': data.clinicPhone || '',
+      '[EMAIL]': data.clinicEmail || '',
+      '[DIAGNÓSTICO]': data.diagnosis || '',
+      '[NOTAS E INSTRUCCIONES ESPECIALES]': data.notes || '',
+      '[FECHA]': data.date || new Date().toLocaleDateString('es-ES'),
+      '[NOTAS]': data.notes || '',
     };
 
     let result = content;
-    Object.entries(variables).forEach(([key, value]) => {
-      result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
-    });
+    for (const [key, value] of Object.entries(variables)) {
+      const escapedKey = key.replace(/[{}[\]\\^$.*+?()|]/g, '\\$&');
+      result = result.replace(new RegExp(escapedKey, 'g'), value);
+    }
+    result = result.replace(/\[MEDICAMENTO\][^[]*/g, medsFormatted);
 
     return result;
   }
@@ -323,8 +381,8 @@ export class PrescriptionPrintService {
         med.instructions ? `   Indicaciones: ${med.instructions}` : ''
       ].filter(Boolean);
 
-      return lines.join('\\n');
-    }).join('\\n\\n');
+      return lines.join('\n');
+    }).join('\n\n');
   }
 
   private static escapeHtml(text: string): string {
@@ -333,12 +391,26 @@ export class PrescriptionPrintService {
     return div.innerHTML;
   }
 
-  static printPrescription(
+  static async printPrescription(
     layout: PrintLayout,
     prescriptionData: PrescriptionData,
     options: Partial<PrintOptions> = {}
-  ): void {
-    const html = this.generatePrintHTML(layout, prescriptionData, options);
+  ): Promise<void> {
+    let qrDataUrls = options.qrDataUrls;
+    const qrElements = layout.template_elements?.filter((el) => el.type === 'qr' && el.isVisible) || [];
+    if (qrElements.length > 0 && !qrDataUrls) {
+      try {
+        const QRCode = (await import('qrcode')).default;
+        qrDataUrls = {};
+        for (const el of qrElements) {
+          const value = this.replaceTemplateVariables(el.content, prescriptionData) || prescriptionData.prescriptionId || 'https://deepluxmed.com';
+          qrDataUrls[el.id] = await QRCode.toDataURL(value, { width: Math.min(el.size?.width || 128, 256), margin: 1 });
+        }
+      } catch {
+        qrDataUrls = {};
+      }
+    }
+    const html = this.generatePrintHTML(layout, prescriptionData, { ...options, qrDataUrls });
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {

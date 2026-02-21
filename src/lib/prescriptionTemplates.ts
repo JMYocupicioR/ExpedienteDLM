@@ -79,7 +79,9 @@ export async function getOrCreateTemplateForUser(userId: string): Promise<Prescr
       .select('*')
       .eq('doctor_id', userId)
       .eq('is_default', true)
-      .single();
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (!error && data) {
       const normalized = normalizeFromLayout(data);
@@ -95,8 +97,9 @@ export async function getOrCreateTemplateForUser(userId: string): Promise<Prescr
       .from('prescription_layouts')
       .select('*')
       .eq('is_predefined', true)
+      .order('updated_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (data) {
       const normalized = normalizeFromLayout(data);
@@ -128,28 +131,92 @@ export async function getOrCreateTemplateForUser(userId: string): Promise<Prescr
 export async function saveTemplateForUser(userId: string, template: PrescriptionTemplateData): Promise<PrescriptionTemplateData> {
   const payload = denormalizeTemplate(template);
 
-  // First, unset any existing defaults
+  const layoutPayload = {
+    name: 'Mi plantilla personalizada',
+    template_elements: payload.template_elements || [],
+    canvas_settings: payload.canvas_settings || {},
+    print_settings: payload.print_settings || {},
+    is_default: true,
+    updated_at: new Date().toISOString(),
+    logo_url: template.logo_url ?? null
+  };
+
+  const layoutPayloadWithoutLogo = {
+    name: layoutPayload.name,
+    template_elements: layoutPayload.template_elements,
+    canvas_settings: layoutPayload.canvas_settings,
+    print_settings: layoutPayload.print_settings,
+    is_default: layoutPayload.is_default,
+    updated_at: layoutPayload.updated_at
+  };
+
+  const isMissingLogoColumnError = (error: unknown): boolean => {
+    const msg = (error as { message?: string } | null)?.message?.toLowerCase() || '';
+    return msg.includes('logo_url') && (msg.includes('column') || msg.includes('does not exist'));
+  };
+
+  // Find existing layout for this doctor (before unsetting)
+  const { data: existing } = await supabase
+    .from('prescription_layouts')
+    .select('id')
+    .eq('doctor_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Unset any existing defaults
   await supabase
     .from('prescription_layouts')
     .update({ is_default: false })
     .eq('doctor_id', userId);
 
-  // Upsert the layout
-  const { data, error } = await supabase
-    .from('prescription_layouts')
-    .upsert({
-      doctor_id: userId,
-      name: 'Mi plantilla personalizada',
-      template_elements: payload.template_elements || [],
-      canvas_settings: payload.canvas_settings || {},
-      print_settings: payload.print_settings || {},
-      is_default: true,
-      updated_at: new Date().toISOString()
-    })
-    .select('*')
-    .single();
+  let data;
+  if (existing?.id) {
+    let updateResult = await supabase
+      .from('prescription_layouts')
+      .update(layoutPayload)
+      .eq('id', existing.id)
+      .select('*')
+      .single();
 
-  if (error) throw error;
+    // Backward-compatible fallback while logo_url migration is pending in remote DB
+    if (updateResult.error && isMissingLogoColumnError(updateResult.error)) {
+      updateResult = await supabase
+        .from('prescription_layouts')
+        .update(layoutPayloadWithoutLogo)
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+    }
+
+    if (updateResult.error) throw updateResult.error;
+    data = updateResult.data;
+  } else {
+    let insertResult = await supabase
+      .from('prescription_layouts')
+      .insert({
+        doctor_id: userId,
+        ...layoutPayload
+      })
+      .select('*')
+      .single();
+
+    // Backward-compatible fallback while logo_url migration is pending in remote DB
+    if (insertResult.error && isMissingLogoColumnError(insertResult.error)) {
+      insertResult = await supabase
+        .from('prescription_layouts')
+        .insert({
+          doctor_id: userId,
+          ...layoutPayloadWithoutLogo
+        })
+        .select('*')
+        .single();
+    }
+
+    if (insertResult.error) throw insertResult.error;
+    data = insertResult.data;
+  }
+
   return normalizeFromLayout(data)!;
 }
 

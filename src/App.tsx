@@ -41,6 +41,7 @@ import PrivacyDashboard from '@/pages/PrivacyDashboard';
 import RequestClinicAccess from '@/pages/RequestClinicAccess';
 import ResetPassword from '@/pages/ResetPassword';
 import ScaleAssessmentSession from '@/pages/ScaleAssessmentSession';
+import NotificationsPage from '@/pages/NotificationsPage';
 import Settings from '@/pages/Settings';
 import UserProfile from '@/pages/UserProfile';
 import SuperAdminDashboard from '@/features/super-admin/pages/SuperAdminDashboard';
@@ -236,6 +237,12 @@ function App() {
                 path='/profile'
                 element={
                   isAuthenticated ? <UserProfile /> : <Navigate to='/auth' />
+                }
+              />
+              <Route
+                path='/notificaciones'
+                element={
+                  isAuthenticated ? <NotificationsPage /> : <Navigate to='/auth' />
                 }
               />
               <Route

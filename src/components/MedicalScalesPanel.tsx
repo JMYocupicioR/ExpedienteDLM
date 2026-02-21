@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExam';
 import { formatAssessmentDate, type ScaleAssessmentViewModel } from '@/features/medical-records/utils/scaleAssessmentViewModel';
-import { fetchMedicalScalesSafe } from '@/lib/services/medical-scales-service';
+import { fetchMedicalScalesSafe, getScaleDefinitionById } from '@/lib/services/medical-scales-service';
 import { Save, ListChecks } from 'lucide-react';
 
 type ScaleDefinition = {
@@ -56,10 +56,16 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
     setSelectedScaleDef(null);
     setAnswers({});
     if (!scaleId) return;
-    const rows = await fetchMedicalScalesSafe();
-    const selected = rows.find((row) => row.id === scaleId);
-    if (!selected) return;
-    setSelectedScaleDef((selected.definition as unknown) as ScaleDefinition);
+    const definition = await getScaleDefinitionById(scaleId);
+    if (definition) {
+      setSelectedScaleDef(definition);
+    } else {
+      const rows = await fetchMedicalScalesSafe();
+      const selected = rows.find((row) => row.id === scaleId);
+      if (selected?.definition) {
+        setSelectedScaleDef((selected.definition as unknown) as ScaleDefinition);
+      }
+    }
   };
 
   const computedScore = useMemo(() => {

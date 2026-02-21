@@ -1137,11 +1137,16 @@ export interface PhysicalExamFormData {
 
 // ===== NUEVOS TIPOS PARA SISTEMA DE RECETAS MEJORADO =====
 
+/** Legacy alias - prescription_layouts uses doctor_id */
 export interface PrescriptionTemplate {
   id: string
   user_id: string
+  doctor_id?: string
   style_definition: Record<string, unknown>
-  logo_url?: string
+  template_elements?: unknown
+  canvas_settings?: unknown
+  print_settings?: unknown
+  logo_url?: string | null
   created_at: string
   updated_at: string
 }
@@ -1166,6 +1171,7 @@ export interface PrescriptionLayoutsUnified {
     template_elements: Json
     canvas_settings: Json
     print_settings: Json
+    logo_url: string | null
     is_horizontal: boolean
     is_default: boolean
     is_public: boolean
@@ -1186,6 +1192,7 @@ export interface PrescriptionLayoutsUnified {
     template_elements?: Json
     canvas_settings?: Json
     print_settings?: Json
+    logo_url?: string | null
     is_default?: boolean
     is_public?: boolean
     is_predefined?: boolean
@@ -1205,6 +1212,7 @@ export interface PrescriptionLayoutsUnified {
     template_elements?: Json
     canvas_settings?: Json
     print_settings?: Json
+    logo_url?: string | null
     is_default?: boolean
     is_public?: boolean
     is_predefined?: boolean

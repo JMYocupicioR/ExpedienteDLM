@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { fetchActiveMedicalScalesSafe } from '@/lib/services/medical-scales-service';
+import { fetchActiveMedicalScalesSafe, getScaleDefinitionById } from '@/lib/services/medical-scales-service';
 import ScaleStepper from '@/components/ScaleStepper';
 
 type TokenRow = {
@@ -11,6 +11,7 @@ type TokenRow = {
   clinic_id: string;
   selected_scale_ids: string[] | null;
   allowed_sections?: string[] | null;
+  invitation_template?: string | null;
   assigned_patient_id?: string | null;
   expires_at: string;
   status: string;
@@ -88,7 +89,7 @@ export default function PatientPublicRegistration() {
         setLoading(true);
         const { data, error } = await supabase
           .from('patient_registration_tokens')
-          .select('id, token, doctor_id, clinic_id, selected_scale_ids, allowed_sections, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name), clinic:clinics(name)')
+          .select('id, token, doctor_id, clinic_id, selected_scale_ids, allowed_sections, invitation_template, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name), clinic:clinics(name)')
           .eq('token', token)
           .single();
         if (error) throw error;
@@ -104,13 +105,41 @@ export default function PatientPublicRegistration() {
           ? (data.allowed_sections as string[])
           : ['personal','pathological','non_pathological','hereditary'];
         setAllowedSections(sections);
+        const isQuestionnaireOnly = sections.length === 0;
+
+        if (isQuestionnaireOnly) {
+          setStep(3);
+          if (data.assigned_patient_id) {
+            const { data: patient } = await supabase
+              .from('patients')
+              .select('full_name, birth_date, gender, email, phone, address')
+              .eq('id', data.assigned_patient_id)
+              .single();
+            if (patient) {
+              setPersonal({
+                full_name: patient.full_name ?? '',
+                birth_date: patient.birth_date ? String(patient.birth_date).slice(0, 10) : '',
+                gender: (patient.gender as string) || 'unspecified',
+                email: patient.email ?? '',
+                phone: patient.phone ?? '',
+                address: patient.address ?? '',
+              });
+            }
+          }
+        }
 
         const scaleIds = (data.selected_scale_ids || []) as string[];
         if (scaleIds.length > 0) {
           const allActiveScales = await fetchActiveMedicalScalesSafe();
-          const defs = allActiveScales.filter((row) => scaleIds.includes(row.id));
           const map: Record<string, { name: string; definition: ScaleDefinition }> = {};
-          (defs || []).forEach((row: { id: string; name: string; definition: unknown }) => { map[row.id] = { name: row.name, definition: row.definition as ScaleDefinition }; });
+          for (const sid of scaleIds) {
+            const row = allActiveScales.find((r) => r.id === sid);
+            const definition = await getScaleDefinitionById(sid);
+            map[sid] = {
+              name: row?.name ?? sid,
+              definition: definition ?? (row?.definition as ScaleDefinition) ?? { items: [] },
+            };
+          }
           setScaleDefs(map);
         }
       } catch {
@@ -128,6 +157,14 @@ export default function PatientPublicRegistration() {
     const clinic = tokenRow.clinic?.name || 'tu clínica';
     return `Bienvenido(a). Este registro será entregado a ${doc} en ${clinic}.`;
   }, [tokenRow]);
+
+  const isQuestionnaireOnly = allowedSections.length === 0;
+  const questionnaireHeader = useMemo(() => {
+    if (!tokenRow || !isQuestionnaireOnly) return null;
+    const doc = tokenRow.doctor?.full_name || 'tu médico';
+    const clinic = tokenRow.clinic?.name || 'tu clínica';
+    return `Cuestionarios asignados por ${doc} de ${clinic}`;
+  }, [tokenRow, isQuestionnaireOnly]);
 
   const handleScaleComplete = (scaleId: string, payload: { answers: Record<string, unknown>; score: number | null; severity: string | null }) => {
     setScaleAnswers(prev => ({ ...prev, [scaleId]: payload }));
@@ -260,15 +297,23 @@ export default function PatientPublicRegistration() {
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-3xl mx-auto">
         <div className="bg-gray-800 border border-gray-700 rounded p-4 mb-4">
-          <h1 className="text-white text-xl font-semibold mb-1">Registro de paciente</h1>
-          <p className="text-gray-300 text-sm">{welcome}</p>
+          <h1 className="text-white text-xl font-semibold mb-1">
+            {isQuestionnaireOnly && questionnaireHeader ? questionnaireHeader : 'Registro de paciente'}
+          </h1>
+          <p className="text-gray-300 text-sm">
+            {isQuestionnaireOnly && questionnaireHeader ? 'Completa los cuestionarios asignados. Los resultados se guardarán en tu expediente.' : welcome}
+          </p>
         </div>
 
-        {/* Stepper header (3 pasos) */}
+        {/* Stepper header */}
         <div className="flex items-center space-x-2 mb-4">
-          {[1,2,3].map(n => (
-            <div key={n} className={`px-3 py-1 rounded ${step === n ? 'bg-cyan-700 text-white' : 'bg-gray-700 text-gray-300'}`}>Paso {n}</div>
-          ))}
+          {isQuestionnaireOnly ? (
+            <div className="px-3 py-1 rounded bg-cyan-700 text-white">Cuestionarios</div>
+          ) : (
+            [1,2,3].map(n => (
+              <div key={n} className={`px-3 py-1 rounded ${step === n ? 'bg-cyan-700 text-white' : 'bg-gray-700 text-gray-300'}`}>Paso {n}</div>
+            ))
+          )}
         </div>
 
         {step === 1 && allowedSections.includes('personal') && (
@@ -404,6 +449,26 @@ export default function PatientPublicRegistration() {
 
         {step === 3 && (
           <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-4">
+            {isQuestionnaireOnly && !tokenRow.assigned_patient_id && (
+              <div className="p-3 bg-gray-900/80 border border-gray-600 rounded-lg">
+                <div className="text-gray-200 font-medium mb-2">Identificación necesaria</div>
+                <p className="text-gray-400 text-sm mb-3">Para guardar tus respuestas en tu expediente, necesitamos estos datos:</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm text-gray-300">Nombre completo</label>
+                    <input className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white mt-1" value={personal.full_name} onChange={e => setPersonal(p => ({ ...p, full_name: e.target.value }))} placeholder="Obligatorio" />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-300">Fecha de nacimiento</label>
+                    <input type="date" className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white mt-1" value={personal.birth_date} onChange={e => setPersonal(p => ({ ...p, birth_date: e.target.value }))} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-gray-300">Correo (opcional)</label>
+                    <input className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white mt-1" value={personal.email || ''} onChange={e => setPersonal(p => ({ ...p, email: e.target.value }))} placeholder="Para crear cuenta" />
+                  </div>
+                </div>
+              </div>
+            )}
             {(tokenRow.selected_scale_ids || []).length === 0 && (
               <div className="text-gray-300 text-sm">No hay escalas para completar. Puedes enviar el formulario.</div>
             )}
@@ -483,7 +548,11 @@ export default function PatientPublicRegistration() {
             </div>
 
             <div className="flex items-center justify-between">
-              <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={() => setStep(Math.max(1, step-1))}>Atrás</button>
+              {isQuestionnaireOnly ? (
+                <div />
+              ) : (
+                <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={() => setStep(Math.max(1, step - 1))}>Atrás</button>
+              )}
               <button className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded disabled:opacity-50" onClick={handleSubmit} disabled={submitting}>
                 {submitting ? 'Enviando...' : 'Enviar registro'}
               </button>

@@ -2,9 +2,10 @@
  * Dashboard operativo para rol administrative_assistant.
  * Centrado en recepción, agenda, pendientes y coordinación de pacientes.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useClinic } from '@/features/clinic/context/ClinicContext';
+import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
 import { useAdminAppointments } from '@/hooks/useAdminAppointments';
 import { useAdminPatients } from '@/hooks/useAdminPatients';
 import { useAssistantPermissions } from '@/hooks/useAssistantPermissions';
@@ -14,6 +15,7 @@ import ClinicStaffAssignmentPanel from '@/components/assistant/ClinicStaffAssign
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
 import {
   ArrowRight,
+  Building2,
   Calendar,
   CheckCircle,
   Clock,
@@ -21,6 +23,7 @@ import {
   FileText,
   ListTodo,
   Phone,
+  Zap,
   Plus,
   Search,
   Users,
@@ -31,9 +34,17 @@ import { format } from 'date-fns';
 export default function AssistantDashboard() {
   const navigate = useNavigate();
   const { activeClinic } = useClinic();
+  const { getClinicLogoUrl } = useProfilePhotos();
   const clinicId = activeClinic?.id ?? null;
+  const [clinicLogoUrl, setClinicLogoUrl] = useState<string | null>(null);
   const today = format(new Date(), 'yyyy-MM-dd');
   const weekEnd = format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+
+  useEffect(() => {
+    if (clinicId) {
+      getClinicLogoUrl(clinicId).then(setClinicLogoUrl).catch(() => {});
+    }
+  }, [clinicId, getClinicLogoUrl]);
 
   const { permissions } = useAssistantPermissions();
   const { appointments, stats, workload, isLoading } = useAdminAppointments({
@@ -115,14 +126,32 @@ export default function AssistantDashboard() {
 
   return (
     <main className="w-full max-w-none">
-      {/* Header */}
+      {/* Hero / Header con identidad de la clínica */}
       <section className="section">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <h1 className="section-title text-3xl mb-2">Recepción y Coordinación</h1>
-            <p className="section-subtitle">
-              {activeClinic.name} — Panel operativo del asistente
-            </p>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="flex items-center gap-5">
+            {/* Imagen/Logo de la clínica */}
+            <div className="flex-shrink-0">
+              {clinicLogoUrl ? (
+                <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-cyan-500/30 bg-gray-800 shadow-lg shadow-cyan-500/10 ring-2 ring-gray-700">
+                  <img
+                    src={clinicLogoUrl}
+                    alt={`Logo ${activeClinic.name}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-2xl border-2 border-gray-600 bg-gray-800 flex items-center justify-center">
+                  <Building2 className="h-10 w-10 text-cyan-500/70" />
+                </div>
+              )}
+            </div>
+            <div>
+              <h1 className="section-title text-3xl mb-1">Recepción y Coordinación</h1>
+              <p className="section-subtitle text-gray-400">
+                {activeClinic.name} — Panel operativo del asistente
+              </p>
+            </div>
           </div>
           <div className="relative w-full lg:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-5 w-5" />
@@ -131,7 +160,7 @@ export default function AssistantDashboard() {
               placeholder="Buscar paciente..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="form-input w-full pl-10"
+              className="form-input w-full pl-10 rounded-lg border-gray-600 bg-gray-800/80 focus:ring-cyan-500/50"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && searchTerm.trim()) {
                   navigate(`/clinic/patients?search=${encodeURIComponent(searchTerm)}`);
@@ -144,8 +173,10 @@ export default function AssistantDashboard() {
 
       {/* Recepción hoy - KPIs */}
       <section className="section">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
-          <UserCheck className="h-5 w-5 mr-2 text-cyan-400" />
+        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <span className="p-2 rounded-lg bg-cyan-500/10">
+            <UserCheck className="h-5 w-5 text-cyan-400" />
+          </span>
           Recepción hoy
         </h2>
         <div className="stats-grid">
@@ -214,7 +245,7 @@ export default function AssistantDashboard() {
         </div>
 
         {/* Acciones rápidas recepción */}
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap gap-3">
           <Link
             to="/citas"
             className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors"
@@ -246,7 +277,7 @@ export default function AssistantDashboard() {
       </section>
 
       <section className="section">
-        <ClinicStatusCard />
+        <ClinicStatusCard logoUrl={clinicLogoUrl} />
       </section>
 
       {/* Personal de la clínica */}
@@ -451,7 +482,12 @@ export default function AssistantDashboard() {
 
       {/* Acciones rápidas */}
       <section className="section">
-        <h2 className="text-lg font-semibold text-white mb-4">Acciones rápidas</h2>
+        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <span className="p-2 rounded-lg bg-amber-500/10">
+            <Zap className="h-4 w-4 text-amber-400" />
+          </span>
+          Acciones rápidas
+        </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <Link
             to="/clinic/patients"

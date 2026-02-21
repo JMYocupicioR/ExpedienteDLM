@@ -25,22 +25,59 @@ import type {
 // =====================================================
 
 export async function fetchPrescriptions(doctorId: string): Promise<Prescription[]> {
-  const { data, error } = await supabase
+  // Try with optional columns first; then progressively fall back on schema incompatibilities.
+  const fullSelect = `
+    id, patient_id, doctor_id, clinic_id, consultation_id,
+    medications, diagnosis, instructions, notes, status,
+    expires_at, visual_layout, prescription_date, created_at, updated_at,
+    patients(full_name)
+  `;
+  const baseSelect = `
+    id, patient_id, doctor_id, clinic_id, consultation_id,
+    medications, diagnosis, instructions, notes, status,
+    expires_at, created_at, updated_at,
+    patients(full_name)
+  `;
+  const noJoinSelect = `
+    id, patient_id, doctor_id, clinic_id, consultation_id,
+    medications, diagnosis, instructions, notes, status,
+    expires_at, created_at, updated_at
+  `;
+
+  let { data, error } = await supabase
     .from('prescriptions')
-    .select(`
-      id, patient_id, doctor_id, clinic_id, consultation_id,
-      medications, diagnosis, instructions, notes, status,
-      expires_at, visual_layout, prescription_date, created_at, updated_at,
-      patients(full_name)
-    `)
+    .select(fullSelect)
     .eq('doctor_id', doctorId)
     .order('created_at', { ascending: false });
+
+  // 400 = bad request (columns/relations don't exist yet – migration pending)
+  if (error && (error.code === 'PGRST200' || (error as any)?.message?.includes('column'))) {
+    const fallback = await supabase
+      .from('prescriptions')
+      .select(baseSelect)
+      .eq('doctor_id', doctorId)
+      .order('created_at', { ascending: false });
+    // reassign through any to avoid strict type mismatch on optional columns
+    (data as any) = fallback.data;
+    (error as any) = fallback.error;
+  }
+
+  // Second fallback: relation/embed failures for patients(full_name)
+  if (error && ((error as any)?.message?.includes('patients') || (error as any)?.message?.includes('relationship'))) {
+    const fallbackNoJoin = await supabase
+      .from('prescriptions')
+      .select(noJoinSelect)
+      .eq('doctor_id', doctorId)
+      .order('created_at', { ascending: false });
+    (data as any) = fallbackNoJoin.data;
+    (error as any) = fallbackNoJoin.error;
+  }
 
   if (error) throw error;
 
   return (data || []).map((p: any) => ({
     ...p,
-    patient_name: p.patients?.full_name || '',
+    patient_name: p.patients?.full_name || p.patients?.[0]?.full_name || '',
   }));
 }
 
@@ -87,7 +124,7 @@ export async function createPrescription(
   let visualLayout: PrescriptionLayoutSnapshot | null = null;
   if (dto.layout_id) {
     const { data: layout } = await supabase
-      .from('prescription_layouts_unified')
+      .from('prescription_layouts')
       .select('template_elements, canvas_settings, print_settings')
       .eq('id', dto.layout_id)
       .single();
@@ -98,7 +135,7 @@ export async function createPrescription(
         print_settings: layout.print_settings,
       };
       // Increment usage
-      await supabase.rpc('increment_prescription_layout_usage', { p_layout_id: dto.layout_id }).catch(() => {});
+      await Promise.resolve(supabase.rpc('increment_prescription_layout_usage', { p_layout_id: dto.layout_id })).catch(() => {});
     }
   }
 
@@ -124,31 +161,34 @@ export async function createPrescription(
 
   // 5. Link to consultation if provided
   if (dto.consultation_id) {
-    await supabase
-      .from('consultation_prescriptions')
-      .insert([{
-        consultation_id: dto.consultation_id,
-        prescription_id: data.id,
-      }])
-      .catch(() => {}); // Non-critical
+    await Promise.resolve(
+      supabase
+        .from('consultation_prescriptions')
+        .insert([{
+          consultation_id: dto.consultation_id,
+          prescription_id: data.id,
+        }])
+    ).catch(() => {});
+    // Non-critical
   }
 
-  // 6. Log history
-  await supabase
-    .from('prescription_history_log')
-    .insert([{
-      prescription_id: data.id,
-      action: 'created',
-      performed_by: userId,
-      notes: `Receta creada con ${dto.medications.length} medicamento(s)`,
-      metadata: {
-        diagnosis: dto.diagnosis,
-        medications_count: dto.medications.length,
-        expires_at: expiresAt.toISOString(),
-        layout_id: dto.layout_id || null,
-      },
-    }])
-    .catch(() => {}); // Non-critical
+  // 6. Log history (non-critical)
+  await Promise.resolve(
+    supabase
+      .from('prescription_history_log')
+      .insert([{
+        prescription_id: data.id,
+        action: 'created',
+        performed_by: userId,
+        notes: `Receta creada con ${dto.medications.length} medicamento(s)`,
+        metadata: {
+          diagnosis: dto.diagnosis,
+          medications_count: dto.medications.length,
+          expires_at: expiresAt.toISOString(),
+          layout_id: dto.layout_id || null,
+        },
+      }])
+  ).catch(() => {});
 
   return data;
 }
@@ -168,15 +208,16 @@ export async function updatePrescription(
   if (error) throw error;
 
   // Log
-  await supabase
-    .from('prescription_history_log')
-    .insert([{
-      prescription_id: id,
-      action: 'updated',
-      performed_by: userId,
-      metadata: { fields_updated: Object.keys(updates) },
-    }])
-    .catch(() => {});
+  await Promise.resolve(
+    supabase
+      .from('prescription_history_log')
+      .insert([{
+        prescription_id: id,
+        action: 'updated',
+        performed_by: userId,
+        metadata: { fields_updated: Object.keys(updates) },
+      }])
+  ).catch(() => {});
 
   return data;
 }
@@ -189,14 +230,15 @@ export async function cancelPrescription(id: string, userId: string): Promise<vo
 
   if (error) throw error;
 
-  await supabase
-    .from('prescription_history_log')
-    .insert([{
-      prescription_id: id,
-      action: 'cancelled',
-      performed_by: userId,
-    }])
-    .catch(() => {});
+  await Promise.resolve(
+    supabase
+      .from('prescription_history_log')
+      .insert([{
+        prescription_id: id,
+        action: 'cancelled',
+        performed_by: userId,
+      }])
+  ).catch(() => {});
 }
 
 // =====================================================
@@ -250,13 +292,20 @@ export async function getPrescriptionStats(doctorId: string): Promise<Prescripti
 
 export async function fetchLayouts(doctorId: string): Promise<PrescriptionLayout[]> {
   const { data, error } = await supabase
-    .from('prescription_layouts_unified')
+    .from('prescription_layouts')
     .select('*')
     .or(`doctor_id.eq.${doctorId},is_public.eq.true,is_predefined.eq.true`)
     .order('is_predefined', { ascending: false })
     .order('usage_count', { ascending: false });
 
-  if (error) throw error;
+  // 404/42P01 = table doesn't exist yet (migration pending) – return empty silently
+  if (error) {
+    if ((error as any)?.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('404')) {
+      console.warn('[prescriptionService] prescription_layouts table not found – run migration 20260214000000');
+      return [];
+    }
+    throw error;
+  }
   return data || [];
 }
 
@@ -266,7 +315,7 @@ export async function saveLayout(
 ): Promise<PrescriptionLayout> {
   if (layoutId) {
     const { data, error } = await supabase
-      .from('prescription_layouts_unified')
+      .from('prescription_layouts')
       .update({ ...layout, updated_at: new Date().toISOString() })
       .eq('id', layoutId)
       .select('*')
@@ -275,7 +324,7 @@ export async function saveLayout(
     return data;
   } else {
     const { data, error } = await supabase
-      .from('prescription_layouts_unified')
+      .from('prescription_layouts')
       .insert([{ ...layout, usage_count: 0 }])
       .select('*')
       .single();
@@ -286,21 +335,20 @@ export async function saveLayout(
 
 export async function deleteLayout(layoutId: string): Promise<void> {
   const { error } = await supabase
-    .from('prescription_layouts_unified')
+    .from('prescription_layouts')
     .delete()
     .eq('id', layoutId);
   if (error) throw error;
 }
 
 export async function setDefaultLayout(layoutId: string, doctorId: string): Promise<void> {
-  // Unset all defaults first
   await supabase
-    .from('prescription_layouts_unified')
+    .from('prescription_layouts')
     .update({ is_default: false })
     .eq('doctor_id', doctorId);
 
   const { error } = await supabase
-    .from('prescription_layouts_unified')
+    .from('prescription_layouts')
     .update({ is_default: true })
     .eq('id', layoutId);
   if (error) throw error;
@@ -397,10 +445,18 @@ export async function fetchPrintSettings(doctorId: string): Promise<PrintSetting
     .from('prescription_print_settings')
     .select('*')
     .eq('doctor_id', doctorId)
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') throw error;
-  return data;
+  // Silently ignore missing table (migration pending) or no row found
+  if (error) {
+    if ((error as any)?.code === '42P01' || error.message?.includes('does not exist')) {
+      console.warn('[prescriptionService] prescription_print_settings table not found – run migration 20260214000000');
+      return null;
+    }
+    if (error.code === 'PGRST116') return null; // no rows
+    throw error;
+  }
+  return data ?? null;
 }
 
 export async function savePrintSettings(doctorId: string, settings: Partial<PrintSettings>): Promise<void> {

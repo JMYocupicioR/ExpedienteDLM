@@ -78,6 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_prescription_layouts_default ON prescription_layo
 CREATE INDEX IF NOT EXISTS idx_prescription_layouts_usage ON prescription_layouts(usage_count DESC);
 
 -- Trigger updated_at
+DROP TRIGGER IF EXISTS update_prescription_layouts_updated_at ON prescription_layouts;
 CREATE TRIGGER update_prescription_layouts_updated_at
   BEFORE UPDATE ON prescription_layouts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -135,6 +136,7 @@ CREATE INDEX IF NOT EXISTS idx_medication_templates_doctor ON medication_templat
 CREATE INDEX IF NOT EXISTS idx_medication_templates_public ON medication_templates(is_public) WHERE is_public = true;
 CREATE INDEX IF NOT EXISTS idx_medication_templates_usage ON medication_templates(usage_count DESC);
 
+DROP TRIGGER IF EXISTS update_medication_templates_updated_at ON medication_templates;
 CREATE TRIGGER update_medication_templates_updated_at
   BEFORE UPDATE ON medication_templates
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -218,6 +220,7 @@ CREATE POLICY "prescription_print_settings_delete" ON prescription_print_setting
 
 CREATE INDEX IF NOT EXISTS idx_prescription_print_settings_doctor ON prescription_print_settings(doctor_id);
 
+DROP TRIGGER IF EXISTS update_prescription_print_settings_updated_at ON prescription_print_settings;
 CREATE TRIGGER update_prescription_print_settings_updated_at
   BEFORE UPDATE ON prescription_print_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

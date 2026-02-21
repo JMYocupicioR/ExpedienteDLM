@@ -328,25 +328,33 @@ export function useEnhancedPrescriptions() {
 
       let logoUrl = prescriptionTemplate?.logo_url;
 
-      // Subir logo si se proporciona
+      // Subir logo si se proporciona (bucket unificado: clinic-assets)
       if (logoFile) {
-        const filePath = `${user.id}/${logoFile.name}-${Date.now()}`;
+        const fileExt = logoFile.name.split('.').pop()?.toLowerCase() || 'png';
+        const fileName = `prescription-logo.${fileExt}`;
+        const { data: membership } = await supabase
+          .from('clinic_user_relationships')
+          .select('clinic_id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+        const clinicId = (membership as { clinic_id?: string } | null)?.clinic_id;
+        const filePath = clinicId ? `${clinicId}/${fileName}` : `${user.id}/${fileName}`;
+
         const { error: uploadError } = await supabase.storage
-          .from('logos')
-          .upload(filePath, logoFile, {
-            cacheControl: '3600',
-            upsert: true,
-          });
+          .from('clinic-assets')
+          .upload(filePath, logoFile, { cacheControl: '3600', upsert: true });
 
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supabase.storage.from('logos').getPublicUrl(filePath);
+        const { data: urlData } = supabase.storage.from('clinic-assets').getPublicUrl(filePath);
         logoUrl = urlData.publicUrl;
       }
 
       // Save as default layout in prescription_layouts
-      const layoutData = {
-        doctor_id: user.id,
+      // Note: prescription_layouts has no UNIQUE(doctor_id), so we use update-or-insert logic
+      const layoutPayload = {
         name: 'Mi plantilla',
         template_elements: (styleDefinition as any)?.template_elements || [],
         canvas_settings: (styleDefinition as any)?.canvas_settings || {},
@@ -355,22 +363,44 @@ export function useEnhancedPrescriptions() {
         updated_at: new Date().toISOString()
       };
 
-      // First, unset any existing defaults
+      // Find existing layout for this doctor to update in place (before unsetting)
+      const { data: existing } = await supabase
+        .from('prescription_layouts')
+        .select('id')
+        .eq('doctor_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Unset any existing defaults so only one is default
       await supabase
         .from('prescription_layouts')
         .update({ is_default: false })
         .eq('doctor_id', user.id);
 
-      const { data, error: upsertError } = await supabase
-        .from('prescription_layouts')
-        .upsert(
-          layoutData,
-          { onConflict: 'doctor_id' }
-        )
-        .select()
-        .single();
-
-      if (upsertError) throw upsertError;
+      let data;
+      if (existing?.id) {
+        const { data: updated, error: updateErr } = await supabase
+          .from('prescription_layouts')
+          .update({ ...layoutPayload, logo_url: logoUrl ?? undefined })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (updateErr) throw updateErr;
+        data = updated;
+      } else {
+        const { data: inserted, error: insertErr } = await supabase
+          .from('prescription_layouts')
+          .insert({
+            doctor_id: user.id,
+            ...layoutPayload,
+            logo_url: logoUrl ?? null
+          })
+          .select()
+          .single();
+        if (insertErr) throw insertErr;
+        data = inserted;
+      }
 
       setPrescriptionTemplate(data);
     } catch (err) {
