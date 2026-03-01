@@ -9,7 +9,8 @@ import {
   Loader2,
   RefreshCw,
   Calendar,
-  User
+  User,
+  Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -230,9 +231,22 @@ export default function ClinicStatusCard({ onStatusUpdate, logoUrl }: ClinicStat
   const currentStatus = userRelationship?.status || 'approved';
   const config = statusConfig[currentStatus];
   const StatusIcon = config.icon;
+  const canGoToSettings = currentStatus === 'approved';
+
+  const handleCardClick = () => {
+    if (canGoToSettings) navigate('/clinic/settings');
+  };
 
   return (
-    <div className={`bg-gray-800/50 backdrop-blur-xl rounded-2xl border p-6 ${config.borderColor}`}>
+    <div
+      role={canGoToSettings ? 'button' : undefined}
+      tabIndex={canGoToSettings ? 0 : undefined}
+      onClick={canGoToSettings ? handleCardClick : undefined}
+      onKeyDown={canGoToSettings ? (e) => e.key === 'Enter' && handleCardClick() : undefined}
+      className={`bg-gray-800/50 backdrop-blur-xl rounded-2xl border p-6 ${config.borderColor} ${
+        canGoToSettings ? 'cursor-pointer hover:ring-2 hover:ring-cyan-500/50 hover:border-cyan-600/50 transition-all' : ''
+      }`}
+    >
       <div className="flex items-start space-x-4">
         {logoUrl ? (
           <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-gray-600 bg-gray-700 flex-shrink-0 shadow-inner">
@@ -249,13 +263,21 @@ export default function ClinicStatusCard({ onStatusUpdate, logoUrl }: ClinicStat
             <h3 className="text-lg font-semibold text-white">
               Estado en {activeClinic.name}
             </h3>
-            <button
-              onClick={() => window.location.reload()}
-              className="p-1 text-gray-400 hover:text-white transition-colors"
-              title="Actualizar estado"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {canGoToSettings && (
+                <span className="text-xs text-gray-400 mr-1">Clic para configuración</span>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.location.reload();
+                }}
+                className="p-1 text-gray-400 hover:text-white transition-colors"
+                title="Actualizar estado"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           
           <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${config.bgColor} ${config.color} border ${config.borderColor}`}>
@@ -301,7 +323,10 @@ export default function ClinicStatusCard({ onStatusUpdate, logoUrl }: ClinicStat
           <div className="mt-4 flex items-center space-x-3">
             {currentStatus === 'rejected' && (
               <Button
-                onClick={handleSendRequest}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSendRequest();
+                }}
                 disabled={sendingRequest}
                 className="flex items-center"
               >
@@ -325,6 +350,7 @@ export default function ClinicStatusCard({ onStatusUpdate, logoUrl }: ClinicStat
               <div className="flex items-center text-green-400">
                 <CheckCircle className="h-4 w-4 mr-2" />
                 <span className="text-sm">Acceso completo a la clínica</span>
+                <Settings className="h-4 w-4 ml-2 text-cyan-400" />
               </div>
             )}
           </div>

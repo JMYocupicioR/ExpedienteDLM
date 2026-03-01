@@ -5,7 +5,7 @@ import {
   Award, Calendar, Phone, Mail, MapPin, 
   Stethoscope, Users, Building, FileText, Star, 
   Edit3, Save, X, DoorOpen, Clock,
-  AlertCircle, CheckCircle
+  AlertCircle, CheckCircle, Globe, ExternalLink, Eye
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
@@ -148,6 +148,13 @@ export default function UserProfile() {
     primary_room_id: null as string | null,
     accepts_appointments: true,
     physical_presence_schedule: [] as Array<{ day: number; start: string; end: string }>,
+    // Public profile (visible to patients)
+    is_profile_public: false,
+    public_bio: '',
+    public_consultation_fee: '',
+    public_languages: '',
+    public_address: '',
+    public_photo_url: '',
   });
 
   // Rooms and assignments for doctors with clinic
@@ -219,6 +226,7 @@ export default function UserProfile() {
       const acceptsAppointments = (enhancedProfile.accepts_appointments ?? addInfo?.accepts_appointments) !== false;
       const physSchedule = (enhancedProfile.physical_presence_schedule ?? addInfo?.physical_presence_schedule ?? []) as Array<{ day: number; start: string; end: string }>;
 
+      const publicLanguages = enhancedProfile.public_languages ?? addInfo?.public_languages;
       setEditData({
         full_name: String(enhancedProfile.full_name || ''),
         phone: String(enhancedProfile.phone || ''),
@@ -234,6 +242,12 @@ export default function UserProfile() {
         primary_room_id: null as string | null,
         accepts_appointments: acceptsAppointments,
         physical_presence_schedule: Array.isArray(physSchedule) ? physSchedule : [],
+        is_profile_public: Boolean((enhancedProfile as Record<string, unknown>).is_profile_public),
+        public_bio: String((enhancedProfile as Record<string, unknown>).public_bio ?? addInfo?.public_bio ?? ''),
+        public_consultation_fee: String((enhancedProfile as Record<string, unknown>).consultation_fee ?? addInfo?.consultation_fee ?? ''),
+        public_languages: Array.isArray(publicLanguages) ? (publicLanguages as string[]).join(', ') : String(publicLanguages || ''),
+        public_address: String((enhancedProfile as Record<string, unknown>).public_address ?? addInfo?.public_address ?? ''),
+        public_photo_url: String((enhancedProfile as Record<string, unknown>).public_photo_url ?? addInfo?.public_photo_url ?? ''),
       });
 
       // Load available clinics (non-blocking; may fail for some roles)
@@ -265,11 +279,22 @@ export default function UserProfile() {
       const { data: clinics, error } = await supabase
         .from('clinics')
         .select('*')
+        .eq('is_public', true)
         .order('name');
 
       if (error) throw error;
 
-      setAvailableClinics(clinics || []);
+      let list = (clinics || []) as Clinic[];
+      const currentClinicId = profileData?.clinic_id;
+      if (currentClinicId && !list.some((c) => c.id === currentClinicId)) {
+        const { data: current } = await supabase
+          .from('clinics')
+          .select('*')
+          .eq('id', currentClinicId)
+          .maybeSingle();
+        if (current) list = [current as Clinic, ...list];
+      }
+      setAvailableClinics(list);
     } catch (err) {
       console.error('Error loading clinics:', err);
     }
@@ -488,27 +513,27 @@ export default function UserProfile() {
       let targetClinicId = editData.clinic_id;
 
       if (editData.is_independent) {
-        try {
-          // Pass user.id explicitly, safe because of check above
-          targetClinicId = await getOrCreatePersonalClinic(user.id);
-        } catch (clinicErr) {
-          console.error(clinicErr);
-          throw new Error('Error al configurar el consultorio personal');
-        }
+        targetClinicId = null;
       }
 
       const updateData: Record<string, unknown> = {
         full_name: editData.full_name,
         phone: editData.phone,
         clinic_id: targetClinicId,
+        is_profile_public: editData.is_profile_public,
+        public_bio: editData.public_bio || null,
+        consultation_fee: editData.public_consultation_fee ? parseFloat(editData.public_consultation_fee.replace(/[^0-9.]/g, '')) || null : null,
+        public_languages: editData.public_languages ? editData.public_languages.split(',').map((l: string) => l.trim()).filter(Boolean) : [],
+        public_address: editData.public_address || null,
+        public_photo_url: editData.public_photo_url || null,
         additional_info: {
           ...profileData?.additional_info,
           address: editData.address,
           bio: editData.bio,
           consultation_fee: editData.consultation_fee,
-          languages: editData.languages.split(',').map(l => l.trim()).filter(l => l),
-          certifications: editData.certifications.split(',').map(c => c.trim()).filter(c => c),
-          awards: editData.awards.split(',').map(a => a.trim()).filter(a => a),
+          languages: editData.languages.split(',').map((l: string) => l.trim()).filter((l: string) => l),
+          certifications: editData.certifications.split(',').map((c: string) => c.trim()).filter((c: string) => c),
+          awards: editData.awards.split(',').map((a: string) => a.trim()).filter((a: string) => a),
           emergency_contact: editData.emergency_contact,
           accepts_appointments: editData.accepts_appointments,
           physical_presence_schedule: editData.physical_presence_schedule,
@@ -803,6 +828,116 @@ export default function UserProfile() {
                       </>
                     ) : (
                       <span className="text-gray-400">Sin clínica asignada</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Perfil Público - for doctors (visible early so toggle is easy to find) */}
+            {profileData.role === 'doctor' && (
+              <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Globe className="h-5 w-5 text-cyan-400 mr-2" />
+                  Perfil Público
+                </h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Permite que los pacientes te busquen, vean tu perfil y agenden citas. Solo se mostrarán los datos que configures aquí.
+                </p>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-300">
+                      {editData.is_profile_public ? 'Tu perfil es visible en el directorio' : 'Tu perfil está oculto'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {editData.is_profile_public ? 'Los pacientes pueden encontrarte y agendar citas' : 'Activa para aparecer en la búsqueda de médicos'}
+                    </p>
+                  </div>
+                  {editing ? (
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editData.is_profile_public}
+                        onChange={(e) => setEditData((prev) => ({ ...prev, is_profile_public: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                    </label>
+                  ) : (
+                    <span className={`px-2 py-1 rounded text-sm ${editData.is_profile_public ? 'bg-green-500/20 text-green-400' : 'bg-gray-600 text-gray-400'}`}>
+                      {editData.is_profile_public ? 'Público' : 'Privado'}
+                    </span>
+                  )}
+                </div>
+                {editData.is_profile_public && (
+                  <div className="space-y-4 pt-4 border-t border-gray-700">
+                    {editing ? (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Descripción pública (bio)</label>
+                          <textarea
+                            value={editData.public_bio}
+                            onChange={(e) => setEditData((prev) => ({ ...prev, public_bio: e.target.value }))}
+                            placeholder="Tu experiencia, enfoque y qué pueden esperar los pacientes..."
+                            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
+                            rows={3}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Tarifa de consulta (visible)</label>
+                          <input
+                            type="text"
+                            value={editData.public_consultation_fee}
+                            onChange={(e) => setEditData((prev) => ({ ...prev, public_consultation_fee: e.target.value }))}
+                            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+                            placeholder="Ej: 500 o $500 MXN"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Idiomas (separados por coma)</label>
+                          <input
+                            type="text"
+                            value={editData.public_languages}
+                            onChange={(e) => setEditData((prev) => ({ ...prev, public_languages: e.target.value }))}
+                            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+                            placeholder="Español, Inglés"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Dirección pública (consultorio)</label>
+                          <input
+                            type="text"
+                            value={editData.public_address}
+                            onChange={(e) => setEditData((prev) => ({ ...prev, public_address: e.target.value }))}
+                            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
+                            placeholder="Dirección del consultorio"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-sm text-gray-400 space-y-2">
+                        {editData.public_bio && <p>{editData.public_bio}</p>}
+                        {editData.public_consultation_fee && <p>Tarifa: {editData.public_consultation_fee}</p>}
+                        {editData.public_languages && <p>Idiomas: {editData.public_languages}</p>}
+                        {editData.public_address && <p>Dirección: {editData.public_address}</p>}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {editData.is_profile_public && (
+                  <div className="mt-4 pt-4 border-t border-gray-700">
+                    <a
+                      href={`${import.meta.env.VITE_PACIENTES_APP_URL || ''}/medicos/${user?.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-sm text-cyan-400 hover:text-cyan-300"
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Ver cómo lo ven los pacientes
+                      <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                    {!import.meta.env.VITE_PACIENTES_APP_URL && (
+                      <p className="text-xs text-amber-500 mt-2">Configura VITE_PACIENTES_APP_URL para el enlace correcto.</p>
                     )}
                   </div>
                 )}

@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_HCAPTCHA_SITE_KEY: string
   readonly VITE_DEEPSEEK_API_KEY: string
   readonly VITE_DEEPSEEK_API_URL: string
+  /** Base URL of the Pacientes app (e.g. https://pacientes.yourapp.com) for "Ver perfil público" link */
+  readonly VITE_PACIENTES_APP_URL?: string
 }
 
 interface ImportMeta {

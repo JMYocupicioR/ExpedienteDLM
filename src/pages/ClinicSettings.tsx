@@ -57,7 +57,8 @@ const ClinicSettings: React.FC = () => {
     emergency_phone: '',
     appointment_duration_minutes: 30,
     theme_color: '#3B82F6',
-    logo_url: ''
+    logo_url: '',
+    is_public: false
   });
 
   const [workingHours, setWorkingHours] = useState<DaySchedule>({
@@ -110,52 +111,29 @@ const ClinicSettings: React.FC = () => {
     // Sensitive log removed for security;
 
     try {
-      // Check if user is admin
-      // Sensitive log removed for security;
-      
-      const { data: membership, error: membershipError } = await supabase
-        .from('clinic_members')
-        .select('role')
+      // Check if user can manage clinic (owner, director, admin_staff in clinic_user_relationships)
+      const { data: relationship, error: relError } = await supabase
+        .from('clinic_user_relationships')
+        .select('role_in_clinic')
         .eq('clinic_id', activeClinic.id)
         .eq('user_id', user.id)
-        .single();
+        .eq('status', 'approved')
+        .eq('is_active', true)
+        .maybeSingle();
 
-      // Sensitive log removed for security;
-
-      if (membershipError) {
-        // Error log removed for security;
-        
-        // Try alternative approach: check profiles table
-        // Sensitive log removed for security;
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role, clinic_id')
-          .eq('id', user.id)
-          .single();
-        
-        if (profileError || !profile || profile.clinic_id !== activeClinic.id || profile.role !== 'admin') {
-          // Error log removed for security;
-          alert('Error verificando permisos de administrador');
-          navigate('/dashboard');
-          return;
-        }
-        
-        // Sensitive log removed for security;
-        setIsAdmin(true);
-        await loadClinicData();
-        return;
-      }
-
-      // Sensitive log removed for security;
-
-      if (membership?.role !== 'admin') {
-        // Sensitive log removed for security;
-        alert('Solo los administradores pueden acceder a la configuración');
+      if (relError) {
+        alert('Error verificando permisos');
         navigate('/dashboard');
         return;
       }
 
-      // Sensitive log removed for security;
+      const canManage = relationship && ['owner', 'director', 'admin_staff'].includes(relationship.role_in_clinic);
+      if (!canManage) {
+        alert('Solo los administradores de la clínica pueden acceder a la configuración');
+        navigate('/dashboard');
+        return;
+      }
+
       setIsAdmin(true);
       await loadClinicData();
 
@@ -195,7 +173,8 @@ const ClinicSettings: React.FC = () => {
           emergency_phone: clinic.emergency_phone || '',
           appointment_duration_minutes: clinic.appointment_duration_minutes || 30,
           theme_color: clinic.theme_color || '#3B82F6',
-          logo_url: clinic.logo_url || ''
+          logo_url: clinic.logo_url || '',
+          is_public: Boolean(clinic.is_public)
         });
 
         setWorkingHours(clinic.working_hours || workingHours);
@@ -295,6 +274,7 @@ const ClinicSettings: React.FC = () => {
         .from('clinics')
         .update({
           ...formData,
+          is_public: formData.is_public,
           working_hours: workingHours,
           services,
           specialties,
@@ -458,6 +438,24 @@ const ClinicSettings: React.FC = () => {
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                  </div>
+
+                  <div className="md:col-span-2 flex items-center justify-between p-4 rounded-lg bg-gray-700/50 border border-gray-600">
+                    <div>
+                      <p className="font-medium text-gray-200">Clínica visible en el listado para médicos</p>
+                      <p className="text-sm text-gray-400">
+                        Si está activo, los médicos podrán ver esta clínica al asociar su perfil (Seleccionar Clínica en Mi Perfil).
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_public}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, is_public: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                    </label>
                   </div>
 
                   <div>

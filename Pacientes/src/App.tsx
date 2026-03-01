@@ -9,12 +9,16 @@ import ProfilePage from '@/features/profile/ProfilePage';
 import ProgressPage from '@/features/progress/ProgressPage';
 import ScaleTaskPage from '@/features/scales/ScaleTaskPage';
 import TimelinePage from '@/features/timeline/TimelinePage';
+import DoctorDirectory from '@/pages/DoctorDirectory';
+import DoctorPublicProfile from '@/pages/DoctorPublicProfile';
 import PatientPublicRegistration from '@/pages/PatientPublicRegistration';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 function ProtectedRoutes() {
   return (
     <Routes>
+      <Route path="/medicos" element={<DoctorDirectory />} />
+      <Route path="/medicos/:doctorId" element={<DoctorPublicProfile />} />
       <Route element={<PatientMobileLayout />}>
         <Route path="/" element={<TimelinePage />} />
         <Route path="/citas" element={<AppointmentsPage />} />
@@ -33,6 +37,8 @@ function ProtectedRoutes() {
 function PublicRoutes() {
   return (
     <Routes>
+      <Route path="/medicos" element={<DoctorDirectory />} />
+      <Route path="/medicos/:doctorId" element={<DoctorPublicProfile />} />
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/register/patient/:token" element={<PatientPublicRegistration />} />
       <Route path="*" element={<Navigate to="/auth" />} />
