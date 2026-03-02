@@ -16,12 +16,32 @@ export interface ScaleDefinition {
   };
 }
 
+const BOSTON_FALLBACK_DEFINITION: ScaleDefinition = {
+  items: [
+    { id: 'sss_1', text: 'Dolor nocturno en mano o muneca', type: 'select', options: [{ label: 'Sin dolor', value: 1 }, { label: 'Leve', value: 2 }, { label: 'Moderado', value: 3 }, { label: 'Severo', value: 4 }, { label: 'Muy severo', value: 5 }] },
+    { id: 'sss_2', text: 'Frecuencia del dolor nocturno', type: 'select', options: [{ label: 'Nunca', value: 1 }, { label: 'Una vez', value: 2 }, { label: '2-3 veces', value: 3 }, { label: '4-5 veces', value: 4 }, { label: 'Mas de 5 veces', value: 5 }] },
+    { id: 'sss_3', text: 'Dolor durante el dia', type: 'select', options: [{ label: 'Sin dolor', value: 1 }, { label: 'Leve', value: 2 }, { label: 'Moderado', value: 3 }, { label: 'Severo', value: 4 }, { label: 'Muy severo', value: 5 }] },
+    { id: 'sss_4', text: 'Adormecimiento u hormigueo', type: 'select', options: [{ label: 'No', value: 1 }, { label: 'Leve', value: 2 }, { label: 'Moderado', value: 3 }, { label: 'Severo', value: 4 }, { label: 'Muy severo', value: 5 }] },
+    { id: 'fss_1', text: 'Escribir con la mano afectada', type: 'select', options: [{ label: 'Sin dificultad', value: 1 }, { label: 'Poca dificultad', value: 2 }, { label: 'Dificultad moderada', value: 3 }, { label: 'Mucha dificultad', value: 4 }, { label: 'No puede hacerlo', value: 5 }] },
+    { id: 'fss_2', text: 'Abrir frascos', type: 'select', options: [{ label: 'Sin dificultad', value: 1 }, { label: 'Poca dificultad', value: 2 }, { label: 'Dificultad moderada', value: 3 }, { label: 'Mucha dificultad', value: 4 }, { label: 'No puede hacerlo', value: 5 }] },
+  ],
+};
+
 let medicalScalesUnavailable = false;
 
 export const fetchMedicalScalesSafe = async (): Promise<MedicalScaleRow[]> => {
   if (medicalScalesUnavailable) return [];
 
-  const { data, error } = await supabase.from('medical_scales').select('*');
+  const baseColumns = 'id, name, specialty, category, description, is_active, created_at, updated_at';
+  const withDefinition = `${baseColumns}, definition`;
+
+  let { data, error } = await supabase.from('medical_scales').select(withDefinition);
+  if (error && (error as { code?: string }).code === '42703') {
+    const retry = await supabase.from('medical_scales').select(baseColumns);
+    data = retry.data;
+    error = retry.error;
+  }
+
   if (error) {
     medicalScalesUnavailable = true;
     return [];
@@ -44,13 +64,31 @@ export const resetMedicalScalesCache = (): void => {
  * en caso contrario hace fallback a medical_scales.definition.
  */
 export const getScaleDefinitionById = async (scaleId: string): Promise<ScaleDefinition | null> => {
-  const { data: scaleRow, error: scaleError } = await supabase
+  let scaleRow: { id: string; name: string; definition?: ScaleDefinition | null } | null = null;
+  let scaleError: { code?: string; message?: string; details?: string | null; hint?: string | null } | null = null;
+
+  const primaryScaleQuery = await supabase
     .from('medical_scales')
     .select('id, name, definition')
     .eq('id', scaleId)
     .maybeSingle();
 
-  if (scaleError || !scaleRow) return null;
+  scaleRow = (primaryScaleQuery.data as { id: string; name: string; definition?: ScaleDefinition | null } | null) ?? null;
+  scaleError = (primaryScaleQuery.error as any) ?? null;
+
+  if (scaleError?.code === '42703') {
+    const fallbackScaleQuery = await supabase
+      .from('medical_scales')
+      .select('id, name')
+      .eq('id', scaleId)
+      .maybeSingle();
+    scaleRow = (fallbackScaleQuery.data as { id: string; name: string; definition?: ScaleDefinition | null } | null) ?? null;
+    scaleError = (fallbackScaleQuery.error as any) ?? null;
+  }
+
+  if (scaleError || !scaleRow) {
+    return null;
+  }
 
   const { data: questions, error: qError } = await supabase
     .from('scale_questions')
@@ -60,7 +98,15 @@ export const getScaleDefinitionById = async (scaleId: string): Promise<ScaleDefi
 
   if (qError || !questions || questions.length === 0) {
     const def = (scaleRow as { definition?: ScaleDefinition }).definition;
-    return def && typeof def === 'object' ? (def as ScaleDefinition) : null;
+    if (def && typeof def === 'object') return def as ScaleDefinition;
+
+    // Fallback when DB has the scale row but no persisted JSON definition/questions.
+    // This prevents empty questionnaires for known scales like Boston CTS.
+    const lowerName = String((scaleRow as { name?: string }).name || '').toLowerCase();
+    if (lowerName.includes('boston') || lowerName.includes('tunel carpiano') || lowerName.includes('carpal tunnel')) {
+      return BOSTON_FALLBACK_DEFINITION;
+    }
+    return null;
   }
 
   const questionIds = questions.map((q) => q.id);

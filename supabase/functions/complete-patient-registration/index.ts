@@ -171,6 +171,23 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Token expirado o usado' }), { status: 400, headers: buildCorsHeaders(req) });
     }
 
+    // 1b) Validar médico asociado para evitar fallos FK en patients.primary_doctor_id
+    const { data: doctorProfile, error: doctorCheckErr } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', tokenRow.doctor_id)
+      .maybeSingle();
+    if (doctorCheckErr || !doctorProfile) {
+      console.error('doctor_id not found in profiles:', tokenRow.doctor_id, doctorCheckErr);
+      return new Response(
+        JSON.stringify({
+          error: 'El médico asociado al enlace no se encontró',
+          detail: doctorCheckErr?.message ?? null,
+        }),
+        { status: 400, headers: buildCorsHeaders(req) }
+      );
+    }
+
     // 2) Transacción usando RPC (Postgres) porque supabase-js no tiene transacciones multi-requests
     // Creamos un bloque anónimo que ejecute todo y haga ROLLBACK ante error
     const sql = `
@@ -198,7 +215,14 @@ serve(async (req) => {
         })
         .eq('id', tokenRow.assigned_patient_id);
       if (updPatientErr) {
-        return new Response(JSON.stringify({ error: 'No se pudo actualizar paciente' }), { status: 400, headers: buildCorsHeaders(req) });
+        console.error('patients update error:', JSON.stringify(updPatientErr));
+        return new Response(
+          JSON.stringify({
+            error: 'No se pudo actualizar paciente',
+            detail: updPatientErr?.message ?? null,
+          }),
+          { status: 400, headers: buildCorsHeaders(req) }
+        );
       }
       patientId = tokenRow.assigned_patient_id as string;
     } else {
@@ -220,7 +244,14 @@ serve(async (req) => {
         .select('id')
         .single();
       if (patientErr || !patient) {
-        return new Response(JSON.stringify({ error: 'No se pudo crear paciente' }), { status: 400, headers: buildCorsHeaders(req) });
+        console.error('patients insert error:', JSON.stringify(patientErr));
+        return new Response(
+          JSON.stringify({
+            error: 'No se pudo crear paciente',
+            detail: patientErr?.message ?? null,
+          }),
+          { status: 400, headers: buildCorsHeaders(req) }
+        );
       }
       patientId = patient.id as string;
     }
@@ -278,12 +309,8 @@ serve(async (req) => {
       if (scaleEntries.length > 0) {
         const { error: saErr } = await supabase.from('scale_assessments').insert(scaleEntries as any);
         if (saErr) {
-          await supabase.from('non_pathological_histories').delete().eq('patient_id', patientId);
-          await supabase.from('pathological_histories').delete().eq('patient_id', patientId);
-          if (!tokenRow.assigned_patient_id) {
-            await supabase.from('patients').delete().eq('id', patientId);
-          }
-          return new Response(JSON.stringify({ error: 'No se pudieron guardar las escalas' }), { status: 400, headers: buildCorsHeaders(req) });
+          // Mantener paciente y expediente base; fallar escalas no debe borrar el registro.
+          console.error('scale_assessments insert error:', JSON.stringify(saErr));
         }
       }
     }

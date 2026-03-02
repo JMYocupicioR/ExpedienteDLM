@@ -3,6 +3,23 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { fetchActiveMedicalScalesSafe, getScaleDefinitionById } from '@/lib/services/medical-scales-service';
 import ScaleStepper from '@/components/ScaleStepper';
+import ChipSelector from '@/components/patient-registration/ChipSelector';
+import SelectSimple from '@/components/patient-registration/SelectSimple';
+import VoiceInputButton from '@/components/patient-registration/VoiceInputButton';
+import {
+  CHRONIC_DISEASE_OPTIONS,
+  TREATMENT_OPTIONS,
+  SURGERY_OPTIONS,
+  FRACTURE_OPTIONS,
+  HOSPITALIZATION_OPTIONS,
+  RELIGION_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  EDUCATION_LEVEL_OPTIONS,
+  DIET_OPTIONS,
+  HYGIENE_OPTIONS,
+  VACCINE_OPTIONS,
+  FAMILY_RELATIONSHIP_OPTIONS,
+} from '@/lib/patient-registration-catalogs';
 
 type TokenRow = {
   id: string;
@@ -51,6 +68,8 @@ type NonPathological = {
 type HereditaryItem = {
   relationship: string;
   condition: string;
+  relationship_other?: string;
+  condition_other?: string;
   notes?: string;
 };
 
@@ -81,6 +100,17 @@ export default function PatientPublicRegistration() {
   const [accountPassword, setAccountPassword] = useState('');
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
   const [postSubmitMessage, setPostSubmitMessage] = useState<string | null>(null);
+  const [chronicDiseasesOther, setChronicDiseasesOther] = useState('');
+  const [currentTreatmentsOther, setCurrentTreatmentsOther] = useState('');
+  const [surgeriesOther, setSurgeriesOther] = useState('');
+  const [fracturesOther, setFracturesOther] = useState('');
+  const [hospitalizationsOther, setHospitalizationsOther] = useState('');
+  const [vaccinationOther, setVaccinationOther] = useState('');
+  const [religionOther, setReligionOther] = useState('');
+  const [maritalStatusOther, setMaritalStatusOther] = useState('');
+  const [educationLevelOther, setEducationLevelOther] = useState('');
+  const [dietOther, setDietOther] = useState('');
+  const [hygieneOther, setHygieneOther] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -132,9 +162,19 @@ export default function PatientPublicRegistration() {
         if (scaleIds.length > 0) {
           const allActiveScales = await fetchActiveMedicalScalesSafe();
           const map: Record<string, { name: string; definition: ScaleDefinition }> = {};
+          const missingDefinitionIds: string[] = [];
+          const missingDefinitionDetails: Array<{ scaleId: string; foundInActiveCatalog: boolean; hasInlineDefinition: boolean }> = [];
           for (const sid of scaleIds) {
             const row = allActiveScales.find((r) => r.id === sid);
             const definition = await getScaleDefinitionById(sid);
+            if (!definition && !(row?.definition as ScaleDefinition)) {
+              missingDefinitionIds.push(sid);
+              missingDefinitionDetails.push({
+                scaleId: sid,
+                foundInActiveCatalog: Boolean(row),
+                hasInlineDefinition: Boolean((row as any)?.definition),
+              });
+            }
             map[sid] = {
               name: row?.name ?? sid,
               definition: definition ?? (row?.definition as ScaleDefinition) ?? { items: [] },
@@ -142,7 +182,7 @@ export default function PatientPublicRegistration() {
           }
           setScaleDefs(map);
         }
-      } catch {
+      } catch (e: any) {
         // Error log removed for security;
         setError('No se pudo validar el enlace.');
       } finally {
@@ -171,6 +211,27 @@ export default function PatientPublicRegistration() {
     setActiveScaleId(null);
   };
 
+  const appendFieldText = (current: string | undefined, incoming: string) => {
+    const cleanIncoming = incoming.trim();
+    if (!cleanIncoming) return current || '';
+    const cleanCurrent = (current || '').trim();
+    return cleanCurrent ? `${cleanCurrent} ${cleanIncoming}` : cleanIncoming;
+  };
+
+  const normalizeMultiValue = (values: string[], otherValue?: string) => {
+    const filtered = values.filter((item) => item !== 'Otra' && item !== 'Otro' && item !== 'Ninguna');
+    const custom = (otherValue || '').trim();
+    if (custom) filtered.push(custom);
+    return Array.from(new Set(filtered));
+  };
+
+  const normalizeSingleValue = (value: string, otherValue?: string) => {
+    if (value === 'Otra' || value === 'Otro') {
+      return (otherValue || '').trim();
+    }
+    return value;
+  };
+
   const handleSubmit = async () => {
     if (!tokenRow) return;
     try {
@@ -194,16 +255,54 @@ export default function PatientPublicRegistration() {
         }
       }
 
+      const normalizedPathological = {
+        ...pathological,
+        chronic_diseases: normalizeMultiValue(pathological.chronic_diseases, chronicDiseasesOther),
+        current_treatments: normalizeMultiValue(pathological.current_treatments, currentTreatmentsOther),
+        surgeries: normalizeMultiValue(pathological.surgeries, surgeriesOther),
+        fractures: normalizeMultiValue(pathological.fractures, fracturesOther),
+        previous_hospitalizations: normalizeMultiValue(pathological.previous_hospitalizations, hospitalizationsOther),
+      };
+
+      const normalizedNonPathological = {
+        ...nonPathological,
+        religion: normalizeSingleValue(nonPathological.religion, religionOther),
+        marital_status: normalizeSingleValue(nonPathological.marital_status, maritalStatusOther),
+        education_level: normalizeSingleValue(nonPathological.education_level, educationLevelOther),
+        diet: normalizeSingleValue(nonPathological.diet, dietOther),
+        personal_hygiene: normalizeSingleValue(nonPathological.personal_hygiene, hygieneOther),
+        vaccination_history: normalizeMultiValue(nonPathological.vaccination_history, vaccinationOther),
+      };
+
+      const normalizedHereditary = hereditary.map((item) => ({
+        relationship: normalizeSingleValue(item.relationship, item.relationship_other).trim(),
+        condition: normalizeSingleValue(item.condition, item.condition_other).trim(),
+        notes: item.notes || '',
+      }));
+
       const body = {
         token: tokenRow.token,
         personal,
-        pathological,
-        nonPathological,
-        hereditary,
+        pathological: normalizedPathological,
+        nonPathological: normalizedNonPathological,
+        hereditary: normalizedHereditary,
         scales: scaleAnswers,
       };
       const { error } = await supabase.functions.invoke('complete-patient-registration', { body });
-      if (error) throw new Error(error.message || 'Error al completar registro');
+      if (error) {
+        let contextBody: string | null = null;
+        let contextStatus: number | null = null;
+        try {
+          const maybeResponse = (error as any)?.context;
+          if (maybeResponse) {
+            contextStatus = maybeResponse.status ?? null;
+            contextBody = await maybeResponse.text();
+          }
+        } catch {
+          // no-op
+        }
+        throw new Error(error.message || 'Error al completar registro');
+      }
 
       if (createPatientAccount) {
         let accountInfoMessage: string | null = null;
@@ -294,7 +393,7 @@ export default function PatientPublicRegistration() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 p-4">
+    <div className="min-h-screen bg-gray-900 p-3 md:p-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
       <div className="max-w-3xl mx-auto">
         <div className="bg-gray-800 border border-gray-700 rounded p-4 mb-4">
           <h1 className="text-white text-xl font-semibold mb-1">
@@ -306,12 +405,12 @@ export default function PatientPublicRegistration() {
         </div>
 
         {/* Stepper header */}
-        <div className="flex items-center space-x-2 mb-4">
+        <div className="flex items-center space-x-2 mb-4 overflow-x-auto pb-1">
           {isQuestionnaireOnly ? (
-            <div className="px-3 py-1 rounded bg-cyan-700 text-white">Cuestionarios</div>
+            <div className="px-3 py-2 rounded bg-cyan-700 text-white whitespace-nowrap">Cuestionarios</div>
           ) : (
             [1,2,3].map(n => (
-              <div key={n} className={`px-3 py-1 rounded ${step === n ? 'bg-cyan-700 text-white' : 'bg-gray-700 text-gray-300'}`}>Paso {n}</div>
+              <div key={n} className={`px-3 py-2 rounded whitespace-nowrap ${step === n ? 'bg-cyan-700 text-white' : 'bg-gray-700 text-gray-300'}`}>Paso {n}</div>
             ))
           )}
         </div>
@@ -320,32 +419,38 @@ export default function PatientPublicRegistration() {
           <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="text-sm text-gray-300">Nombre completo</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={personal.full_name} onChange={e => setPersonal(p => ({ ...p, full_name: e.target.value }))} />
+                <label className="text-base text-gray-200">Nombre completo</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.full_name} onChange={e => setPersonal(p => ({ ...p, full_name: e.target.value }))} />
+                  <VoiceInputButton onAppendText={(text) => setPersonal((prev) => ({ ...prev, full_name: appendFieldText(prev.full_name, text) }))} />
+                </div>
               </div>
               <div>
-                <label className="text-sm text-gray-300">Fecha de nacimiento</label>
-                <input type="date" className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={personal.birth_date} onChange={e => setPersonal(p => ({ ...p, birth_date: e.target.value }))} />
+                <label className="text-base text-gray-200">Fecha de nacimiento</label>
+                <input type="date" className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.birth_date} onChange={e => setPersonal(p => ({ ...p, birth_date: e.target.value }))} />
               </div>
               <div>
-                <label className="text-sm text-gray-300">Género</label>
-                <select className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={personal.gender} onChange={e => setPersonal(p => ({ ...p, gender: e.target.value }))}>
+                <label className="text-base text-gray-200">Genero</label>
+                <select className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.gender} onChange={e => setPersonal(p => ({ ...p, gender: e.target.value }))}>
                   <option value="female">Femenino</option>
                   <option value="male">Masculino</option>
                   <option value="unspecified">Prefiero no decir</option>
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-300">Correo</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={personal.email || ''} onChange={e => setPersonal(p => ({ ...p, email: e.target.value }))} />
+                <label className="text-base text-gray-200">Correo</label>
+                <input className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.email || ''} onChange={e => setPersonal(p => ({ ...p, email: e.target.value }))} />
               </div>
               <div>
-                <label className="text-sm text-gray-300">Teléfono</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={personal.phone || ''} onChange={e => setPersonal(p => ({ ...p, phone: e.target.value }))} />
+                <label className="text-base text-gray-200">Telefono</label>
+                <input className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.phone || ''} onChange={e => setPersonal(p => ({ ...p, phone: e.target.value }))} />
               </div>
               <div className="md:col-span-2">
-                <label className="text-sm text-gray-300">Dirección</label>
-                <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={personal.address || ''} onChange={e => setPersonal(p => ({ ...p, address: e.target.value }))} />
+                <label className="text-base text-gray-200">Direccion</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.address || ''} onChange={e => setPersonal(p => ({ ...p, address: e.target.value }))} />
+                  <VoiceInputButton onAppendText={(text) => setPersonal((prev) => ({ ...prev, address: appendFieldText(prev.address, text) }))} />
+                </div>
               </div>
             </div>
             <div className="flex justify-end">
@@ -358,67 +463,124 @@ export default function PatientPublicRegistration() {
           <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-4">
             {allowedSections.includes('pathological') && (
               <div>
-                <div className="text-gray-200 font-medium mb-2">Antecedentes patológicos</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm text-gray-300">Enfermedades crónicas</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.chronic_diseases.join(', ')} onChange={e => setPathological(v => ({ ...v, chronic_diseases: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-300">Tratamientos actuales</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.current_treatments.join(', ')} onChange={e => setPathological(v => ({ ...v, current_treatments: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-300">Cirugías</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.surgeries.join(', ')} onChange={e => setPathological(v => ({ ...v, surgeries: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-300">Fracturas</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.fractures.join(', ')} onChange={e => setPathological(v => ({ ...v, fractures: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-sm text-gray-300">Hospitalizaciones previas</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" placeholder="Separar por coma" value={pathological.previous_hospitalizations.join(', ')} onChange={e => setPathological(v => ({ ...v, previous_hospitalizations: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
-                  </div>
+                <div className="text-gray-200 font-medium mb-2">Antecedentes medicos</div>
+                <div className="grid grid-cols-1 gap-4">
+                  <ChipSelector
+                    label="Que enfermedades tiene? (puede elegir varias)"
+                    helpText="Si no tiene ninguna, marque Ninguna."
+                    options={CHRONIC_DISEASE_OPTIONS}
+                    values={pathological.chronic_diseases}
+                    onChange={(values) => setPathological((prev) => ({ ...prev, chronic_diseases: values }))}
+                    otherText={chronicDiseasesOther}
+                    onOtherTextChange={setChronicDiseasesOther}
+                  />
+                  <ChipSelector
+                    label="Que medicinas toma?"
+                    options={TREATMENT_OPTIONS}
+                    values={pathological.current_treatments}
+                    onChange={(values) => setPathological((prev) => ({ ...prev, current_treatments: values }))}
+                    otherText={currentTreatmentsOther}
+                    onOtherTextChange={setCurrentTreatmentsOther}
+                  />
+                  <ChipSelector
+                    label="Ha tenido operaciones?"
+                    options={SURGERY_OPTIONS}
+                    values={pathological.surgeries}
+                    onChange={(values) => setPathological((prev) => ({ ...prev, surgeries: values }))}
+                    otherText={surgeriesOther}
+                    onOtherTextChange={setSurgeriesOther}
+                  />
+                  <ChipSelector
+                    label="Ha tenido huesos rotos?"
+                    options={FRACTURE_OPTIONS}
+                    values={pathological.fractures}
+                    onChange={(values) => setPathological((prev) => ({ ...prev, fractures: values }))}
+                    otherText={fracturesOther}
+                    onOtherTextChange={setFracturesOther}
+                  />
+                  <ChipSelector
+                    label="Ha estado internado en hospital?"
+                    options={HOSPITALIZATION_OPTIONS}
+                    values={pathological.previous_hospitalizations}
+                    onChange={(values) => setPathological((prev) => ({ ...prev, previous_hospitalizations: values }))}
+                    otherText={hospitalizationsOther}
+                    onOtherTextChange={setHospitalizationsOther}
+                  />
                 </div>
               </div>
             )}
 
             {allowedSections.includes('non_pathological') && (
               <div>
-                <div className="text-gray-200 font-medium mb-2">Antecedentes no patológicos</div>
+                <div className="text-gray-200 font-medium mb-2">Habitos y datos generales</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-sm text-gray-300">Lateralidad</label>
-                    <select className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.handedness} onChange={e => setNonPathological(v => ({ ...v, handedness: e.target.value }))}>
+                    <label className="text-base text-gray-200 font-medium">Con que mano escribe?</label>
+                    <select className="w-full mt-1 min-h-[44px] bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.handedness} onChange={e => setNonPathological(v => ({ ...v, handedness: e.target.value }))}>
                       <option value="right">Derecha</option>
                       <option value="left">Izquierda</option>
                       <option value="ambidextrous">Ambidiestro</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Religión</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.religion} onChange={e => setNonPathological(v => ({ ...v, religion: e.target.value }))} />
+                    <SelectSimple
+                      label="Religion"
+                      value={nonPathological.religion}
+                      onChange={(value) => setNonPathological((prev) => ({ ...prev, religion: value }))}
+                      options={RELIGION_OPTIONS}
+                      otherText={religionOther}
+                      onOtherTextChange={setReligionOther}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Estado civil</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.marital_status} onChange={e => setNonPathological(v => ({ ...v, marital_status: e.target.value }))} />
+                    <SelectSimple
+                      label="Estado civil"
+                      value={nonPathological.marital_status}
+                      onChange={(value) => setNonPathological((prev) => ({ ...prev, marital_status: value }))}
+                      options={MARITAL_STATUS_OPTIONS}
+                      otherText={maritalStatusOther}
+                      onOtherTextChange={setMaritalStatusOther}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Nivel educativo</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.education_level} onChange={e => setNonPathological(v => ({ ...v, education_level: e.target.value }))} />
+                    <SelectSimple
+                      label="Nivel educativo"
+                      value={nonPathological.education_level}
+                      onChange={(value) => setNonPathological((prev) => ({ ...prev, education_level: value }))}
+                      options={EDUCATION_LEVEL_OPTIONS}
+                      otherText={educationLevelOther}
+                      onOtherTextChange={setEducationLevelOther}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Dieta</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.diet} onChange={e => setNonPathological(v => ({ ...v, diet: e.target.value }))} />
+                    <SelectSimple
+                      label="Alimentacion"
+                      value={nonPathological.diet}
+                      onChange={(value) => setNonPathological((prev) => ({ ...prev, diet: value }))}
+                      options={DIET_OPTIONS}
+                      otherText={dietOther}
+                      onOtherTextChange={setDietOther}
+                    />
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Higiene personal</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.personal_hygiene} onChange={e => setNonPathological(v => ({ ...v, personal_hygiene: e.target.value }))} />
+                    <SelectSimple
+                      label="Higiene personal"
+                      value={nonPathological.personal_hygiene}
+                      onChange={(value) => setNonPathological((prev) => ({ ...prev, personal_hygiene: value }))}
+                      options={HYGIENE_OPTIONS}
+                      otherText={hygieneOther}
+                      onOtherTextChange={setHygieneOther}
+                    />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="text-sm text-gray-300">Vacunas (separar por coma)</label>
-                    <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={nonPathological.vaccination_history.join(', ')} onChange={e => setNonPathological(v => ({ ...v, vaccination_history: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))} />
+                    <ChipSelector
+                      label="Que vacunas recuerda?"
+                      options={VACCINE_OPTIONS}
+                      values={nonPathological.vaccination_history}
+                      onChange={(values) => setNonPathological((prev) => ({ ...prev, vaccination_history: values }))}
+                      otherText={vaccinationOther}
+                      onOtherTextChange={setVaccinationOther}
+                    />
                   </div>
                 </div>
               </div>
@@ -426,23 +588,43 @@ export default function PatientPublicRegistration() {
 
             {allowedSections.includes('hereditary') && (
               <div>
-                <div className="text-gray-200 font-medium mb-2">Antecedentes heredofamiliares</div>
+                <div className="text-gray-200 font-medium mb-2">Antecedentes de familiares</div>
                 {hereditary.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
-                    <input placeholder="Parentesco (madre, padre...)" className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={item.relationship} onChange={e => setHereditary(arr => arr.map((it,i) => i===idx ? { ...it, relationship: e.target.value } : it))} />
-                    <input placeholder="Condición (diabetes, hipertensión...)" className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={item.condition} onChange={e => setHereditary(arr => arr.map((it,i) => i===idx ? { ...it, condition: e.target.value } : it))} />
-                    <input placeholder="Notas (opcional)" className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white" value={item.notes || ''} onChange={e => setHereditary(arr => arr.map((it,i) => i===idx ? { ...it, notes: e.target.value } : it))} />
+                  <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                    <SelectSimple
+                      label="Parentesco"
+                      value={item.relationship}
+                      options={FAMILY_RELATIONSHIP_OPTIONS}
+                      onChange={(value) => setHereditary((arr) => arr.map((it, i) => i === idx ? { ...it, relationship: value } : it))}
+                      otherText={item.relationship_other || ''}
+                      onOtherTextChange={(value) => setHereditary((arr) => arr.map((it, i) => i === idx ? { ...it, relationship_other: value } : it))}
+                    />
+                    <SelectSimple
+                      label="Enfermedad"
+                      value={item.condition}
+                      options={CHRONIC_DISEASE_OPTIONS}
+                      onChange={(value) => setHereditary((arr) => arr.map((it, i) => i === idx ? { ...it, condition: value } : it))}
+                      otherText={item.condition_other || ''}
+                      onOtherTextChange={(value) => setHereditary((arr) => arr.map((it, i) => i === idx ? { ...it, condition_other: value } : it))}
+                    />
+                    <div>
+                      <label className="text-base text-gray-200 font-medium">Notas (opcional)</label>
+                      <div className="mt-1 flex items-center gap-2">
+                        <input placeholder="Escriba una nota breve" className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={item.notes || ''} onChange={e => setHereditary(arr => arr.map((it,i) => i===idx ? { ...it, notes: e.target.value } : it))} />
+                        <VoiceInputButton onAppendText={(text) => setHereditary((arr) => arr.map((it, i) => i === idx ? { ...it, notes: appendFieldText(it.notes, text) } : it))} />
+                      </div>
+                    </div>
                   </div>
                 ))}
                 <div>
-                  <button className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm" onClick={() => setHereditary(arr => [...arr, { relationship: '', condition: '', notes: '' }])}>Agregar familiar</button>
+                  <button className="px-3 py-2 min-h-[44px] bg-gray-700 hover:bg-gray-600 text-white rounded text-sm" onClick={() => setHereditary(arr => [...arr, { relationship: '', condition: '', notes: '' }])}>Agregar familiar</button>
                 </div>
               </div>
             )}
 
             <div className="flex items-center justify-between">
-              <button className="px-3 py-2 bg-gray-700 text-white rounded" onClick={() => setStep(1)}>Atrás</button>
-              <button className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded" onClick={() => setStep(3)}>Siguiente</button>
+                <button className="px-3 py-2 min-h-[44px] bg-gray-700 text-white rounded" onClick={() => setStep(1)}>Atras</button>
+              <button className="px-3 py-2 min-h-[44px] bg-cyan-600 hover:bg-cyan-700 text-white rounded" onClick={() => setStep(3)}>Siguiente</button>
             </div>
           </div>
         )}
