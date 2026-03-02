@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, Printer, Download, CheckCircle } from 'lucide-react';
+import { X, Printer, CheckCircle } from 'lucide-react';
 
 type ScaleOption = { label: string; value: number | string };
 type ScaleItem = { id: string; text: string; type: 'select'; options: ScaleOption[] };
@@ -87,33 +87,43 @@ export default function ScaleStepper({ isOpen, onClose, scaleId, scaleName, defi
 
   if (!isOpen) return null;
 
-  const current = items[index];
-
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-gray-900 border border-gray-600 rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-2xl overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <div>
-            <h3 className="text-white font-semibold">{scaleName}</h3>
-            <p className="text-xs text-gray-400">Pregunta {Math.min(index + 1, items.length)} de {items.length}</p>
+            <h3 className="text-white font-semibold text-lg">{scaleName}</h3>
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden max-w-[120px]">
+                <div
+                  className="h-full bg-cyan-500 rounded-full transition-all duration-300"
+                  style={{ width: `${items.length ? ((index + 1) / items.length) * 100 : 0}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-400">Pregunta {Math.min(index + 1, items.length)} de {items.length}</span>
+            </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors" aria-label="Cerrar"><X className="h-5 w-5" /></button>
         </div>
 
         {/* Panel deslizante */}
-        <div className="relative h-56 sm:h-64 overflow-hidden">
+        <div className="relative min-h-[14rem] sm:min-h-[16rem] max-h-[60vh] overflow-y-auto overflow-x-hidden">
           <div
-            className="absolute inset-0 flex transition-transform duration-300"
-            style={{ transform: `translateX(-${index * 100}%)`, width: `${items.length * 100}%` }}
+            className="flex transition-transform duration-300"
+            style={{ transform: `translateX(-${items.length ? (index * 100) / items.length : 0}%)`, width: `${Math.max(1, items.length) * 100}%` }}
           >
-            {items.map((it, idx) => (
-              <div key={it.id} className="w-full flex-shrink-0 p-4">
-                <div className="text-white text-base sm:text-lg mb-4">{it.text}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {items.map((it) => (
+              <div
+                key={it.id}
+                className="flex-shrink-0 p-4 min-w-0"
+                style={{ flexBasis: `${items.length ? 100 / items.length : 100}%`, width: `${items.length ? 100 / items.length : 100}%` }}
+              >
+                <div className="text-white text-base sm:text-lg mb-4 leading-relaxed">{it.text}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {it.type === 'select' && it.options.map(opt => (
                     <button
                       key={`${it.id}-${String(opt.value)}`}
-                      className="px-3 py-2 text-left rounded bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200"
+                      className="w-full px-4 py-3 min-h-[44px] text-left rounded-lg bg-gray-800 hover:bg-gray-700 focus:bg-gray-700 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-gray-900 border border-gray-600 text-gray-200 whitespace-normal break-words min-w-0 transition-colors duration-150"
                       onClick={() => handleSelect(it.id, opt.value)}
                     >
                       {opt.label}
@@ -126,23 +136,23 @@ export default function ScaleStepper({ isOpen, onClose, scaleId, scaleName, defi
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-800 flex items-center justify-between">
-          <div className="text-sm text-gray-400">
+        <div className="p-4 border-t border-gray-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-sm text-gray-400 order-2 sm:order-1">
             {allAnswered ? (
-              <span className="text-green-400 inline-flex items-center"><CheckCircle className="h-4 w-4 mr-1" /> Completa</span>
+              <span className="text-green-400 inline-flex items-center"><CheckCircle className="h-4 w-4 mr-1 shrink-0" /> Completa</span>
             ) : (
               <span>Responde tocando una opción; avanza automáticamente</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 order-1 sm:order-2">
             <button
-              className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded flex items-center"
+              className="px-3 py-2.5 min-h-[44px] bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center justify-center transition-colors"
               onClick={handlePrint}
             >
               <Printer className="h-4 w-4 mr-1" /> Imprimir
             </button>
             <button
-              className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded"
+              className="px-4 py-2.5 min-h-[44px] bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
               onClick={handleFinish}
               disabled={!allAnswered}
             >

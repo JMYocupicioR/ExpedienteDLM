@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { fetchActiveMedicalScalesSafe, getScaleDefinitionById } from '@/lib/services/medical-scales-service';
 import ScaleStepper from '@/components/ScaleStepper';
@@ -29,11 +30,12 @@ type TokenRow = {
   selected_scale_ids: string[] | null;
   allowed_sections?: string[] | null;
   invitation_template?: string | null;
+  message_template?: string | null;
   assigned_patient_id?: string | null;
   expires_at: string;
   status: string;
   created_at: string;
-  doctor?: { full_name: string | null } | null;
+  doctor?: { full_name: string | null; specialty?: string | null } | null;
   clinic?: { name: string } | null;
 };
 
@@ -119,7 +121,7 @@ export default function PatientPublicRegistration() {
         setLoading(true);
         const { data, error } = await supabase
           .from('patient_registration_tokens')
-          .select('id, token, doctor_id, clinic_id, selected_scale_ids, allowed_sections, invitation_template, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name), clinic:clinics(name)')
+          .select('id, token, doctor_id, clinic_id, selected_scale_ids, allowed_sections, invitation_template, message_template, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name, specialty), clinic:clinics(name)')
           .eq('token', token)
           .single();
         if (error) throw error;
@@ -205,6 +207,13 @@ export default function PatientPublicRegistration() {
     const clinic = tokenRow.clinic?.name || 'tu clínica';
     return `Cuestionarios asignados por ${doc} de ${clinic}`;
   }, [tokenRow, isQuestionnaireOnly]);
+
+  const doctorLine = useMemo(() => {
+    if (!tokenRow?.doctor?.full_name) return null;
+    const name = tokenRow.doctor.full_name;
+    const specialty = tokenRow.doctor.specialty;
+    return specialty ? `${name} — ${specialty}` : name;
+  }, [tokenRow]);
 
   const handleScaleComplete = (scaleId: string, payload: { answers: Record<string, unknown>; score: number | null; severity: string | null }) => {
     setScaleAnswers(prev => ({ ...prev, [scaleId]: payload }));
@@ -394,10 +403,27 @@ export default function PatientPublicRegistration() {
   return (
     <div className="min-h-screen bg-gray-900 p-3 md:p-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
       <div className="max-w-3xl mx-auto">
-        <div className="bg-gray-800 border border-gray-700 rounded p-4 mb-4">
-          <h1 className="text-white text-xl font-semibold mb-1">
+        <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-lg p-4 md:p-5 mb-4 space-y-3">
+          {tokenRow.message_template?.trim() && (
+            <div className="p-3 bg-cyan-900/30 border border-cyan-700/50 rounded-lg">
+              <p className="text-cyan-100 text-sm leading-relaxed whitespace-pre-wrap">
+                {tokenRow.message_template.trim()}
+              </p>
+            </div>
+          )}
+          <h1 className="text-white text-xl font-semibold">
             {isQuestionnaireOnly && questionnaireHeader ? questionnaireHeader : 'Registro de paciente'}
           </h1>
+          {tokenRow.clinic?.name && (
+            <div className="text-lg font-medium text-gray-100">
+              {tokenRow.clinic.name}
+            </div>
+          )}
+          {doctorLine && (
+            <p className="text-sm text-cyan-400">
+              Dr(a). {doctorLine}
+            </p>
+          )}
           <p className="text-gray-300 text-sm">
             {isQuestionnaireOnly && questionnaireHeader ? 'Completa los cuestionarios asignados. Los resultados se guardarán en tu expediente.' : welcome}
           </p>
@@ -657,13 +683,13 @@ export default function PatientPublicRegistration() {
               {(tokenRow.selected_scale_ids || []).map((sid: string) => {
                 const answered = Boolean(scaleAnswers[sid]);
                 return (
-                  <div key={sid} className="flex items-center justify-between bg-gray-900 border border-gray-700 rounded p-3">
-                    <div className="text-sm text-gray-200">
-                      {scaleDefs[sid]?.name || sid}
-                      {answered && <span className="ml-2 text-xs text-green-400">Completada</span>}
+                  <div key={sid} className="flex items-center justify-between bg-gray-900/80 border border-gray-600 rounded-lg p-3 shadow-sm">
+                    <div className="text-sm text-gray-200 min-w-0 flex-1">
+                      <span className="font-medium">{scaleDefs[sid]?.name || sid}</span>
+                      {answered && <span className="ml-2 text-xs text-green-400 inline-flex items-center"><CheckCircle className="h-3.5 w-3.5 mr-0.5" />Completada</span>}
                     </div>
                     <button
-                      className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm"
+                      className="ml-3 px-4 py-2 min-h-[44px] bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium shrink-0 transition-colors"
                       onClick={() => setActiveScaleId(sid)}
                     >
                       {answered ? 'Revisar' : 'Responder'}
