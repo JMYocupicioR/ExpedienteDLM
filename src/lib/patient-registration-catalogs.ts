@@ -3,6 +3,77 @@ export type CatalogOption = {
   label: string;
 };
 
+export const GENDER_OPTIONS: CatalogOption[] = [
+  { value: 'male', label: 'Masculino' },
+  { value: 'female', label: 'Femenino' },
+  { value: 'masculino', label: 'Masculino' },
+  { value: 'femenino', label: 'Femenino' },
+  { value: 'otro', label: 'Otro' },
+  { value: 'other', label: 'Otro' },
+  { value: 'unspecified', label: 'Prefiero no decir' },
+  { value: 'no_especificado', label: 'Prefiero no decir' },
+];
+
+// Normalizes gender values from different input sources to canonical form
+const GENDER_CANONICAL: Record<string, string> = {
+  male: 'male', masculino: 'male', m: 'male',
+  female: 'female', femenino: 'female', f: 'female',
+  otro: 'otro', other: 'otro',
+  unspecified: 'unspecified', no_especificado: 'unspecified',
+  'prefiero no decir': 'unspecified',
+};
+
+const HANDEDNESS_CANONICAL: Record<string, string> = {
+  right: 'right', diestro: 'right', derecha: 'right',
+  left: 'left', zurdo: 'left', izquierda: 'left',
+  ambidextrous: 'ambidextrous', ambidiestro: 'ambidextrous',
+};
+
+const MARITAL_CANONICAL: Record<string, string> = {
+  soltero: 'soltero', 'soltero o soltera': 'soltero',
+  casado: 'casado', 'casado o casada': 'casado',
+  union_libre: 'union_libre', 'union libre': 'union_libre',
+  divorciado: 'divorciado', 'divorciado o divorciada': 'divorciado',
+  viudo: 'viudo', 'viudo o viuda': 'viudo',
+  otro: 'otro', other: 'otro',
+};
+
+const EDUCATION_CANONICAL: Record<string, string> = {
+  ninguna: 'ninguna', 'sin estudios': 'ninguna', none: 'ninguna',
+  primaria: 'primaria',
+  secundaria: 'secundaria',
+  preparatoria: 'preparatoria',
+  universidad: 'universidad',
+  posgrado: 'posgrado',
+  otro: 'otro', other: 'otro',
+};
+
+/** Returns the canonical value for a field or the original value if unknown. */
+export const normalizeFieldValue = (
+  field: 'gender' | 'handedness' | 'marital_status' | 'education_level',
+  raw?: string | null,
+): string => {
+  if (!raw) return '';
+  const lower = raw.toLowerCase().trim();
+  const map: Record<string, Record<string, string>> = {
+    gender: GENDER_CANONICAL,
+    handedness: HANDEDNESS_CANONICAL,
+    marital_status: MARITAL_CANONICAL,
+    education_level: EDUCATION_CANONICAL,
+  };
+  return map[field][lower] ?? raw;
+};
+
+/** Returns the human-readable label for a canonical value in a catalog. */
+export const getLabelFromCatalog = (
+  options: CatalogOption[],
+  value?: string | null,
+): string => {
+  if (!value) return '';
+  const found = options.find((o) => o.value === value);
+  return found?.label ?? value;
+};
+
 export const CHRONIC_DISEASE_OPTIONS: CatalogOption[] = [
   { value: 'Diabetes', label: 'Diabetes' },
   { value: 'Presion alta', label: 'Presion alta' },
@@ -60,21 +131,22 @@ export const RELIGION_OPTIONS: CatalogOption[] = [
 ];
 
 export const MARITAL_STATUS_OPTIONS: CatalogOption[] = [
-  { value: 'Soltero o soltera', label: 'Soltero o soltera' },
-  { value: 'Casado o casada', label: 'Casado o casada' },
-  { value: 'Union libre', label: 'Union libre' },
-  { value: 'Divorciado o divorciada', label: 'Divorciado o divorciada' },
-  { value: 'Viudo o viuda', label: 'Viudo o viuda' },
-  { value: 'Otro', label: 'Otro' },
+  { value: 'soltero', label: 'Soltero o soltera' },
+  { value: 'casado', label: 'Casado o casada' },
+  { value: 'union_libre', label: 'Union libre' },
+  { value: 'divorciado', label: 'Divorciado o divorciada' },
+  { value: 'viudo', label: 'Viudo o viuda' },
+  { value: 'otro', label: 'Otro' },
 ];
 
 export const EDUCATION_LEVEL_OPTIONS: CatalogOption[] = [
-  { value: 'Sin estudios', label: 'Sin estudios' },
-  { value: 'Primaria', label: 'Primaria' },
-  { value: 'Secundaria', label: 'Secundaria' },
-  { value: 'Preparatoria', label: 'Preparatoria' },
-  { value: 'Universidad', label: 'Universidad' },
-  { value: 'Otro', label: 'Otro' },
+  { value: 'ninguna', label: 'Sin estudios' },
+  { value: 'primaria', label: 'Primaria' },
+  { value: 'secundaria', label: 'Secundaria' },
+  { value: 'preparatoria', label: 'Preparatoria' },
+  { value: 'universidad', label: 'Universidad' },
+  { value: 'posgrado', label: 'Posgrado' },
+  { value: 'otro', label: 'Otro' },
 ];
 
 export const DIET_OPTIONS: CatalogOption[] = [

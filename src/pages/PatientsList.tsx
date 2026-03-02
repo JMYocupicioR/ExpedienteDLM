@@ -16,8 +16,9 @@ import {
   SortDesc,
   Stethoscope,
   Users,
+  X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface Patient extends PatientTableRow {
@@ -46,8 +47,32 @@ export default function PatientsList() {
     urgentCases: 0,
   });
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const { patientsQuery } = usePatients();
+
+  // Persist view mode preference
+  useEffect(() => {
+    const saved = localStorage.getItem('patients-view-mode') as 'table' | 'cards' | null;
+    if (saved) setViewMode(saved);
+  }, []);
+
+  const handleViewModeChange = (mode: 'table' | 'cards') => {
+    setViewMode(mode);
+    localStorage.setItem('patients-view-mode', mode);
+  };
+
+  // Global keyboard shortcut: Ctrl+F / Cmd+F focuses search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   useEffect(() => {
     if (patientsQuery.data) {
@@ -230,8 +255,12 @@ export default function PatientsList() {
 
   const PatientCard = ({ patient }: { patient: Patient }) => (
     <div
-      className='bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-cyan-400 transition-all cursor-pointer group'
+      className='bg-gray-800 rounded-lg p-4 sm:p-6 border border-gray-700 hover:border-cyan-400 transition-all cursor-pointer group'
       onClick={() => handlePatientClick(patient)}
+      role='button'
+      tabIndex={0}
+      onKeyDown={e => e.key === 'Enter' && handlePatientClick(patient)}
+      aria-label={`Ver expediente de ${patient.full_name}`}
     >
       <div className='flex items-center justify-between mb-4'>
         <div className='flex items-center space-x-3'>
@@ -282,40 +311,34 @@ export default function PatientsList() {
         </div>
       </div>
 
-      <div className='mt-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity'>
-        <div className='flex space-x-2'>
+      <div className='mt-4 flex items-center justify-between'>
+        <div className='flex space-x-2' onClick={e => e.stopPropagation()}>
           <button
-            onClick={e => {
-              e.stopPropagation();
-              handleQuickAction('prescription', patient.id);
-            }}
-            className='p-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors'
+            onClick={e => { e.stopPropagation(); handleQuickAction('prescription', patient.id); }}
+            className='p-2 bg-purple-600/80 rounded-lg hover:bg-purple-600 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center'
             title='Nueva receta'
+            aria-label='Nueva receta'
           >
             <Pill className='h-4 w-4 text-white' />
           </button>
           <button
-            onClick={e => {
-              e.stopPropagation();
-              handleQuickAction('consultation', patient.id);
-            }}
-            className='p-2 bg-green-600 rounded-lg hover:bg-green-700 transition-colors'
+            onClick={e => { e.stopPropagation(); handleQuickAction('consultation', patient.id); }}
+            className='p-2 bg-green-600/80 rounded-lg hover:bg-green-600 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center'
             title='Nueva consulta'
+            aria-label='Nueva consulta'
           >
             <Stethoscope className='h-4 w-4 text-white' />
           </button>
           <button
-            onClick={e => {
-              e.stopPropagation();
-              handleQuickAction('appointment', patient.id);
-            }}
-            className='p-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors'
+            onClick={e => { e.stopPropagation(); handleQuickAction('appointment', patient.id); }}
+            className='p-2 bg-blue-600/80 rounded-lg hover:bg-blue-600 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center'
             title='Programar cita'
+            aria-label='Programar cita'
           >
             <Calendar className='h-4 w-4 text-white' />
           </button>
         </div>
-        <span className='text-cyan-400 text-sm font-medium'>Ver expediente →</span>
+        <span className='text-cyan-400 text-sm font-medium group-hover:text-cyan-300 transition-colors'>Ver expediente →</span>
       </div>
     </div>
   );
@@ -402,14 +425,25 @@ export default function PatientsList() {
             <div className='flex flex-col lg:flex-row lg:items-center space-y-4 lg:space-y-0 lg:space-x-4'>
               {/* Search */}
               <div className='flex-1 relative'>
-                <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' />
+                <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5' aria-hidden='true' />
                 <input
+                  ref={searchRef}
                   type='text'
-                  placeholder='Buscar por nombre, email o teléfono...'
+                  placeholder='Buscar por nombre, email o teléfono... (Ctrl+F)'
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className='w-full pl-10 pr-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                  className='w-full pl-10 pr-10 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent'
+                  aria-label='Buscar pacientes'
                 />
+                {searchTerm && (
+                  <button
+                    onClick={() => { setSearchTerm(''); searchRef.current?.focus(); }}
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 rounded'
+                    aria-label='Limpiar búsqueda'
+                  >
+                    <X className='h-4 w-4' />
+                  </button>
+                )}
               </div>
 
               {/* Filter */}
@@ -480,20 +514,24 @@ export default function PatientsList() {
               </div>
 
               {/* View Mode Toggle */}
-              <div className='flex items-center space-x-1 bg-gray-700 rounded-lg p-1'>
+              <div className='flex items-center space-x-1 bg-gray-700 rounded-lg p-1' role='group' aria-label='Modo de vista'>
                 <button
-                  onClick={() => setViewMode('cards')}
-                  className={`p-2 rounded-lg transition-colors ${
+                  onClick={() => handleViewModeChange('cards')}
+                  className={`p-2 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center ${
                     viewMode === 'cards' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
                   }`}
+                  aria-label='Vista tarjetas'
+                  aria-pressed={viewMode === 'cards'}
                 >
                   <Grid className='h-4 w-4' />
                 </button>
                 <button
-                  onClick={() => setViewMode('table')}
-                  className={`p-2 rounded-lg transition-colors ${
+                  onClick={() => handleViewModeChange('table')}
+                  className={`p-2 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center ${
                     viewMode === 'table' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
                   }`}
+                  aria-label='Vista tabla'
+                  aria-pressed={viewMode === 'table'}
                 >
                   <List className='h-4 w-4' />
                 </button>

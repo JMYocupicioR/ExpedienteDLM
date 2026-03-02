@@ -1389,9 +1389,58 @@ export default function EnhancedSignupQuestionnaire() {
           is_active: true,
         };
 
-        const { error: patientError } = await supabase.from('patients').insert(patientData);
+        const normalizedEmail = (formData.personalInfo.email || '').trim().toLowerCase();
+        const { data: existingByUser } = await supabase
+          .from('patients')
+          .select('id')
+          .eq('patient_user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (patientError) throw patientError;
+        if (existingByUser?.id) {
+          const { error: patientUpdateError } = await supabase
+            .from('patients')
+            .update({
+              ...patientData,
+              email: normalizedEmail || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingByUser.id);
+          if (patientUpdateError) throw patientUpdateError;
+        } else if (normalizedEmail) {
+          const { data: candidatesByEmail } = await supabase
+            .from('patients')
+            .select('id, patient_user_id')
+            .eq('email', normalizedEmail)
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+          const reusable = (candidatesByEmail || []).find((row) => !row.patient_user_id);
+          if (reusable?.id) {
+            const { error: attachError } = await supabase
+              .from('patients')
+              .update({
+                ...patientData,
+                email: normalizedEmail,
+                patient_user_id: userId,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', reusable.id);
+            if (attachError) throw attachError;
+          } else {
+            const { error: patientError } = await supabase
+              .from('patients')
+              .insert({
+                ...patientData,
+                email: normalizedEmail,
+              });
+            if (patientError) throw patientError;
+          }
+        } else {
+          const { error: patientError } = await supabase.from('patients').insert(patientData);
+          if (patientError) throw patientError;
+        }
       }
 
       // 5. Crear relación clínica-usuario si corresponde

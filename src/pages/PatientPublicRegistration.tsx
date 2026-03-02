@@ -321,7 +321,6 @@ export default function PatientPublicRegistration() {
         };
 
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp(signUpPayload);
-
         if (signUpError) {
           const message = signUpError.message || '';
           const alreadyRegistered = /already registered|already been registered|user already/i.test(message.toLowerCase());

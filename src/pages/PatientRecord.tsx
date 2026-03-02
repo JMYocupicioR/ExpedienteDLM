@@ -18,7 +18,7 @@ import ConsultationModal from '@/components/ConsultationModal';
 import AppointmentQuickScheduler from '@/components/AppointmentQuickScheduler';
 import StudiesSection from '@/components/StudiesSection';
 import AuditTrailViewer from '@/components/AuditTrailViewer';
-import PatientRecordSidebar from '@/components/PatientRecordSidebar';
+import PatientRecordSidebar, { type SectionCompleteness } from '@/components/PatientRecordSidebar';
 import PatientRecordHeader from '@/components/PatientRecordHeader';
 import ConsultationListEnhanced from '@/components/ConsultationListEnhanced';
 import ConsultationTimeline from '@/components/ConsultationTimeline';
@@ -28,12 +28,49 @@ import PatientPrescriptionHistory from '@/components/PatientPrescriptionHistory'
 import DashboardPaciente from '@/components/DashboardPaciente';
 import PatientRecordScales from '@/components/PatientRecordScales';
 import type { Database } from '@/lib/database.types';
+import {
+  normalizeFieldValue,
+  MARITAL_STATUS_OPTIONS,
+  EDUCATION_LEVEL_OPTIONS,
+  GENDER_OPTIONS,
+  type CatalogOption,
+} from '@/lib/patient-registration-catalogs';
 
 type Patient = Database['public']['Tables']['patients']['Row'];
 type Consultation = Database['public']['Tables']['consultations']['Row'];
 type PathologicalHistory = Database['public']['Tables']['pathological_histories']['Row'];
 type NonPathologicalHistory = Database['public']['Tables']['non_pathological_histories']['Row'];
 type HereditaryBackground = Database['public']['Tables']['hereditary_backgrounds']['Row'];
+
+const HANDEDNESS_OPTIONS: CatalogOption[] = [
+  { value: 'right', label: 'Derecha' },
+  { value: 'left', label: 'Izquierda' },
+  { value: 'ambidextrous', label: 'Ambidiestro' },
+];
+
+const hasOptionValue = (options: CatalogOption[], value?: string | null): boolean => {
+  if (!value) return true;
+  const normalized = normalizeFieldValue(
+    options === HANDEDNESS_OPTIONS ? 'handedness' :
+    options === MARITAL_STATUS_OPTIONS ? 'marital_status' : 'education_level',
+    value
+  );
+  return options.some((opt) => opt.value === normalized || opt.value === value);
+};
+
+/** Returns display value - normalized canonical if available, otherwise raw. */
+const normalizedSelectValue = (
+  options: CatalogOption[],
+  value?: string | null,
+  field?: 'handedness' | 'marital_status' | 'education_level',
+): string => {
+  if (!value) return '';
+  if (field) {
+    const canonical = normalizeFieldValue(field, value);
+    if (options.some((o) => o.value === canonical)) return canonical;
+  }
+  return options.some((o) => o.value === value) ? value : '';
+};
 
 export default function PatientRecord() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +94,34 @@ export default function PatientRecord() {
   const [error, setError] = useState<string | null>(null);
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
+  const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [sectionSaveSuccess, setSectionSaveSuccess] = useState<string | null>(null);
+
+  // Compute completeness for sidebar indicators
+  const completeness: SectionCompleteness = React.useMemo(() => {
+    const hasPatological = Boolean(
+      pathologicalHistory && (
+        (pathologicalHistory.chronic_diseases?.length ?? 0) > 0 ||
+        (pathologicalHistory.surgeries?.length ?? 0) > 0 ||
+        (pathologicalHistory.current_treatments?.length ?? 0) > 0
+      )
+    );
+    const hasNonPathological = Boolean(
+      nonPathologicalHistory && (
+        nonPathologicalHistory.handedness ||
+        nonPathologicalHistory.marital_status ||
+        nonPathologicalHistory.education_level
+      )
+    );
+    const hasHereditary = hereditaryBackgrounds.length > 0;
+    const hasPersonal = Boolean(patient && patient.phone || patient?.email || patient?.address);
+    return {
+      patologicos: hasPatological,
+      'no-patologicos': hasNonPathological,
+      heredofamiliares: hasHereditary,
+      paciente: hasPersonal,
+    };
+  }, [pathologicalHistory, nonPathologicalHistory, hereditaryBackgrounds, patient]);
 
   // Configurar atajos de teclado específicos del expediente
   useKeyboardShortcuts({
@@ -337,12 +402,15 @@ export default function PatientRecord() {
         if (pathologicalError) throw pathologicalError;
       }
 
-      // Update non-pathological history
+      // Update non-pathological history (normalize canonical values before persisting)
       if (nonPathologicalHistory) {
         const { error: nonPathologicalError } = await supabase
           .from('non_pathological_histories')
           .upsert({
             ...nonPathologicalHistory,
+            handedness: normalizeFieldValue('handedness', nonPathologicalHistory.handedness) || nonPathologicalHistory.handedness,
+            marital_status: normalizeFieldValue('marital_status', nonPathologicalHistory.marital_status) || nonPathologicalHistory.marital_status,
+            education_level: normalizeFieldValue('education_level', nonPathologicalHistory.education_level) || nonPathologicalHistory.education_level,
             patient_id: id
           });
 
@@ -356,6 +424,49 @@ export default function PatientRecord() {
       setError(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSection = async (section: 'patologicos' | 'no-patologicos' | 'paciente') => {
+    if (!id) return;
+    setSavingSection(section);
+    setSectionSaveSuccess(null);
+    try {
+      if (section === 'patologicos' && pathologicalHistory) {
+        const { error } = await supabase.from('pathological_histories').upsert({
+          ...pathologicalHistory,
+          patient_id: id,
+        });
+        if (error) throw error;
+      }
+      if (section === 'no-patologicos' && nonPathologicalHistory) {
+        const { error } = await supabase.from('non_pathological_histories').upsert({
+          ...nonPathologicalHistory,
+          handedness: normalizeFieldValue('handedness', nonPathologicalHistory.handedness) || nonPathologicalHistory.handedness,
+          marital_status: normalizeFieldValue('marital_status', nonPathologicalHistory.marital_status) || nonPathologicalHistory.marital_status,
+          education_level: normalizeFieldValue('education_level', nonPathologicalHistory.education_level) || nonPathologicalHistory.education_level,
+          patient_id: id,
+        });
+        if (error) throw error;
+      }
+      if (section === 'paciente' && patient) {
+        await updatePatient(id, {
+          full_name: patient.full_name,
+          email: patient.email,
+          phone: patient.phone,
+          address: patient.address,
+          city_of_birth: patient.city_of_birth,
+          city_of_residence: patient.city_of_residence,
+          social_security_number: patient.social_security_number,
+        }, activeClinic?.id || '');
+      }
+      setSectionSaveSuccess(section);
+      setTimeout(() => setSectionSaveSuccess(null), 2500);
+      await fetchPatientData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingSection(null);
     }
   };
 
@@ -707,14 +818,17 @@ export default function PatientRecord() {
 
   return (
     <div className="flex h-screen" style={{ background: 'var(--app-bg-solid)', color: 'var(--text-primary)' }}>
-      {/* Sidebar - Componente modularizado */}
-      <PatientRecordSidebar
-        patient={patient}
-        seccionActiva={seccionActiva}
-        onSeccionChange={setSeccionActiva}
-        consultationsCount={consultations.length}
-        upcomingAppointmentsCount={patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length}
-      />
+      {/* Sidebar - hidden on mobile, visible on md+ */}
+      <div className="hidden md:flex">
+        <PatientRecordSidebar
+          patient={patient}
+          seccionActiva={seccionActiva}
+          onSeccionChange={setSeccionActiva}
+          consultationsCount={consultations.length}
+          upcomingAppointmentsCount={patientAppointments.filter(apt => ['scheduled', 'confirmed'].includes(apt.status)).length}
+          completeness={completeness}
+        />
+      </div>
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto">
@@ -732,7 +846,37 @@ export default function PatientRecord() {
           onExportTXT={handleExportRecordTXT}
         />
 
-        <main className="p-6 max-w-7xl mx-auto">
+        {/* Mobile section nav - only visible below md */}
+        <nav className="md:hidden overflow-x-auto flex gap-2 px-4 py-2 border-b border-gray-700 bg-gray-800 sticky top-0 z-10">
+          {[
+            { id: 'dashboard', label: 'Inicio' },
+            { id: 'paciente', label: 'Personal' },
+            { id: 'patologicos', label: 'Patológicos' },
+            { id: 'no-patologicos', label: 'No Patológicos' },
+            { id: 'heredofamiliares', label: 'Heredofamiliares' },
+            { id: 'consultas', label: 'Consultas' },
+            { id: 'escalas', label: 'Escalas' },
+            { id: 'recetas', label: 'Recetas' },
+            { id: 'citas', label: 'Citas' },
+          ].map(({ id: sId, label }) => (
+            <button
+              key={sId}
+              onClick={() => setSeccionActiva(sId)}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[32px] flex items-center ${
+                seccionActiva === sId
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {label}
+              {completeness[sId as keyof typeof completeness] !== undefined && (
+                <span className={`ml-1 w-1.5 h-1.5 rounded-full inline-block ${completeness[sId as keyof typeof completeness] ? 'bg-green-400' : 'bg-gray-500'}`} />
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <main className="p-4 md:p-6 max-w-7xl mx-auto">
           {seccionActiva === 'dashboard' && patient && userProfile && (
             <DashboardPaciente
               patient={patient}
@@ -747,7 +891,24 @@ export default function PatientRecord() {
 
           {seccionActiva === 'paciente' && (
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
-              <h2 className="text-xl font-bold mb-6 text-white">Información Personal</h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">Información Personal</h2>
+                {modoEdicion && (
+                  <button
+                    onClick={() => handleSaveSection('paciente')}
+                    disabled={savingSection === 'paciente'}
+                    className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 min-h-[36px]"
+                  >
+                    {savingSection === 'paciente' ? (
+                      <><div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white" /> Guardando...</>
+                    ) : sectionSaveSuccess === 'paciente' ? (
+                      <><CheckCircle className="h-4 w-4" /> Guardado</>
+                    ) : (
+                      <><Save className="h-4 w-4" /> Guardar sección</>
+                    )}
+                  </button>
+                )}
+              </div>
               {modoEdicion ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -880,7 +1041,24 @@ export default function PatientRecord() {
 
           {seccionActiva === 'patologicos' && (
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 text-left">
-              <h2 className="text-xl font-bold mb-6 text-white text-left">Antecedentes Patológicos</h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">Antecedentes Patológicos</h2>
+                {modoEdicion && (
+                  <button
+                    onClick={() => handleSaveSection('patologicos')}
+                    disabled={savingSection === 'patologicos'}
+                    className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 min-h-[36px]"
+                  >
+                    {savingSection === 'patologicos' ? (
+                      <><div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white" /> Guardando...</>
+                    ) : sectionSaveSuccess === 'patologicos' ? (
+                      <><CheckCircle className="h-4 w-4" /> Guardado</>
+                    ) : (
+                      <><Save className="h-4 w-4" /> Guardar sección</>
+                    )}
+                  </button>
+                )}
+              </div>
               
               <div className="space-y-6">
                 <div>
@@ -1005,14 +1183,31 @@ export default function PatientRecord() {
 
           {seccionActiva === 'no-patologicos' && (
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 text-left">
-              <h2 className="text-xl font-bold mb-6 text-white text-left">Antecedentes No Patológicos</h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">Antecedentes No Patológicos</h2>
+                {modoEdicion && (
+                  <button
+                    onClick={() => handleSaveSection('no-patologicos')}
+                    disabled={savingSection === 'no-patologicos'}
+                    className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 min-h-[36px]"
+                  >
+                    {savingSection === 'no-patologicos' ? (
+                      <><div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white" /> Guardando...</>
+                    ) : sectionSaveSuccess === 'no-patologicos' ? (
+                      <><CheckCircle className="h-4 w-4" /> Guardado</>
+                    ) : (
+                      <><Save className="h-4 w-4" /> Guardar sección</>
+                    )}
+                  </button>
+                )}
+              </div>
               
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-300">Lateralidad</label>
                     <select
-                      value={nonPathologicalHistory?.handedness || ''}
+                      value={normalizedSelectValue(HANDEDNESS_OPTIONS, nonPathologicalHistory?.handedness, 'handedness')}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
                         ...prev!,
                         handedness: e.target.value
@@ -1021,10 +1216,15 @@ export default function PatientRecord() {
                       className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     >
                       <option value="">Seleccionar</option>
-                      <option value="diestro">Diestro</option>
-                      <option value="zurdo">Zurdo</option>
-                      <option value="ambidiestro">Ambidiestro</option>
+                      {HANDEDNESS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
                     </select>
+                    {!hasOptionValue(HANDEDNESS_OPTIONS, nonPathologicalHistory?.handedness) && nonPathologicalHistory?.handedness && (
+                      <p className="mt-1 text-xs text-amber-300">
+                        Guardado: {nonPathologicalHistory?.handedness}
+                      </p>
+                    )}
                   </div>
 
                   <div className="mb-4">
@@ -1044,7 +1244,7 @@ export default function PatientRecord() {
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-300">Estado Civil</label>
                     <select
-                      value={nonPathologicalHistory?.marital_status || ''}
+                      value={normalizedSelectValue(MARITAL_STATUS_OPTIONS, nonPathologicalHistory?.marital_status, 'marital_status')}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
                         ...prev!,
                         marital_status: e.target.value
@@ -1053,12 +1253,15 @@ export default function PatientRecord() {
                       className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     >
                       <option value="">Seleccionar</option>
-                      <option value="soltero">Soltero(a)</option>
-                      <option value="casado">Casado(a)</option>
-                      <option value="divorciado">Divorciado(a)</option>
-                      <option value="viudo">Viudo(a)</option>
-                      <option value="union_libre">Unión Libre</option>
+                      {MARITAL_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
                     </select>
+                    {!hasOptionValue(MARITAL_STATUS_OPTIONS, nonPathologicalHistory?.marital_status) && nonPathologicalHistory?.marital_status && (
+                      <p className="mt-1 text-xs text-amber-300">
+                        Guardado: {nonPathologicalHistory?.marital_status}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1066,7 +1269,7 @@ export default function PatientRecord() {
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-300">Escolaridad</label>
                     <select
-                      value={nonPathologicalHistory?.education_level || ''}
+                      value={normalizedSelectValue(EDUCATION_LEVEL_OPTIONS, nonPathologicalHistory?.education_level, 'education_level')}
                       onChange={(e) => setNonPathologicalHistory(prev => ({
                         ...prev!,
                         education_level: e.target.value
@@ -1075,13 +1278,15 @@ export default function PatientRecord() {
                       className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:bg-gray-600"
                     >
                       <option value="">Seleccionar</option>
-                      <option value="ninguna">Ninguna</option>
-                      <option value="primaria">Primaria</option>
-                      <option value="secundaria">Secundaria</option>
-                      <option value="preparatoria">Preparatoria</option>
-                      <option value="universidad">Universidad</option>
-                      <option value="posgrado">Posgrado</option>
+                      {EDUCATION_LEVEL_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
                     </select>
+                    {!hasOptionValue(EDUCATION_LEVEL_OPTIONS, nonPathologicalHistory?.education_level) && nonPathologicalHistory?.education_level && (
+                      <p className="mt-1 text-xs text-amber-300">
+                        Guardado: {nonPathologicalHistory?.education_level}
+                      </p>
+                    )}
                   </div>
 
                   <div className="mb-4">

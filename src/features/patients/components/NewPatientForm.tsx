@@ -5,11 +5,13 @@ import { usePatients } from '@/features/patients/hooks/usePatients';
 import type { Patient, PatientInsert } from '@/features/patients/services/patientService';
 import { searchPatients } from '@/features/patients/services/patientService';
 import { supabase } from '@/lib/supabase';
-import { AlertCircle, Building, Calendar, ExternalLink, Mail, MapPin, Phone, User, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { GENDER_OPTIONS } from '@/lib/patient-registration-catalogs';
+import {
+  AlertCircle, Building, Calendar, ChevronDown, ChevronRight,
+  ExternalLink, Mail, MapPin, Phone, User, X, CheckCircle,
+} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-type Patient = Database['public']['Tables']['patients']['Row'];
 
 interface NewPatientFormProps {
   isOpen: boolean;
@@ -17,6 +19,13 @@ interface NewPatientFormProps {
   onSave: (patient: Patient) => void;
   initialName?: string;
 }
+
+const GENDER_DISPLAY: Record<string, string> = {
+  male: 'Masculino', female: 'Femenino',
+  masculino: 'Masculino', femenino: 'Femenino',
+  otro: 'Otro', other: 'Otro',
+  unspecified: 'Prefiero no decir', no_especificado: 'Prefiero no decir',
+};
 
 export default function NewPatientForm({
   isOpen,
@@ -26,251 +35,179 @@ export default function NewPatientForm({
 }: NewPatientFormProps) {
   const { addError, addSuccess, addWarning } = useValidationNotifications();
   const navigate = useNavigate();
-  // Usar hook simple como fallback si ClinicContext falla
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
   const {
     activeClinic: contextClinic,
     isLoading: clinicsLoading,
     error: clinicError,
     isIndependentDoctor: contextIndependentDoctor,
   } = useClinic();
-  const { activeClinic: simpleClinic, loading: simpleLoading, error: simpleError } = useSimpleClinic();
-
-  // Usar el contexto si está disponible, sino usar el hook simple
+  const { activeClinic: simpleClinic } = useSimpleClinic();
   const activeClinic = contextClinic || simpleClinic;
 
-  // Estado para detectar si el médico tiene clínica asignada en su perfil
-  const [userHasClinic, setUserHasClinic] = useState<boolean | null>(null);
   const [isIndependentDoctor, setIsIndependentDoctor] = useState(contextIndependentDoctor);
-
-  // Debug logs removed for production;
-  const { createPatientMutation } = usePatients();
-
-  useEffect(() => {
-    setIsIndependentDoctor(contextIndependentDoctor);
-  }, [contextIndependentDoctor]);
-
-  // Estados locales para el manejo del formulario y validaciones en tiempo real
-  const [checkingCurp, setCheckingCurp] = useState(false);
+  const [showOptional, setShowOptional] = useState(false);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [existingPatient, setExistingPatient] = useState<{ id: string; name: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState(false);
+
+  const { createPatientMutation } = usePatients();
 
   const [formData, setFormData] = useState({
     full_name: initialName,
-    social_security_number: '',
-    phone: '',
-    email: '',
     birth_date: '',
     gender: '',
+    phone: '',
+    email: '',
+    social_security_number: '',
     address: '',
     emergency_contact: '',
     insurance_info: '',
     notes: '',
   });
 
-  // Verificar si el usuario tiene clínica en su perfil
+  useEffect(() => {
+    setIsIndependentDoctor(contextIndependentDoctor);
+  }, [contextIndependentDoctor]);
+
+  useEffect(() => {
+    if (initialName) setFormData(prev => ({ ...prev, full_name: initialName }));
+  }, [initialName]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSaved(false);
+      setErrors({});
+      setExistingPatient(null);
+      setTimeout(() => firstInputRef.current?.focus(), 80);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     async function checkUserClinic() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-
         const { data: profile } = await supabase
           .from('profiles')
           .select('clinic_id')
           .eq('id', user.id)
           .single();
-
-        if (profile) {
-          const hasClinic = !!profile.clinic_id;
-          setUserHasClinic(hasClinic);
-          // Si no tiene clínica en su perfil, es médico independiente
-          setIsIndependentDoctor(!hasClinic);
-        }
-      } catch (error) {
-        console.error('Error checking user clinic:', error);
-      }
+        if (profile) setIsIndependentDoctor(!profile.clinic_id);
+      } catch {}
     }
-
     checkUserClinic();
   }, []);
 
-  useEffect(() => {
-    if (initialName) {
-      setFormData(prev => ({ ...prev, full_name: initialName }));
-    }
-  }, [initialName]);
-
-  const handleInputChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-    // Clear existing patient alert when social security number changes
-    if (field === 'social_security_number' && existingPatient) {
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
+    if ((field === 'social_security_number' || field === 'phone') && existingPatient) {
       setExistingPatient(null);
     }
   };
 
-  const checkSocialSecurityExists = async (ssn: string) => {
-    if (!ssn || ssn.length < 10) return;
-    // Solo verificar si hay clínica activa (médicos de clínica)
-    // Médicos independientes no necesitan esta validación por clínica
-    if (!activeClinic && !isIndependentDoctor) return;
-
-    setCheckingCurp(true);
+  const checkDuplicate = async (ssn: string) => {
+    if (!ssn || ssn.length < 10 || !activeClinic) return;
+    setCheckingDuplicate(true);
     try {
-      // Para médicos de clínica, buscar en la clínica
-      if (activeClinic) {
-        const patients = await searchPatients(ssn, activeClinic.id, 1);
-        const existingPatient = patients.find(p =>
-          p.social_security_number?.toUpperCase() === ssn.toUpperCase()
-        );
-
-        if (existingPatient) {
-          setExistingPatient({
-            id: existingPatient.id,
-            name: existingPatient.full_name,
-          });
-          addWarning(
-            'Paciente existente',
-            `El paciente ${existingPatient.full_name} ya está registrado con este número de seguridad social.`
-          );
-        } else {
-          setExistingPatient(null);
-        }
+      const patients = await searchPatients(ssn, activeClinic.id, 1);
+      const found = patients.find(p =>
+        p.social_security_number?.toUpperCase() === ssn.toUpperCase()
+      );
+      if (found) {
+        setExistingPatient({ id: found.id, name: found.full_name });
+        addWarning('Paciente existente', `${found.full_name} ya está registrado con ese NSS.`);
+      } else {
+        setExistingPatient(null);
       }
-      // Para médicos independientes, la validación se hará en el backend
-    } catch (error) {
-      // Error log removed for security;
-    } finally {
-      setCheckingCurp(false);
-    }
+    } catch {}
+    finally { setCheckingDuplicate(false); }
   };
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.full_name.trim()) {
-      newErrors.full_name = 'El nombre completo es obligatorio';
-    }
-
-    // Validación de número de seguridad social (formato estricto para sistema médico)
-    if (formData.social_security_number && formData.social_security_number.trim()) {
+  const validate = (): boolean => {
+    const next: Record<string, string> = {};
+    if (!formData.full_name.trim()) next.full_name = 'El nombre es obligatorio';
+    if (!formData.birth_date) next.birth_date = 'La fecha de nacimiento es obligatoria';
+    if (!formData.gender) next.gender = 'Selecciona el género';
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      next.email = 'Formato de correo inválido';
+    if (formData.phone && !/^[\+]?[0-9\s\-\(\)]{8,}$/.test(formData.phone))
+      next.phone = 'Mínimo 8 dígitos';
+    if (formData.social_security_number) {
       const ssn = formData.social_security_number.trim();
-      if (ssn.length < 10 || ssn.length > 20) {
-        newErrors.social_security_number = 'El número de seguridad social debe tener entre 10 y 20 caracteres';
-      } else if (!/^[A-Z0-9]+$/.test(ssn.toUpperCase())) {
-        newErrors.social_security_number = 'El número de seguridad social solo puede contener letras y números';
-      }
+      if (ssn.length < 10 || ssn.length > 20)
+        next.social_security_number = 'Debe tener entre 10 y 20 caracteres';
     }
-
-    // Solo validar clínica si NO es médico independiente
-    if (!isIndependentDoctor && !activeClinic) {
-      newErrors.clinic = 'No hay una clínica activa seleccionada.';
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'El email no tiene un formato válido';
-    }
-
-    if (formData.phone && !/^[\+]?[0-9\s\-\(\)]{10,}$/.test(formData.phone)) {
-      newErrors.phone = 'El teléfono debe tener al menos 10 dígitos';
-    }
-
-    // Prevent submission if patient already exists
-    if (existingPatient) {
-      newErrors.social_security_number = 'Este paciente ya existe. Use el enlace para ver su expediente.';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (!isIndependentDoctor && !activeClinic)
+      next.clinic = 'No hay clínica activa seleccionada';
+    if (existingPatient)
+      next.social_security_number = 'Paciente ya existe. Ver expediente para editar.';
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) return;
+    if (!validate()) return;
 
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
-        addError('Error de Sesión', 'No se pudo verificar la sesión de usuario.');
-        return;
-      }
-
-      // Validación adicional para médicos de clínica
+      if (!currentUser) { addError('Sesión', 'No se pudo verificar la sesión.'); return; }
       if (!isIndependentDoctor && !activeClinic) {
-        addError('Error de Clínica', 'No hay una clínica activa seleccionada.');
-        return;
+        addError('Clínica', 'No hay clínica activa seleccionada.'); return;
       }
 
-      // Preparamos el objeto del paciente para la inserción
       const fullName = formData.full_name.trim();
-      // Heurística simple para separar nombres de apellidos si se ingresó todo junto
-      // Esto evita que queden campos NULL en la base de datos
       const nameParts = fullName.split(' ');
-      let firstName = fullName;
-      let lastName = '';
-
-      if (nameParts.length > 1) {
-        // Asumimos que la primera palabra es el nombre y el resto apellidos
-        // Esto es una aproximación, idealmente se deberían pedir por separado
-        firstName = nameParts[0];
-        lastName = nameParts.slice(1).join(' ');
-      }
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ');
 
       const patientData: PatientInsert = {
         full_name: fullName || null,
         first_name: firstName || null,
         last_name: lastName || null,
-        social_security_number: formData.social_security_number?.trim() || null,
-        email: formData.email?.trim() || null,
-        phone: formData.phone?.trim() || null,
         birth_date: formData.birth_date || null,
         gender: formData.gender?.trim() || null,
+        phone: formData.phone?.trim() || null,
+        email: formData.email?.trim() || null,
+        social_security_number: formData.social_security_number?.trim() || null,
         address: formData.address?.trim() || null,
         emergency_contact: formData.emergency_contact || null,
         insurance_info: formData.insurance_info || null,
         notes: formData.notes?.trim() || null,
-        // Para médicos independientes, clinic_id es NULL
         clinic_id: isIndependentDoctor ? null : activeClinic!.id,
         primary_doctor_id: currentUser.id,
         is_active: true,
       };
 
-      // Debug logs removed for production;
-
-      // Usamos la mutación de React Query
       createPatientMutation.mutate(patientData, {
         onSuccess: (newPatient) => {
-          // ¡Éxito! Tenemos el paciente real con su ID definitivo.
-          addSuccess('Éxito', `Paciente "${newPatient.full_name}" creado correctamente.`);
-          onSave(newPatient); // Devolvemos el paciente real
+          setSaved(true);
+          addSuccess('Paciente creado', `${newPatient.full_name} se registró correctamente.`);
+          onSave(newPatient);
           onClose();
           resetForm();
         },
         onError: (error) => {
-          // El error ya se maneja en el servicio (ej. CURP duplicado)
-          console.error('Error creating patient:', error);
-          console.error('Patient data sent:', patientData);
           addError('Error al crear', error.message);
         },
       });
-
     } catch (error: any) {
-      // Error log removed for security;
-      addError('Error inesperado', error.message || 'Ocurrió un error inesperado. Intente nuevamente.');
+      addError('Error inesperado', error.message || 'Intente nuevamente.');
     }
   };
 
   const resetForm = () => {
     setFormData({
       full_name: '',
-      social_security_number: '',
-      phone: '',
-      email: '',
       birth_date: '',
       gender: '',
+      phone: '',
+      email: '',
+      social_security_number: '',
       address: '',
       emergency_contact: '',
       insurance_info: '',
@@ -278,291 +215,308 @@ export default function NewPatientForm({
     });
     setExistingPatient(null);
     setErrors({});
+    setSaved(false);
+    setShowOptional(false);
   };
+
+  const inputCls = (field: string) =>
+    `w-full px-3 py-2.5 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-colors min-h-[44px] ${
+      errors[field] ? 'border-red-500 focus:ring-red-400' : 'border-gray-600'
+    }`;
+
+  const labelCls = 'block text-sm font-medium text-gray-300 mb-1.5';
 
   if (!isOpen) return null;
 
   return (
-    <div className='fixed inset-0 bg-black bg-opacity-75 z-50 flex p-0 lg:p-4'>
+    <div className='fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4'>
       <div
-        className='bg-gray-800 rounded-none lg:rounded-lg shadow-xl w-full max-w-2xl lg:max-h-[90vh] lg:mx-auto lg:my-auto flex flex-col'
-        style={{
-          paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}
+        className='bg-gray-800 rounded-t-2xl sm:rounded-xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[92dvh] sm:max-h-[88vh]'
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        role='dialog'
+        aria-modal='true'
+        aria-label='Nuevo Paciente'
       >
         {/* Header */}
-        <div className='flex items-center justify-between p-4 lg:p-6 border-b border-gray-700 sticky top-0 bg-gray-800 z-10'>
-          <div className='flex items-center'>
-            <User className='h-6 w-6 text-cyan-400 mr-3' />
-            <h3 className='text-xl font-semibold text-white'>Nuevo Paciente</h3>
+        <div className='flex items-center justify-between px-5 py-4 border-b border-gray-700 flex-shrink-0'>
+          <div className='flex items-center gap-3'>
+            <div className='p-2 bg-cyan-500/10 rounded-lg'>
+              <User className='h-5 w-5 text-cyan-400' aria-hidden='true' />
+            </div>
+            <div>
+              <h2 className='text-lg font-semibold text-white'>Nuevo Paciente</h2>
+              <p className='text-xs text-gray-400'>
+                {isIndependentDoctor
+                  ? 'Paciente personal'
+                  : activeClinic
+                  ? activeClinic.name
+                  : 'Cargando clínica...'}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className='text-gray-400 hover:text-white p-2 transition-colors touch-target'
+            className='p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center'
+            aria-label='Cerrar'
           >
             <X className='h-5 w-5' />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className='p-4 lg:p-6 space-y-6 overflow-y-auto flex-1'>
-          {/* Clínica Activa o Médico Independiente */}
-          <div>
-            <label className='block text-sm font-medium text-gray-300 mb-2'>
-              {isIndependentDoctor ? 'Médico Independiente' : 'Registrando en Clínica'}
-            </label>
-            <div className='w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white flex items-center'>
-              {userHasClinic === null ? (
-                <span>Verificando perfil...</span>
-              ) : isIndependentDoctor ? (
-                <>
-                  <User className='h-4 w-4 mr-2 text-cyan-400' />
-                  <span className='text-cyan-400'>Paciente personal (sin clínica)</span>
-                </>
-              ) : clinicsLoading ? (
-                <span>Cargando clínica...</span>
-              ) : clinicError ? (
-                <span className='text-red-400'>Error al cargar clínica</span>
-              ) : activeClinic ? (
-                <>
-                  <Building className='h-4 w-4 mr-2 text-gray-400' />
-                  {activeClinic.name}
-                </>
-              ) : (
-                <span className='text-yellow-400'>Ninguna clínica seleccionada</span>
-              )}
+        {/* Body */}
+        <form onSubmit={handleSubmit} className='overflow-y-auto flex-1 px-5 py-5 space-y-4' noValidate>
+          {errors.clinic && (
+            <div className='flex items-center gap-2 p-3 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-sm'>
+              <AlertCircle className='h-4 w-4 flex-shrink-0' />
+              {errors.clinic}
             </div>
-             {errors.clinic && <p className='text-red-400 text-xs mt-1'>{errors.clinic}</p>}
-          </div>
+          )}
 
-          {/* Información Básica */}
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+          {/* Datos esenciales */}
+          <div className='space-y-4'>
+            <p className='text-xs font-semibold text-cyan-400 uppercase tracking-wider'>Datos esenciales</p>
+
             <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>
-                Nombre Completo *
-              </label>
+              <label htmlFor='nf-name' className={labelCls}>Nombre completo <span className='text-red-400'>*</span></label>
               <input
+                id='nf-name'
+                ref={firstInputRef}
                 type='text'
                 value={formData.full_name}
-                onChange={e => handleInputChange('full_name', e.target.value)}
-                className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                  errors.full_name ? 'border-red-500' : 'border-gray-600'
-                }`}
+                onChange={e => handleChange('full_name', e.target.value)}
+                className={inputCls('full_name')}
                 placeholder='Ej. Juan Pérez García'
-                required
+                autoComplete='name'
               />
               {errors.full_name && <p className='text-red-400 text-xs mt-1'>{errors.full_name}</p>}
             </div>
 
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>Número de Seguridad Social</label>
-              <div className='relative'>
-                <input
-                  type='text'
-                  value={formData.social_security_number}
-                  onChange={e => handleInputChange('social_security_number', e.target.value.toUpperCase())}
-                  onBlur={() => {
-                    if (formData.social_security_number && formData.social_security_number.length >= 10 && activeClinic) {
-                      checkSocialSecurityExists(formData.social_security_number);
-                    }
-                  }}
-                  className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                    errors.social_security_number ? 'border-red-500' : 'border-gray-600'
-                  }`}
-                  placeholder='123456789012'
-                  maxLength={20}
-                />
-                {checkingCurp && (
-                  <div className='absolute right-3 top-1/2 transform -translate-y-1/2'>
-                    <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-cyan-400'></div>
-                  </div>
-                )}
-              </div>
-              {errors.social_security_number && <p className='text-red-400 text-xs mt-1'>{errors.social_security_number}</p>}
-              {existingPatient && (
-                <div className='mt-2 p-3 bg-amber-900/20 border border-amber-600 rounded-lg'>
-                  <div className='flex items-start space-x-2'>
-                    <AlertCircle className='h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0' />
-                    <div className='flex-1'>
-                      <p className='text-sm text-amber-200'>
-                        Este paciente ya está registrado como{' '}
-                        <strong>{existingPatient.name}</strong>
-                      </p>
-                      <button
-                        type='button'
-                        onClick={() => {
-                          navigate(`/patient/${existingPatient.id}`);
-                          onClose();
-                        }}
-                        className='mt-1 text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1'
-                      >
-                        Ver expediente
-                        <ExternalLink className='h-3 w-3' />
-                      </button>
-                    </div>
-                  </div>
+            <div className='grid grid-cols-2 gap-3'>
+              <div>
+                <label htmlFor='nf-birth' className={labelCls}>Fecha de nacimiento <span className='text-red-400'>*</span></label>
+                <div className='relative'>
+                  <Calendar className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none' aria-hidden='true' />
+                  <input
+                    id='nf-birth'
+                    type='date'
+                    value={formData.birth_date}
+                    onChange={e => handleChange('birth_date', e.target.value)}
+                    className={`${inputCls('birth_date')} pl-10`}
+                  />
                 </div>
-              )}
-            </div>
-          </div>
+                {errors.birth_date && <p className='text-red-400 text-xs mt-1'>{errors.birth_date}</p>}
+              </div>
 
-          {/* Género y fecha de nacimiento */}
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>Género</label>
-              <select
-                value={formData.gender}
-                onChange={e => handleInputChange('gender', e.target.value)}
-                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400'
-              >
-                <option value=''>Seleccionar</option>
-                <option value='masculino'>Masculino</option>
-                <option value='femenino'>Femenino</option>
-                <option value='otro'>Otro</option>
-              </select>
-            </div>
-
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>
-                Fecha de Nacimiento
-              </label>
-              <div className='relative'>
-                <Calendar className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4' />
-                <input
-                  type='date'
-                  value={formData.birth_date}
-                  onChange={e => handleInputChange('birth_date', e.target.value)}
-                  className='w-full pl-10 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-400'
-                />
+              <div>
+                <label htmlFor='nf-gender' className={labelCls}>Género <span className='text-red-400'>*</span></label>
+                <select
+                  id='nf-gender'
+                  value={formData.gender}
+                  onChange={e => handleChange('gender', e.target.value)}
+                  className={inputCls('gender')}
+                >
+                  <option value=''>Seleccionar</option>
+                  <option value='male'>Masculino</option>
+                  <option value='female'>Femenino</option>
+                  <option value='otro'>Otro</option>
+                  <option value='unspecified'>Prefiero no decir</option>
+                </select>
+                {errors.gender && <p className='text-red-400 text-xs mt-1'>{errors.gender}</p>}
               </div>
             </div>
-          </div>
 
-          {/* Contacto */}
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
             <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>Teléfono</label>
+              <label htmlFor='nf-phone' className={labelCls}>Teléfono</label>
               <div className='relative'>
-                <Phone className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4' />
+                <Phone className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none' aria-hidden='true' />
                 <input
+                  id='nf-phone'
                   type='tel'
                   value={formData.phone}
-                  onChange={e => handleInputChange('phone', e.target.value)}
-                  className={`w-full pl-10 pr-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                    errors.phone ? 'border-red-500' : 'border-gray-600'
-                  }`}
+                  onChange={e => handleChange('phone', e.target.value)}
+                  className={`${inputCls('phone')} pl-10`}
                   placeholder='+52 555 123 4567'
+                  autoComplete='tel'
                 />
               </div>
               {errors.phone && <p className='text-red-400 text-xs mt-1'>{errors.phone}</p>}
             </div>
-
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>Email</label>
-              <div className='relative'>
-                <Mail className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4' />
-                <input
-                  type='email'
-                  value={formData.email}
-                  onChange={e => handleInputChange('email', e.target.value)}
-                  className={`w-full pl-10 pr-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                    errors.email ? 'border-red-500' : 'border-gray-600'
-                  }`}
-                  placeholder='juan.perez@email.com'
-                />
-              </div>
-              {errors.email && <p className='text-red-400 text-xs mt-1'>{errors.email}</p>}
-            </div>
           </div>
 
-          {/* Contacto de Emergencia y Dirección */}
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>
-                Contacto de Emergencia
-              </label>
-              <input
-                type='text'
-                value={formData.emergency_contact}
-                onChange={e => handleInputChange('emergency_contact', e.target.value)}
-                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400'
-                placeholder='Nombre y teléfono'
-              />
-            </div>
-
-            <div>
-              <label className='block text-sm font-medium text-gray-300 mb-2'>
-                Información de Seguro
-              </label>
-              <input
-                type='text'
-                value={formData.insurance_info}
-                onChange={e => handleInputChange('insurance_info', e.target.value)}
-                className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400'
-                placeholder='Compañía, número de póliza'
-              />
-            </div>
-          </div>
-
-          {/* Dirección */}
-          <div>
-            <label className='block text-sm font-medium text-gray-300 mb-2'>Dirección</label>
-            <div className='relative'>
-              <MapPin className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4' />
-              <input
-                type='text'
-                value={formData.address}
-                onChange={e => handleInputChange('address', e.target.value)}
-                className='w-full pl-10 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400'
-                placeholder='Calle, número, colonia, ciudad'
-              />
-            </div>
-          </div>
-
-          {/* Notas Adicionales */}
-          <div>
-            <label className='block text-sm font-medium text-gray-300 mb-2'>
-              Notas Adicionales
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={e => handleInputChange('notes', e.target.value)}
-              rows={3}
-              className='w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none'
-              placeholder='Información adicional relevante...'
-            />
-          </div>
-
-          {/* Actions */}
-          <div className='flex justify-end space-x-3 p-4 lg:p-6 border-t border-gray-700 sticky bottom-0 bg-gray-800'>
+          {/* Datos opcionales (colapsable) */}
+          <div className='border border-gray-700 rounded-lg overflow-hidden'>
             <button
               type='button'
-              onClick={onClose}
-              className='px-6 py-3 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors'
-              disabled={createPatientMutation.isPending}
+              onClick={() => setShowOptional(v => !v)}
+              className='w-full flex items-center justify-between px-4 py-3 bg-gray-700/50 hover:bg-gray-700 transition-colors text-sm font-medium text-gray-300 min-h-[44px]'
+              aria-expanded={showOptional}
             >
-              Cancelar
+              <span className='flex items-center gap-2'>
+                {showOptional
+                  ? <ChevronDown className='h-4 w-4 text-cyan-400' />
+                  : <ChevronRight className='h-4 w-4 text-gray-400' />}
+                Datos adicionales
+                <span className='text-xs text-gray-500'>(correo, NSS, dirección, notas)</span>
+              </span>
             </button>
-            <button
-              type='submit'
-              disabled={createPatientMutation.isPending || !!existingPatient}
-              className='px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center'
-            >
-              {createPatientMutation.isPending ? (
-                <>
-                  <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'></div>
-                  Creando...
-                </>
-              ) : (
-                <>
-                  <User className='h-4 w-4 mr-2' />
-                  Crear Paciente
-                </>
-              )}
-            </button>
+
+            {showOptional && (
+              <div className='px-4 pb-4 pt-3 space-y-4 bg-gray-800/50'>
+                <div>
+                  <label htmlFor='nf-email' className={labelCls}>Correo electrónico</label>
+                  <div className='relative'>
+                    <Mail className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none' aria-hidden='true' />
+                    <input
+                      id='nf-email'
+                      type='email'
+                      value={formData.email}
+                      onChange={e => handleChange('email', e.target.value)}
+                      className={`${inputCls('email')} pl-10`}
+                      placeholder='juan@ejemplo.com'
+                      autoComplete='email'
+                    />
+                  </div>
+                  {errors.email && <p className='text-red-400 text-xs mt-1'>{errors.email}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor='nf-ssn' className={labelCls}>Número de Seguridad Social</label>
+                  <div className='relative'>
+                    <input
+                      id='nf-ssn'
+                      type='text'
+                      value={formData.social_security_number}
+                      onChange={e => handleChange('social_security_number', e.target.value.toUpperCase())}
+                      onBlur={() => {
+                        if (formData.social_security_number.length >= 10 && activeClinic)
+                          checkDuplicate(formData.social_security_number);
+                      }}
+                      className={inputCls('social_security_number')}
+                      placeholder='123456789012'
+                      maxLength={20}
+                    />
+                    {checkingDuplicate && (
+                      <div className='absolute right-3 top-1/2 -translate-y-1/2'>
+                        <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-cyan-400' />
+                      </div>
+                    )}
+                  </div>
+                  {errors.social_security_number && (
+                    <p className='text-red-400 text-xs mt-1'>{errors.social_security_number}</p>
+                  )}
+                  {existingPatient && (
+                    <div className='mt-2 p-3 bg-amber-900/20 border border-amber-600/60 rounded-lg'>
+                      <div className='flex items-start gap-2'>
+                        <AlertCircle className='h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0' />
+                        <div>
+                          <p className='text-sm text-amber-200'>
+                            Ya registrado como <strong>{existingPatient.name}</strong>
+                          </p>
+                          <button
+                            type='button'
+                            onClick={() => { navigate(`/expediente/${existingPatient.id}`); onClose(); }}
+                            className='mt-1 text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1'
+                          >
+                            Ver expediente <ExternalLink className='h-3 w-3' />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor='nf-address' className={labelCls}>Dirección</label>
+                  <div className='relative'>
+                    <MapPin className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none' aria-hidden='true' />
+                    <input
+                      id='nf-address'
+                      type='text'
+                      value={formData.address}
+                      onChange={e => handleChange('address', e.target.value)}
+                      className={`${inputCls('address')} pl-10`}
+                      placeholder='Calle, núm, colonia, ciudad'
+                      autoComplete='street-address'
+                    />
+                  </div>
+                </div>
+
+                <div className='grid grid-cols-2 gap-3'>
+                  <div>
+                    <label htmlFor='nf-ec' className={labelCls}>Contacto de emergencia</label>
+                    <input
+                      id='nf-ec'
+                      type='text'
+                      value={formData.emergency_contact}
+                      onChange={e => handleChange('emergency_contact', e.target.value)}
+                      className={inputCls('emergency_contact')}
+                      placeholder='Nombre y teléfono'
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor='nf-ins' className={labelCls}>Seguro médico</label>
+                    <input
+                      id='nf-ins'
+                      type='text'
+                      value={formData.insurance_info}
+                      onChange={e => handleChange('insurance_info', e.target.value)}
+                      className={inputCls('insurance_info')}
+                      placeholder='Compañía, póliza'
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor='nf-notes' className={labelCls}>Notas adicionales</label>
+                  <textarea
+                    id='nf-notes'
+                    value={formData.notes}
+                    onChange={e => handleChange('notes', e.target.value)}
+                    rows={3}
+                    className='w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none transition-colors'
+                    placeholder='Información adicional relevante...'
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </form>
+
+        {/* Footer */}
+        <div className='flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-700 flex-shrink-0'>
+          <button
+            type='button'
+            onClick={onClose}
+            className='flex-1 px-4 py-2.5 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors min-h-[44px]'
+            disabled={createPatientMutation.isPending}
+          >
+            Cancelar
+          </button>
+          <button
+            type='submit'
+            form=''
+            onClick={handleSubmit as any}
+            disabled={createPatientMutation.isPending || !!existingPatient}
+            className='flex-1 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] flex items-center justify-center gap-2'
+          >
+            {createPatientMutation.isPending ? (
+              <>
+                <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white' />
+                Creando...
+              </>
+            ) : saved ? (
+              <>
+                <CheckCircle className='h-4 w-4' />
+                Creado
+              </>
+            ) : (
+              <>
+                <User className='h-4 w-4' />
+                Crear Paciente
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

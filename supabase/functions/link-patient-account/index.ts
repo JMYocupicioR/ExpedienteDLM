@@ -97,15 +97,16 @@ serve(async (req) => {
       });
     }
 
+    const { data: linkedPatients } = await supabase
+      .from('patients')
+      .select('id, clinic_id, primary_doctor_id')
+      .eq('patient_user_id', currentUser.id)
+      .order('created_at', { ascending: false });
+
     let patientId: string | null = tokenRow.assigned_patient_id || null;
 
     if (!patientId) {
-      const { data: existingByUser } = await supabase
-        .from('patients')
-        .select('id')
-        .eq('patient_user_id', currentUser.id)
-        .maybeSingle();
-      patientId = existingByUser?.id || null;
+      patientId = linkedPatients?.[0]?.id || null;
     }
 
     if (!patientId && currentUser.email) {
@@ -182,6 +183,29 @@ serve(async (req) => {
           status: 400,
           headers: buildCorsHeaders(req),
         });
+      }
+
+      // Si existe un paciente asignado al token, desasocia duplicados huérfanos del mismo usuario.
+      // Previene que el portal lea el paciente equivocado cuando hay más de un registro vinculado.
+      if (tokenRow.assigned_patient_id && Array.isArray(linkedPatients) && linkedPatients.length > 0) {
+        const orphanIds = linkedPatients
+          .filter((row) =>
+            row.id !== tokenRow.assigned_patient_id
+            && !row.clinic_id
+            && !row.primary_doctor_id
+          )
+          .map((row) => row.id);
+
+        if (orphanIds.length > 0) {
+          await supabase
+            .from('patients')
+            .update({
+              patient_user_id: null,
+              updated_at: new Date().toISOString(),
+            })
+            .in('id', orphanIds)
+            .eq('patient_user_id', currentUser.id);
+        }
       }
     }
 
