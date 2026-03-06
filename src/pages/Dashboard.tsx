@@ -63,6 +63,8 @@ const Dashboard = () => {
     todayAppointments: 0,
     upcomingAppointments: 0,
   });
+  const [profileData, setProfileData] = useState<any>(null);
+
   // Lista unificada con la de /patients: misma fuente que la lista de pacientes
   const dashboardPatientList = (patientsQuery.data || []) as Array<{
     id: string;
@@ -117,11 +119,14 @@ const Dashboard = () => {
           // pero mantenemos la carga del perfil para verificar admin.
           const { data: profile } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, is_active, additional_info')
             .eq('id', user.id)
             .single();
 
           if (cancelled) return;
+
+          // Set profile state to determine if active
+          setProfileData(profile);
 
           // La verificación de admin usa userClinics (owner, director, admin_staff -> admin)
           const currentMembership = userClinics.find(m => m.clinic_id === activeClinic?.id);
@@ -131,11 +136,11 @@ const Dashboard = () => {
           if (activeClinic) {
             await loadDashboardData(activeClinic.id);
             await loadUpcomingAppointments(user.id, activeClinic.id);
-          } else if (isIndependentDoctor) {
+          } else if (isIndependentDoctor && profile?.is_active) {
             await loadIndependentDashboard(user.id);
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // Error log removed for security;
       } finally {
         if (!cancelled) {
@@ -411,6 +416,8 @@ const Dashboard = () => {
     );
   }
 
+
+
   return (
     <>
       {/* Main Content - sin padding adicional ya que AppLayout lo maneja */}
@@ -424,7 +431,7 @@ const Dashboard = () => {
               <p className='section-subtitle'>Panel de control de Expediente DLM</p>
             </div>
 
-            {!activeClinic && isIndependentDoctor && (
+            {!activeClinic && isIndependentDoctor && profileData?.is_active && (
               <div className='w-full lg:w-auto bg-cyan-900/30 border border-cyan-500/40 text-cyan-100 rounded-lg p-3'>
                 <p className='font-semibold'>Modo consultorio propio</p>
                 <p className='text-sm text-cyan-200'>

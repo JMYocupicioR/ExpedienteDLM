@@ -13,7 +13,7 @@ export interface Clinic {
 export interface ClinicMember {
   clinic_id: string;
   user_id: string;
-  role: 'admin' | 'doctor' | 'nurse' | 'staff' | 'pending_approval';
+  role: 'admin' | 'owner' | 'director' | 'doctor' | 'nurse' | 'staff' | 'administrative_assistant' | 'pending_approval';
   joined_at: string;
   clinic?: Clinic;
 }

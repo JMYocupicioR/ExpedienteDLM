@@ -1349,7 +1349,7 @@ export default function EnhancedSignupQuestionnaire() {
         employee_id: formData.professionalInfo?.employeeId,
         clinic_id: clinicId,
         profile_completed: true,
-        is_active: true,
+        is_active: formData.accountInfo.role !== 'doctor',
         additional_info: {
           birth_date: formData.personalInfo.birthDate,
           gender: formData.personalInfo.gender,

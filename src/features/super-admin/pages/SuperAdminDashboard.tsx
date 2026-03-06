@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import ClinicManagementTable from '../components/ClinicManagementTable';
 import AdminUserList from '../components/AdminUserList';
 import PendingApprovalsTable from '../components/PendingApprovalsTable';
-import { LayoutDashboard, Users, UserCheck } from 'lucide-react';
+import SuperAdminUserList from '../components/SuperAdminUserList';
+import { LayoutDashboard, Users, UserCheck, List } from 'lucide-react';
 
 export default function SuperAdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'clinics' | 'admins' | 'approvals'>('clinics');
+  const [activeTab, setActiveTab] = useState<'clinics' | 'admins' | 'approvals' | 'users'>('clinics');
 
   return (
     <div className="min-h-screen bg-[#0F1218] text-white p-6">
@@ -60,6 +61,17 @@ export default function SuperAdminDashboard() {
             <UserCheck className="h-4 w-4" />
             Aprobaciones Pendientes
           </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`pb-3 px-2 text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'users'
+                ? 'text-emerald-400 border-b-2 border-emerald-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <List className="h-4 w-4" />
+            Lista Usuarios
+          </button>
         </div>
 
         {/* Content */}
@@ -68,8 +80,10 @@ export default function SuperAdminDashboard() {
             <ClinicManagementTable />
           ) : activeTab === 'admins' ? (
             <AdminUserList />
-          ) : (
+          ) : activeTab === 'approvals' ? (
             <PendingApprovalsTable />
+          ) : (
+            <SuperAdminUserList />
           )}
         </div>
 

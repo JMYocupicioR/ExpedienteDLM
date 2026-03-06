@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -83,9 +83,13 @@ type ScaleDefinition = {
 export default function PatientPublicRegistration() {
   const { token } = useParams<{ token: string }>();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [tokenRow, setTokenRow] = useState<TokenRow | null>(null);
   const [step, setStep] = useState(1);
+  const submitErrorBannerRef = useRef<HTMLDivElement>(null);
+  const firstErrorFieldRef = useRef<HTMLInputElement>(null);
 
   const [personal, setPersonal] = useState<PersonalInfo>({ full_name: '', birth_date: '', gender: 'unspecified', email: '', phone: '', address: '' });
   const [pathological, setPathological] = useState<Pathological>({ chronic_diseases: [], current_treatments: [], surgeries: [], fractures: [], previous_hospitalizations: [], substance_use: {} });
@@ -128,7 +132,7 @@ export default function PatientPublicRegistration() {
 
         const isExpired = new Date(data.expires_at).getTime() < Date.now();
         if (data.status !== 'pending' || isExpired) {
-          setError('Este enlace no es válido o ha expirado.');
+          setFatalError('Este enlace no es válido o ha expirado.');
           setTokenRow(null);
           return;
         }
@@ -186,7 +190,7 @@ export default function PatientPublicRegistration() {
         }
       } catch (e: any) {
         // Error log removed for security;
-        setError('No se pudo validar el enlace.');
+        setFatalError('No se pudo validar el enlace.');
       } finally {
         setLoading(false);
       }
@@ -215,6 +219,19 @@ export default function PatientPublicRegistration() {
     return specialty ? `${name} — ${specialty}` : name;
   }, [tokenRow]);
 
+  const pendingRequirements = useMemo(() => {
+    const list: string[] = [];
+    if (!personal.full_name?.trim()) list.push('Nombre completo');
+    if (!personal.birth_date) list.push('Fecha de nacimiento');
+    const normalizedAccountEmail = (accountEmail || personal.email || '').trim().toLowerCase();
+    if (createPatientAccount) {
+      if (!normalizedAccountEmail) list.push('Correo para la cuenta');
+      if (!accountPassword || accountPassword.length < 6) list.push('Contraseña (mín. 6 caracteres)');
+      if (accountPassword !== accountConfirmPassword) list.push('Las contraseñas deben coincidir');
+    }
+    return list;
+  }, [personal.full_name, personal.birth_date, personal.email, createPatientAccount, accountEmail, accountPassword, accountConfirmPassword]);
+
   const handleScaleComplete = (scaleId: string, payload: { answers: Record<string, unknown>; score: number | null; severity: string | null }) => {
     setScaleAnswers(prev => ({ ...prev, [scaleId]: payload }));
     setActiveScaleId(null);
@@ -241,28 +258,56 @@ export default function PatientPublicRegistration() {
     return value;
   };
 
+  const validateBeforeSubmit = (): { valid: boolean; errors: Record<string, string> } => {
+    const next: Record<string, string> = {};
+    if (!personal.full_name?.trim()) next.full_name = 'El nombre completo es requerido';
+    if (!personal.birth_date) next.birth_date = 'La fecha de nacimiento es requerida';
+    const normalizedAccountEmail = (accountEmail || personal.email || '').trim().toLowerCase();
+    if (createPatientAccount) {
+      if (!normalizedAccountEmail) next.account_email = 'Captura un correo electrónico';
+      if (!accountPassword || accountPassword.length < 6) next.account_password = 'La contraseña debe tener al menos 6 caracteres';
+      if (accountPassword !== accountConfirmPassword) next.account_confirm = 'Las contraseñas no coinciden';
+    }
+    return { valid: Object.keys(next).length === 0, errors: next };
+  };
+
+  const clearFieldError = (field: string) => {
+    setFieldErrors(prev => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
   const handleSubmit = async () => {
     if (!tokenRow) return;
+    setSubmitError(null);
+    setFieldErrors({});
+
+    const { valid, errors } = validateBeforeSubmit();
+    if (!valid) {
+      setFieldErrors(errors);
+      setSubmitError('Revisa los campos marcados.');
+      const hasNameOrBirth = errors.full_name || errors.birth_date;
+      const hasAccountError = errors.account_email || errors.account_password || errors.account_confirm;
+      if (isQuestionnaireOnly || hasAccountError) {
+        setStep(3);
+      } else if (hasNameOrBirth) {
+        setStep(1);
+      }
+      setTimeout(() => {
+        if (submitErrorBannerRef.current) {
+          submitErrorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (firstErrorFieldRef.current) {
+          firstErrorFieldRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      return;
+    }
+
     try {
       setSubmitting(true);
-      setError(null);
-
-      if (!personal.full_name?.trim() || !personal.birth_date) {
-        throw new Error('Completa al menos nombre completo y fecha de nacimiento.');
-      }
-
       const normalizedAccountEmail = (accountEmail || personal.email || '').trim().toLowerCase();
-      if (createPatientAccount) {
-        if (!normalizedAccountEmail) {
-          throw new Error('Para crear cuenta de paciente, captura un correo electrónico.');
-        }
-        if (!accountPassword || accountPassword.length < 6) {
-          throw new Error('La contraseña del paciente debe tener al menos 6 caracteres.');
-        }
-        if (accountPassword !== accountConfirmPassword) {
-          throw new Error('Las contraseñas del paciente no coinciden.');
-        }
-      }
 
       const normalizedPathological = {
         ...pathological,
@@ -361,7 +406,7 @@ export default function PatientPublicRegistration() {
 
       setSubmitted(true);
     } catch (e: any) {
-      setError(e?.message || 'Error al enviar');
+      setSubmitError(e?.message || 'Error al enviar');
     } finally {
       setSubmitting(false);
     }
@@ -375,12 +420,12 @@ export default function PatientPublicRegistration() {
     );
   }
 
-  if (error || !tokenRow) {
+  if (fatalError || !tokenRow) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="bg-gray-800 border border-gray-700 rounded p-6 text-center max-w-md">
           <h1 className="text-white text-lg font-semibold mb-2">Enlace inválido</h1>
-          <p className="text-gray-300 text-sm">{error || 'El enlace no es válido.'}</p>
+          <p className="text-gray-300 text-sm">{fatalError || 'El enlace no es válido.'}</p>
         </div>
       </div>
     );
@@ -429,14 +474,53 @@ export default function PatientPublicRegistration() {
           </p>
         </div>
 
+        {submitError && (
+          <div
+            ref={submitErrorBannerRef}
+            role="alert"
+            className="mb-4 p-4 bg-red-900/80 border border-red-600 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          >
+            <p className="text-red-100 text-sm flex-1">{submitError}</p>
+            <button
+              type="button"
+              className="shrink-0 px-3 py-2 bg-red-800 hover:bg-red-700 text-white rounded text-sm"
+              onClick={() => setSubmitError(null)}
+            >
+              Cerrar
+            </button>
+          </div>
+        )}
+
         {/* Stepper header */}
         <div className="flex items-center space-x-2 mb-4 overflow-x-auto pb-1">
           {isQuestionnaireOnly ? (
             <div className="px-3 py-2 rounded bg-cyan-700 text-white whitespace-nowrap">Cuestionarios</div>
           ) : (
-            [1,2,3].map(n => (
-              <div key={n} className={`px-3 py-2 rounded whitespace-nowrap ${step === n ? 'bg-cyan-700 text-white' : 'bg-gray-700 text-gray-300'}`}>Paso {n}</div>
-            ))
+            [1,2,3].map(n => {
+              const step1Incomplete = n === 1 && (!personal.full_name?.trim() || !personal.birth_date);
+              const step3Incomplete = n === 3 && createPatientAccount && (
+                !(accountEmail || personal.email || '').trim() ||
+                !accountPassword || accountPassword.length < 6 ||
+                accountPassword !== accountConfirmPassword
+              );
+              const hasError = step1Incomplete || step3Incomplete;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setStep(n)}
+                  className={`px-3 py-2 rounded whitespace-nowrap transition-colors ${
+                    step === n
+                      ? 'bg-cyan-700 text-white'
+                      : hasError
+                        ? 'bg-amber-800/80 text-amber-100 hover:bg-amber-700/80'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Paso {n}
+                </button>
+              );
+            })
           )}
         </div>
 
@@ -444,15 +528,31 @@ export default function PatientPublicRegistration() {
           <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="text-base text-gray-200">Nombre completo</label>
+                <label htmlFor="reg-full-name" className="text-base text-gray-200">Nombre completo</label>
                 <div className="mt-1 flex items-center gap-2">
-                  <input className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.full_name} onChange={e => setPersonal(p => ({ ...p, full_name: e.target.value }))} />
+                  <input
+                    id="reg-full-name"
+                    name="full_name"
+                    ref={step === 1 ? firstErrorFieldRef : undefined}
+                    className={`w-full bg-gray-900 rounded px-3 py-3 text-white ${fieldErrors.full_name ? 'border-2 border-red-500' : 'border border-gray-700'}`}
+                    value={personal.full_name}
+                    onChange={e => { setPersonal(p => ({ ...p, full_name: e.target.value })); clearFieldError('full_name'); }}
+                  />
                   <VoiceInputButton onAppendText={(text) => setPersonal((prev) => ({ ...prev, full_name: appendFieldText(prev.full_name, text) }))} />
                 </div>
+                {fieldErrors.full_name && <p className="text-red-400 text-sm mt-1">{fieldErrors.full_name}</p>}
               </div>
               <div>
-                <label className="text-base text-gray-200">Fecha de nacimiento</label>
-                <input type="date" className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-3 py-3 text-white" value={personal.birth_date} onChange={e => setPersonal(p => ({ ...p, birth_date: e.target.value }))} />
+                <label htmlFor="reg-birth-date" className="text-base text-gray-200">Fecha de nacimiento</label>
+                <input
+                  id="reg-birth-date"
+                  name="birth_date"
+                  type="date"
+                  className={`w-full mt-1 bg-gray-900 rounded px-3 py-3 text-white ${fieldErrors.birth_date ? 'border-2 border-red-500' : 'border border-gray-700'}`}
+                  value={personal.birth_date}
+                  onChange={e => { setPersonal(p => ({ ...p, birth_date: e.target.value })); clearFieldError('birth_date'); }}
+                />
+                {fieldErrors.birth_date && <p className="text-red-400 text-sm mt-1">{fieldErrors.birth_date}</p>}
               </div>
               <div>
                 <label className="text-base text-gray-200">Genero</label>
@@ -662,18 +762,40 @@ export default function PatientPublicRegistration() {
                 <p className="text-gray-400 text-sm mb-3">Para guardar tus respuestas en tu expediente, necesitamos estos datos:</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-sm text-gray-300">Nombre completo</label>
-                    <input className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white mt-1" value={personal.full_name} onChange={e => setPersonal(p => ({ ...p, full_name: e.target.value }))} placeholder="Obligatorio" />
+                    <label htmlFor="reg-q3-full-name" className="text-sm text-gray-300">Nombre completo</label>
+                    <input
+                      id="reg-q3-full-name"
+                      name="full_name_q3"
+                      ref={(step === 3 && isQuestionnaireOnly && !tokenRow?.assigned_patient_id) ? firstErrorFieldRef : undefined}
+                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white mt-1 ${fieldErrors.full_name ? 'border-2 border-red-500' : 'border border-gray-700'}`}
+                      value={personal.full_name}
+                      onChange={e => { setPersonal(p => ({ ...p, full_name: e.target.value })); clearFieldError('full_name'); }}
+                      placeholder="Obligatorio"
+                    />
+                    {fieldErrors.full_name && <p className="text-red-400 text-sm mt-1">{fieldErrors.full_name}</p>}
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Fecha de nacimiento</label>
-                    <input type="date" className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white mt-1" value={personal.birth_date} onChange={e => setPersonal(p => ({ ...p, birth_date: e.target.value }))} />
+                    <label htmlFor="reg-q3-birth-date" className="text-sm text-gray-300">Fecha de nacimiento</label>
+                    <input
+                      id="reg-q3-birth-date"
+                      name="birth_date_q3"
+                      type="date"
+                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white mt-1 ${fieldErrors.birth_date ? 'border-2 border-red-500' : 'border border-gray-700'}`}
+                      value={personal.birth_date}
+                      onChange={e => { setPersonal(p => ({ ...p, birth_date: e.target.value })); clearFieldError('birth_date'); }}
+                    />
+                    {fieldErrors.birth_date && <p className="text-red-400 text-sm mt-1">{fieldErrors.birth_date}</p>}
                   </div>
                   <div className="md:col-span-2">
                     <label className="text-sm text-gray-300">Correo (opcional)</label>
                     <input className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white mt-1" value={personal.email || ''} onChange={e => setPersonal(p => ({ ...p, email: e.target.value }))} placeholder="Para crear cuenta" />
                   </div>
                 </div>
+              </div>
+            )}
+            {pendingRequirements.length > 0 && (
+              <div className="p-3 bg-amber-900/30 border border-amber-600/50 rounded-lg">
+                <p className="text-amber-200 text-sm">Para enviar, completa: {pendingRequirements.join(', ')}</p>
               </div>
             )}
             {(tokenRow.selected_scale_ids || []).length === 0 && (
@@ -724,31 +846,40 @@ export default function PatientPublicRegistration() {
               {createPatientAccount && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="md:col-span-2">
-                    <label className="text-sm text-gray-300">Correo para la cuenta</label>
+                    <label htmlFor="reg-account-email" className="text-sm text-gray-300">Correo para la cuenta</label>
                     <input
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      id="reg-account-email"
+                      name="account_email"
+                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white ${fieldErrors.account_email ? 'border-2 border-red-500' : 'border border-gray-700'}`}
                       value={accountEmail}
                       placeholder={personal.email ? `Usar ${personal.email}` : 'paciente@correo.com'}
-                      onChange={(e) => setAccountEmail(e.target.value)}
+                      onChange={(e) => { setAccountEmail(e.target.value); clearFieldError('account_email'); }}
                     />
+                    {fieldErrors.account_email && <p className="text-red-400 text-sm mt-1">{fieldErrors.account_email}</p>}
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Contraseña</label>
+                    <label htmlFor="reg-account-password" className="text-sm text-gray-300">Contraseña</label>
                     <input
+                      id="reg-account-password"
+                      name="account_password"
                       type="password"
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white ${fieldErrors.account_password ? 'border-2 border-red-500' : 'border border-gray-700'}`}
                       value={accountPassword}
-                      onChange={(e) => setAccountPassword(e.target.value)}
+                      onChange={(e) => { setAccountPassword(e.target.value); clearFieldError('account_password'); }}
                     />
+                    {fieldErrors.account_password && <p className="text-red-400 text-sm mt-1">{fieldErrors.account_password}</p>}
                   </div>
                   <div>
-                    <label className="text-sm text-gray-300">Confirmar contraseña</label>
+                    <label htmlFor="reg-account-confirm" className="text-sm text-gray-300">Confirmar contraseña</label>
                     <input
+                      id="reg-account-confirm"
+                      name="account_confirm"
                       type="password"
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white ${fieldErrors.account_confirm ? 'border-2 border-red-500' : 'border border-gray-700'}`}
                       value={accountConfirmPassword}
-                      onChange={(e) => setAccountConfirmPassword(e.target.value)}
+                      onChange={(e) => { setAccountConfirmPassword(e.target.value); clearFieldError('account_confirm'); }}
                     />
+                    {fieldErrors.account_confirm && <p className="text-red-400 text-sm mt-1">{fieldErrors.account_confirm}</p>}
                   </div>
                 </div>
               )}

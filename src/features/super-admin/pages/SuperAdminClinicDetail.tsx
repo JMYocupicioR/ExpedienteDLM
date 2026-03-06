@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
-import { ArrowLeft, Building2, CheckCircle, Globe, Mail, Save, Settings, Trash2, Upload, UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, Bell, Building2, CheckCircle, Globe, Mail, Save, Settings, Trash2, Upload, UserPlus, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AddMemberModal from '../components/AddMemberModal';
 import { ClinicStaffService } from '@/lib/services/clinic-staff-service';
@@ -10,6 +10,14 @@ import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
 type ClinicRow = Database['public']['Tables']['clinics']['Row'];
 type ClinicRelationshipRow = Database['public']['Tables']['clinic_user_relationships']['Row'];
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
+
+type NotificationSettings = {
+  email_enabled?: boolean;
+  sms_enabled?: boolean;
+  whatsapp_enabled?: boolean;
+  appointment_reminders?: boolean;
+  reminder_hours_before?: number;
+};
 
 type ClinicConfigRow = {
   id?: string;
@@ -23,6 +31,12 @@ type ClinicConfigRow = {
   enable_emergency_mode: boolean;
   theme_color: string;
   logo_url?: string | null;
+  buffer_time_minutes?: number;
+  require_diagnosis?: boolean;
+  require_physical_exam?: boolean;
+  enable_electronic_prescription?: boolean;
+  require_patient_consent?: boolean;
+  notification_settings?: NotificationSettings;
   data_retention_days?: number;
   enable_audit_log?: boolean;
   enable_billing?: boolean;
@@ -49,6 +63,12 @@ type ClinicFormValues = {
   enable_emergency_mode: boolean;
   theme_color: string;
   logo_url: string;
+  buffer_time_minutes: number;
+  require_diagnosis: boolean;
+  require_physical_exam: boolean;
+  enable_electronic_prescription: boolean;
+  require_patient_consent: boolean;
+  notification_settings: NotificationSettings;
   data_retention_days: number;
   enable_audit_log: boolean;
   enable_billing: boolean;
@@ -107,6 +127,18 @@ export default function SuperAdminClinicDetail() {
     enable_emergency_mode: false,
     theme_color: '#3B82F6',
     logo_url: '',
+    buffer_time_minutes: 5,
+    require_diagnosis: true,
+    require_physical_exam: false,
+    enable_electronic_prescription: false,
+    require_patient_consent: true,
+    notification_settings: {
+      email_enabled: true,
+      sms_enabled: false,
+      whatsapp_enabled: false,
+      appointment_reminders: true,
+      reminder_hours_before: 24,
+    },
     data_retention_days: 3650,
     enable_audit_log: true,
     enable_billing: false,
@@ -135,8 +167,8 @@ export default function SuperAdminClinicDetail() {
             .eq('clinic_id', clinicId);
           if (configError) throw configError;
         }
-      } catch (err: any) {
-        alert(err?.message || 'Error al subir el logo');
+      } catch (err) {
+        alert((err as Error)?.message || 'Error al subir el logo');
       } finally {
         setLogoUploading(false);
         e.target.value = '';
@@ -230,6 +262,18 @@ export default function SuperAdminClinicDetail() {
         enable_emergency_mode: cfg?.enable_emergency_mode ?? false,
         theme_color: cfg?.theme_color || '#3B82F6',
         logo_url: (cfg?.logo_url as string) || (c?.logo_url as string) || '',
+        buffer_time_minutes: cfg?.buffer_time_minutes ?? 5,
+        require_diagnosis: cfg?.require_diagnosis ?? true,
+        require_physical_exam: cfg?.require_physical_exam ?? false,
+        enable_electronic_prescription: cfg?.enable_electronic_prescription ?? false,
+        require_patient_consent: cfg?.require_patient_consent ?? true,
+        notification_settings: (cfg?.notification_settings as NotificationSettings) || {
+          email_enabled: true,
+          sms_enabled: false,
+          whatsapp_enabled: false,
+          appointment_reminders: true,
+          reminder_hours_before: 24,
+        },
         data_retention_days: cfg?.data_retention_days ?? 3650,
         enable_audit_log: cfg?.enable_audit_log ?? true,
         enable_billing: cfg?.enable_billing ?? false,
@@ -283,6 +327,12 @@ export default function SuperAdminClinicDetail() {
         enable_emergency_mode: formValues.enable_emergency_mode,
         theme_color: formValues.theme_color,
         logo_url: formValues.logo_url.trim() || null,
+        buffer_time_minutes: Math.max(0, formValues.buffer_time_minutes),
+        require_diagnosis: formValues.require_diagnosis,
+        require_physical_exam: formValues.require_physical_exam,
+        enable_electronic_prescription: formValues.enable_electronic_prescription,
+        require_patient_consent: formValues.require_patient_consent,
+        notification_settings: formValues.notification_settings,
         data_retention_days: Math.max(365, formValues.data_retention_days),
         enable_audit_log: formValues.enable_audit_log,
         enable_billing: formValues.enable_billing,
@@ -619,6 +669,17 @@ export default function SuperAdminClinicDetail() {
                     className="w-full bg-[#11151F] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2">Tiempo de buffer (min)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={formValues.buffer_time_minutes}
+                    onChange={(e) => setFormValues((p) => ({ ...p, buffer_time_minutes: parseInt(e.target.value, 10) || 5 }))}
+                    className="w-full bg-[#11151F] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                  />
+                </div>
                 <div className="flex flex-col justify-end gap-2">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -637,6 +698,33 @@ export default function SuperAdminClinicDetail() {
                       className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
                     />
                     <span className="text-sm text-gray-300">Modo emergencia</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer mt-1">
+                    <input
+                      type="checkbox"
+                      checked={formValues.require_diagnosis}
+                      onChange={(e) => setFormValues((p) => ({ ...p, require_diagnosis: e.target.checked }))}
+                      className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
+                    />
+                    <span className="text-sm text-gray-300">Requerir diagnóstico</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer mt-1">
+                    <input
+                      type="checkbox"
+                      checked={formValues.require_physical_exam}
+                      onChange={(e) => setFormValues((p) => ({ ...p, require_physical_exam: e.target.checked }))}
+                      className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
+                    />
+                    <span className="text-sm text-gray-300">Requerir expl. física</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer mt-1">
+                    <input
+                      type="checkbox"
+                      checked={formValues.enable_electronic_prescription}
+                      onChange={(e) => setFormValues((p) => ({ ...p, enable_electronic_prescription: e.target.checked }))}
+                      className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
+                    />
+                    <span className="text-sm text-gray-300">Receta electrónica</span>
                   </label>
                 </div>
               </div>
@@ -732,7 +820,16 @@ export default function SuperAdminClinicDetail() {
                     />
                     <span className="text-sm text-gray-300">Bitácora de auditoría</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer mt-1">
+                    <input
+                      type="checkbox"
+                      checked={formValues.require_patient_consent}
+                      onChange={(e) => setFormValues((p) => ({ ...p, require_patient_consent: e.target.checked }))}
+                      className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
+                    />
+                    <span className="text-sm text-gray-300">Consentimiento informado</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer mt-1">
                     <input
                       type="checkbox"
                       checked={formValues.enable_billing}
@@ -751,6 +848,59 @@ export default function SuperAdminClinicDetail() {
                     step={0.01}
                     value={formValues.tax_rate}
                     onChange={(e) => setFormValues((p) => ({ ...p, tax_rate: parseFloat(e.target.value) || 16 }))}
+                    className="w-full bg-[#11151F] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Notificaciones */}
+            <div>
+              <div className="flex items-center gap-2 text-cyan-400 text-sm font-medium mb-4">
+                <Bell className="h-4 w-4" />
+                Notificaciones
+              </div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="flex flex-col justify-start gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formValues.notification_settings?.email_enabled ?? true}
+                      onChange={(e) => setFormValues((p) => ({ ...p, notification_settings: { ...p.notification_settings, email_enabled: e.target.checked } }))}
+                      className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
+                    />
+                    <span className="text-sm text-gray-300">Notificaciones por correo</span>
+                  </label>
+                </div>
+                <div className="flex flex-col justify-start gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formValues.notification_settings?.sms_enabled ?? false}
+                      onChange={(e) => setFormValues((p) => ({ ...p, notification_settings: { ...p.notification_settings, sms_enabled: e.target.checked } }))}
+                      className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
+                    />
+                    <span className="text-sm text-gray-300">Notificaciones por SMS</span>
+                  </label>
+                </div>
+                <div className="flex flex-col justify-start gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formValues.notification_settings?.appointment_reminders ?? true}
+                      onChange={(e) => setFormValues((p) => ({ ...p, notification_settings: { ...p.notification_settings, appointment_reminders: e.target.checked } }))}
+                      className="rounded border-gray-600 bg-[#11151F] text-cyan-500 focus:ring-cyan-500/40"
+                    />
+                    <span className="text-sm text-gray-300">Recordatorios de citas autom.</span>
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2">Recordatorio antes de (horas)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formValues.notification_settings?.reminder_hours_before ?? 24}
+                    onChange={(e) => setFormValues((p) => ({ ...p, notification_settings: { ...p.notification_settings, reminder_hours_before: parseInt(e.target.value, 10) || 24 } }))}
                     className="w-full bg-[#11151F] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
                   />
                 </div>

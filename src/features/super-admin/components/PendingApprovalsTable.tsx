@@ -7,10 +7,17 @@ type ClinicUserRelationship = Database['public']['Tables']['clinic_user_relation
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Clinic = Database['public']['Tables']['clinics']['Row'];
 
+type PendingApprovalType = 'clinic_join' | 'new_doctor';
+
 interface PendingApproval {
-  relationship: ClinicUserRelationship;
+  id: string; // relationship.id or profile.id
+  type: PendingApprovalType;
   doctor: Profile;
-  clinic: Clinic;
+  // For clinic_join
+  relationship?: ClinicUserRelationship;
+  clinic?: Clinic;
+  // Common fields
+  created_at: string;
 }
 
 export default function PendingApprovalsTable() {
@@ -27,7 +34,7 @@ export default function PendingApprovalsTable() {
       setLoading(true);
       
       // Query for pending relationships with user and clinic data
-      const { data, error } = await supabase
+      const { data: relData, error: relError } = await supabase
         .from('clinic_user_relationships')
         .select(`
           *,
@@ -37,7 +44,16 @@ export default function PendingApprovalsTable() {
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (relError) throw relError;
+
+      // Query for inactive doctors requesting a personal clinic
+      const { data: docData, error: docError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'doctor')
+        .eq('is_active', false);
+
+      if (docError) throw docError;
 
       // Type for the Supabase query response with nested relationships
       type QueryResponse = {
@@ -45,14 +61,28 @@ export default function PendingApprovalsTable() {
         clinics: Clinic;
       } & ClinicUserRelationship;
 
-      // Transform the data
-      const pendingApprovals: PendingApproval[] = (data || []).map((item: QueryResponse) => ({
-        relationship: item as ClinicUserRelationship,
-        doctor: item.profiles as Profile,
-        clinic: item.clinics as Clinic,
-      }));
+      // Filter docs for access_requested
+      const newDoctors = (docData || []).filter((p: any) => p.additional_info?.access_requested === true);
 
-      setApprovals(pendingApprovals);
+      // Transform and combine data
+      const combined: PendingApproval[] = [
+        ...(relData || []).map((item: any) => ({
+          id: item.id,
+          type: 'clinic_join' as const,
+          doctor: item.profiles as Profile,
+          relationship: item as ClinicUserRelationship,
+          clinic: item.clinics as Clinic,
+          created_at: item.created_at,
+        })),
+        ...(newDoctors.map((p: any) => ({
+          id: p.id,
+          type: 'new_doctor' as const,
+          doctor: p as Profile,
+          created_at: p.updated_at || p.created_at || new Date().toISOString(),
+        })))
+      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setApprovals(combined);
     } catch (error) {
       console.error('Error loading pending approvals:', error);
     } finally {
@@ -62,29 +92,38 @@ export default function PendingApprovalsTable() {
 
   const handleApprove = async (approval: PendingApproval) => {
     try {
-      setActionLoading(approval.relationship.id);
+      setActionLoading(approval.id);
       
       // Get current user for approved_by field
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No authenticated user');
 
-      const { error } = await supabase
-        .from('clinic_user_relationships')
-        .update({
-          status: 'approved',
-          is_active: true,
-          approved_by: user.id,
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', approval.relationship.id);
+      if (approval.type === 'clinic_join') {
+        const { error } = await supabase
+          .from('clinic_user_relationships')
+          .update({
+            status: 'approved',
+            is_active: true,
+            approved_by: user.id,
+            approved_at: new Date().toISOString(),
+          })
+          .eq('id', approval.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else if (approval.type === 'new_doctor') {
+        // Call RPC approve_doctor_account
+        const { error } = await supabase.rpc('approve_doctor_account', {
+          p_doctor_id: approval.id
+        });
+        
+        if (error) throw error;
+      }
 
       // Remove from UI
-      setApprovals(prev => prev.filter(a => a.relationship.id !== approval.relationship.id));
-    } catch (error) {
+      setApprovals(prev => prev.filter(a => a.id !== approval.id));
+    } catch (error: any) {
       console.error('Error approving request:', error);
-      alert('Error al aprobar la solicitud. Revisa la consola para más detalles.');
+      alert('Error al aprobar la solicitud: ' + (error?.message || 'Revisa la consola para más detalles.'));
     } finally {
       setActionLoading(null);
     }
@@ -92,27 +131,43 @@ export default function PendingApprovalsTable() {
 
   const handleReject = async (approval: PendingApproval) => {
     try {
-      setActionLoading(approval.relationship.id);
+      setActionLoading(approval.id);
       
       // Get current user for rejected_by field
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No authenticated user');
 
-      const { error } = await supabase
-        .from('clinic_user_relationships')
-        .update({
-          status: 'rejected',
-          is_active: false,
-          rejected_by: user.id,
-          rejected_at: new Date().toISOString(),
-          rejection_reason: 'Rechazado por super administrador',
-        })
-        .eq('id', approval.relationship.id);
+      if (approval.type === 'clinic_join') {
+        const { error } = await supabase
+          .from('clinic_user_relationships')
+          .update({
+            status: 'rejected',
+            is_active: false,
+            rejected_by: user.id,
+            rejected_at: new Date().toISOString(),
+            rejection_reason: 'Rechazado por super administrador',
+          })
+          .eq('id', approval.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else if (approval.type === 'new_doctor') {
+        // Just clear the access_requested flag
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            additional_info: {
+              ...(approval.doctor.additional_info as object || {}),
+              access_requested: false,
+              rejected: true
+            }
+          })
+          .eq('id', approval.id);
+          
+        if (error) throw error;
+      }
 
       // Remove from UI
-      setApprovals(prev => prev.filter(a => a.relationship.id !== approval.relationship.id));
+      setApprovals(prev => prev.filter(a => a.id !== approval.id));
     } catch (error) {
       console.error('Error rejecting request:', error);
       alert('Error al rechazar la solicitud. Revisa la consola para más detalles.');
@@ -180,7 +235,7 @@ export default function PendingApprovalsTable() {
           </thead>
           <tbody className="divide-y divide-gray-800">
             {approvals.map((approval) => (
-              <tr key={approval.relationship.id} className="hover:bg-gray-800/50 transition-colors">
+              <tr key={approval.id} className="hover:bg-gray-800/50 transition-colors">
                 <td className="p-4">
                   <div className="space-y-1">
                     <div className="font-medium text-white">
@@ -199,41 +254,53 @@ export default function PendingApprovalsTable() {
                   </div>
                 </td>
                 <td className="p-4">
-                  <div className="space-y-1">
-                    <div className="font-medium text-white flex items-center gap-2">
-                      <Building className="h-4 w-4 text-cyan-400" />
-                      {approval.clinic.name}
+                  {approval.type === 'clinic_join' && approval.clinic ? (
+                    <div className="space-y-1">
+                      <div className="font-medium text-white flex items-center gap-2">
+                        <Building className="h-4 w-4 text-cyan-400" />
+                        {approval.clinic.name}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {approval.clinic.type}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {approval.clinic.type}
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="font-medium text-white flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-amber-400" />
+                        Consultorio Personal
+                      </div>
+                      <div className="text-xs text-amber-500/80">
+                        Creación de consultorio
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </td>
                 <td className="p-4">
                   <div className="flex items-center gap-2 text-sm text-gray-300">
                     <Clock className="h-4 w-4 text-gray-400" />
-                    {formatDate(approval.relationship.created_at)}
+                    {formatDate(approval.created_at)}
                   </div>
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => handleApprove(approval)}
-                      disabled={actionLoading === approval.relationship.id}
+                      disabled={actionLoading === approval.id}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Aprobar solicitud"
                     >
                       <CheckCircle className="h-4 w-4" />
-                      {actionLoading === approval.relationship.id ? 'Procesando...' : 'Aprobar'}
+                      {actionLoading === approval.id ? 'Procesando...' : 'Aprobar'}
                     </button>
                     <button
                       onClick={() => handleReject(approval)}
-                      disabled={actionLoading === approval.relationship.id}
+                      disabled={actionLoading === approval.id}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Rechazar solicitud"
                     >
                       <XCircle className="h-4 w-4" />
-                      {actionLoading === approval.relationship.id ? 'Procesando...' : 'Rechazar'}
+                      {actionLoading === approval.id ? 'Procesando...' : 'Rechazar'}
                     </button>
                   </div>
                 </td>
