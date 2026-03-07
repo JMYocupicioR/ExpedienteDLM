@@ -127,13 +127,19 @@ export default function PatientPublicRegistration() {
       if (!token) return;
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('patient_registration_tokens')
-          .select('id, token, doctor_id, clinic_id, selected_scale_ids, required_scale_ids, allowed_sections, invitation_template, message_template, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name, specialty), clinic:clinics(name)')
-          .eq('token', token)
-          .single();
-        if (error) throw error;
 
+        // Use SECURITY DEFINER RPC to fetch token + patient in one call (bypasses RLS for public page)
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          'get_registration_token_with_patient',
+          { p_token: token }
+        );
+
+        if (rpcError || !rpcData) {
+          setFatalError('No se pudo validar el enlace.');
+          return;
+        }
+
+        const data = rpcData as any;
         const isExpired = new Date(data.expires_at).getTime() < Date.now();
         if (data.status !== 'pending' || isExpired) {
           setFatalError('Este enlace no es válido o ha expirado.');
@@ -141,9 +147,7 @@ export default function PatientPublicRegistration() {
           return;
         }
         setTokenRow(data as unknown as TokenRow);
-        // Determine allowed sections:
-        // - If the token has an explicit allowed_sections array (even empty), use it directly
-        // - Only fall back to all sections when allowed_sections is null/undefined (legacy tokens)
+
         const rawSections = data.allowed_sections;
         const sections: string[] = (rawSections !== null && rawSections !== undefined && Array.isArray(rawSections))
           ? (rawSections as string[])
@@ -155,25 +159,18 @@ export default function PatientPublicRegistration() {
           setStep(3);
         }
 
-        // Pre-fill patient data whenever a patient is assigned — regardless of template type
-        if (data.assigned_patient_id) {
-          const { data: patient } = await supabase
-            .from('patients')
-            .select('full_name, birth_date, gender, email, phone, address')
-            .eq('id', data.assigned_patient_id)
-            .single();
-          if (patient) {
-            // Capture patient name for personalized greeting
-            setAssignedPatientName(patient.full_name || null);
-            setPersonal({
-              full_name: patient.full_name ?? '',
-              birth_date: patient.birth_date ? String(patient.birth_date).slice(0, 10) : '',
-              gender: (patient.gender as string) || 'unspecified',
-              email: patient.email ?? '',
-              phone: patient.phone ?? '',
-              address: patient.address ?? '',
-            });
-          }
+        // Patient data is already included in the RPC response (SECURITY DEFINER bypasses RLS)
+        const patient = data.patient as { full_name?: string; birth_date?: string; gender?: string; email?: string; phone?: string; address?: string } | null;
+        if (patient && data.assigned_patient_id) {
+          setAssignedPatientName(patient.full_name || null);
+          setPersonal({
+            full_name: patient.full_name ?? '',
+            birth_date: patient.birth_date ? String(patient.birth_date).slice(0, 10) : '',
+            gender: patient.gender || 'unspecified',
+            email: patient.email ?? '',
+            phone: patient.phone ?? '',
+            address: patient.address ?? '',
+          });
         }
 
         const scaleIds = (data.selected_scale_ids || []) as string[];
