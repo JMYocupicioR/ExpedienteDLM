@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExam';
 import { formatAssessmentDate, type ScaleAssessmentViewModel } from '@/features/medical-records/utils/scaleAssessmentViewModel';
 import { fetchMedicalScalesSafe, getScaleDefinitionById } from '@/lib/services/medical-scales-service';
-import { PlayCircle, ListChecks } from 'lucide-react';
+import { ListChecks } from 'lucide-react';
 import { GuidedScaleWizard } from './medical-scales/GuidedScaleWizard';
+import { ScaleTaxonomySearch } from './medical-scales/ScaleTaxonomySearch';
 import { ScaleDefinition as UnifiedScaleDefinition } from '@/features/medical-records/types/medical-scale.types';
 
 
@@ -16,8 +17,8 @@ interface MedicalScalesPanelProps {
 }
 
 export default function MedicalScalesPanel({ patientId, doctorId, consultationId, onAssessmentSaved }: MedicalScalesPanelProps) {
-  const { listActiveScales, saveScaleAssessment, getScaleAssessmentsByConsultation } = usePhysicalExam({ patientId, doctorId });
-  const [scales, setScales] = useState<Array<{ id: string; name: string }>>([]);
+  const { saveScaleAssessment, getScaleAssessmentsByConsultation } = usePhysicalExam({ patientId, doctorId });
+  const [scales, setScales] = useState<Array<{ id: string; name: string; acronym?: string }>>([]);
   const [selectedScaleId, setSelectedScaleId] = useState<string>('');
   const [selectedScaleDef, setSelectedScaleDef] = useState<UnifiedScaleDefinition | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
@@ -25,9 +26,13 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
   const [showGuidedWizard, setShowGuidedWizard] = useState(false);
 
   const loadScales = useCallback(async () => {
-    const data = await listActiveScales();
-    setScales(data);
-  }, [listActiveScales]);
+    const rows = await fetchMedicalScalesSafe();
+    const active = rows
+      .filter(r => (r as any).is_active !== false)
+      .map(r => ({ id: String(r.id), name: String((r as any).name || r.id), acronym: (r as any).acronym as string | undefined }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    setScales(active);
+  }, []);
 
   const loadExisting = useCallback(async () => {
     if (!consultationId) return;
@@ -138,31 +143,11 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-white font-medium flex items-center"><ListChecks className="h-5 w-5 mr-2" /> Escalas médicas</h3>
-        <div className="flex items-center space-x-2">
-          <select
-            value={selectedScaleId}
-            onChange={(e) => handleSelectScale(e.target.value)}
-            className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 min-w-[200px]"
-          >
-            <option value="">Seleccionar escala...</option>
-            {scales.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          {selectedScaleDef && (
-            <button
-              type="button"
-              onClick={() => setShowGuidedWizard(true)}
-              className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center font-medium shadow-lg shadow-emerald-500/20"
-              title="Comenzar evaluación interactivamente"
-            >
-              <PlayCircle className="h-5 w-5 mr-2" /> Comenzar Evaluación
-            </button>
-          )}
-        </div>
-      </div>
+      <h3 className="text-white font-medium flex items-center"><ListChecks className="h-5 w-5 mr-2" /> Escalas médicas</h3>
+      <ScaleTaxonomySearch
+        scales={scales}
+        onSelect={handleSelectScale}
+      />
 
       {showGuidedWizard && selectedScaleDef && (
         <div className="fixed inset-0 z-[60] bg-white dark:bg-gray-900 flex flex-col">

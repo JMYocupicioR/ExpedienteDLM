@@ -342,7 +342,7 @@ const fetchScaleMeta = async (
 
   const scales = (await fetchActiveMedicalScalesSafe()) as MedicalScaleRow[];
 
-  // First pass: use JSONB definition or hardcoded fallback
+  // First pass: use JSONB definition or hardcoded fallback as baseline
   scales.forEach((scale) => {
     const dbDef = normalizeScaleDefinition(scale.definition);
     const fallbackDef = getFallbackDefinition(scale.id, scale.name);
@@ -356,31 +356,26 @@ const fetchScaleMeta = async (
     if (!map.has(id)) map.set(id, { name: id, definition: null });
   });
 
-  // Second pass: for scales still missing a definition, load from relational tables
-  const missingIds = scaleIds.filter((id) => {
-    const entry = map.get(id);
-    return !entry?.definition;
-  });
-
-  if (missingIds.length > 0) {
-    // Fetch questions for all missing scale IDs in one query
+  // Second pass: query relational tables for ALL scale IDs.
+  // Relational definitions use UUID-based item IDs that match stored answers,
+  // so they MUST take priority over hardcoded fallbacks (which use aliases
+  // like 'feeding', 'bathing' that don't match the UUID keys in answers).
+  if (scaleIds.length > 0) {
     const { data: questions } = await supabase
       .from('scale_questions')
       .select('id, scale_id, question_text, question_type, order_index, description, image_url')
-      .in('scale_id', missingIds)
+      .in('scale_id', scaleIds)
       .order('order_index', { ascending: true });
 
     if (questions && questions.length > 0) {
       const questionIds = questions.map((q: { id: string }) => q.id);
 
-      // Fetch options for all questions in bulk
       const { data: options } = await supabase
         .from('question_options')
         .select('question_id, option_label, option_value, order_index')
         .in('question_id', questionIds)
         .order('order_index', { ascending: true });
 
-      // Group options by question
       const optsByQuestion = new Map<string, Array<{ label: string; value: number | string }>>();
       (options || []).forEach((opt: { question_id: string; option_label: string; option_value: number | string }) => {
         const arr = optsByQuestion.get(opt.question_id) || [];
@@ -388,7 +383,6 @@ const fetchScaleMeta = async (
         optsByQuestion.set(opt.question_id, arr);
       });
 
-      // Group questions by scale_id
       const qByScale = new Map<string, ScaleItemDef[]>();
       questions.forEach((q: {
         id: string;
@@ -407,7 +401,7 @@ const fetchScaleMeta = async (
         qByScale.set(q.scale_id, arr);
       });
 
-      // Update map entries with the relational definition
+      // Override with relational definition — these use UUIDs that match stored answers
       qByScale.forEach((items, scaleId) => {
         const existing = map.get(scaleId);
         if (existing) {

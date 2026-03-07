@@ -1,0 +1,336 @@
+# Auditoría: Información Científica y Bibliografía
+
+Análisis completo de qué datos de la pestaña "Científica" del Constructor se guardan en la base de datos, cuáles NO se guardan, y dónde se almacenan.
+
+---
+
+## 1. Resumen Rápido de Estado
+
+| Campo de la UI | ¿Se guarda en BD? | Tabla en Supabase | Columna |
+|---|---|---|---|
+| Categorías Médicas | ✅ Sí | `scale_medical_categories` (junction) | `category_id` |
+| Especialidades | ✅ Sí | `scale_specialties` (junction) | `specialty_id` |
+| Sistemas Corporales | ✅ Sí | `scale_body_systems` (junction) | `system_id` |
+| Población Objetivo | ✅ Sí | `scale_populations` (junction) | `population_id` |
+| Tipos de Escala | ✅ Sí | `scale_scale_types` (junction) | `type_id` |
+| Autor Original | ✅ Sí | `medical_scales` | `original_author` |
+| Información de Validación | ✅ Sí | `medical_scales` | `evidence_level` |
+| Idioma | ✅ Sí | `medical_scales` | `language` |
+| Referencias Bibliográficas | ✅ Sí | `scale_references` | `title`, `authors`, `year`, `journal`, `doi`, etc. |
+
+> [!TIP]
+> **Todos los campos se guardan correctamente después de los fixes aplicados.**
+
+---
+
+## 2. Análisis Detallado por Sección
+
+### 2.1 Clasificación Médica (Taxonomía) ✅
+
+**Estado: CORREGIDO**
+
+[handleSave()](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx#362-405) ahora llama a `TaxonomyService.assign*()` después de [publishScale()](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#311-569):
+
+```typescript
+// ScaleBuilder.tsx — handleSave (corregido)
+const scaleId = await ScaleService.publishScale({...});
+await Promise.all([
+  TaxonomyService.assignCategories(scaleId, scale.taxonomy.categoryIds),
+  TaxonomyService.assignSpecialties(scaleId, scale.taxonomy.specialtyIds),
+  TaxonomyService.assignBodySystems(scaleId, scale.taxonomy.bodySystemIds),
+  TaxonomyService.assignPopulations(scaleId, scale.taxonomy.populationIds),
+  TaxonomyService.assignScaleTypes(scaleId, scale.taxonomy.scaleTypeIds)
+]);
+```
+
+**Tablas junction en BD (ya existen):**
+
+| Tabla Junction | Columnas | Catálogo de referencia |
+|---|---|---|
+| `scale_medical_categories` | `scale_id`, `category_id` | `medical_categories` |
+| `scale_specialties` | `scale_id`, `specialty_id` | `medical_specialties` |
+| `scale_body_systems` | `scale_id`, `system_id` | `body_systems` |
+| `scale_populations` | `scale_id`, `population_id` | `target_populations` |
+| `scale_scale_types` | `scale_id`, `type_id` | `scale_types` |
+
+> Creadas en migración [20260210120000_add_medical_taxonomy.sql](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/supabase/migrations/20260210120000_add_medical_taxonomy.sql)
+
+#### 2.1.1 Cómo Funciona el Buscador de Taxonomías
+
+El [TaxonomySelector.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/TaxonomySelector.tsx) es un componente reutilizable tipo **search-as-you-type dropdown** que se renderiza 5 veces en la pestaña "Científica" del [ScaleBuilder.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx) (líneas 727-776).
+
+**Ciclo de vida completo:**
+
+```mermaid
+sequenceDiagram
+    participant UI as TaxonomySelector
+    participant SB as ScaleBuilder State
+    participant TS as TaxonomyService
+    participant Cat as Supabase Catalogos
+    participant JT as Supabase Junction Tables
+
+    Note over UI,Cat: 1. CARGA INICIAL (useEffect al montar)
+    UI->>TS: getCategories() / getSpecialties() / etc.
+    TS->>Cat: SELECT * FROM medical_categories<br/>WHERE is_active=true<br/>ORDER BY display_order
+    Cat-->>UI: Array de opciones
+
+    Note over UI,SB: 2. BUSQUEDA (filtrado client-side)
+    UI->>UI: Usuario escribe en input
+    UI->>UI: Filtra por name_es o name_en
+    UI->>UI: Muestra dropdown sin las ya seleccionadas
+
+    Note over UI,SB: 3. SELECCION
+    UI->>SB: onChange([...selected, optionId])
+    SB->>SB: Actualiza scale.taxonomy.*Ids
+    UI->>UI: Muestra chip azul con name_es y boton X
+
+    Note over SB,JT: 4. GUARDADO (handleSave)
+    SB->>TS: assignCategories(scaleId, categoryIds)
+    TS->>JT: DELETE FROM scale_medical_categories<br/>WHERE scale_id = X
+    TS->>JT: INSERT INTO scale_medical_categories<br/>(scale_id, category_id) VALUES...
+
+    Note over SB,JT: 5. RECARGA AL EDITAR (useEffect)
+    SB->>TS: getScaleTaxonomies(scaleId)
+    TS->>JT: SELECT category_id, medical_categories(*)<br/>FROM scale_medical_categories<br/>WHERE scale_id = X
+    JT-->>SB: Restaura taxonomy.categoryIds
+```
+
+**Props del componente:**
+
+| Prop | Tipo | Descripción |
+|------|------|-------------|
+| `type` | `'categories' \| 'specialties' \| 'bodySystems' \| 'populations' \| 'scaleTypes'` | Tabla catálogo a consultar |
+| `selected` | `string[]` | UUIDs actualmente seleccionados |
+| `onChange` | [(ids: string[]) => void](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/main.tsx#68-231) | Callback al cambiar selección |
+| `label` | `string` | Etiqueta visible (ej: "Categorías Médicas") |
+| `multiple` | `boolean` | Permite selección múltiple (default: `true`) |
+
+**Estructura base de las tablas catálogo (compartida por las 5):**
+
+| Columna | Tipo | Nota |
+|---------|------|------|
+| [id](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/JSONImporter.tsx#21-67) | `uuid` PK | Identificador único |
+| `name_es` | `text` | Nombre en español — **se muestra en la UI** |
+| `name_en` | `text` | Nombre en inglés — se muestra como subtexto gris |
+| `description` | `text` | Descripción opcional |
+| `is_active` | `boolean` | Solo las activas aparecen en el buscador |
+| `display_order` | `integer` | Orden en el dropdown (ORDER BY) |
+| `created_at` | `timestamptz` | Fecha de creación |
+
+**Campos adicionales por tabla catálogo:**
+
+| Tabla | Campos extra |
+|-------|-------------|
+| `medical_categories` | `icon` (texto para icono), `color` (código hex) |
+| `medical_specialties` | `parent_specialty_id` (uuid FK — permite jerarquía padre/hijo) |
+| `body_systems` | — (solo los campos base) |
+| `target_populations` | `age_range` (texto, ej: "0-18 años") |
+| `scale_types` | — (solo los campos base) |
+
+**Mecanismo de búsqueda:**
+- La búsqueda es **100% client-side** — se cargan TODAS las opciones activas al montar el componente via `useEffect`
+- El filtro compara `inputValue.toLowerCase()` contra `name_es` Y `name_en` simultáneamente
+- Las opciones ya seleccionadas se **excluyen** automáticamente del dropdown
+- Al seleccionar, aparece como un **chip azul** con el `name_es` y botón ✕ para remover
+- El dropdown se abre al hacer focus y se cierra al perder focus (con 200ms de delay para permitir clicks)
+
+**Guardado (DELETE + INSERT pattern):**
+- Cada método `assign*` primero **elimina** todas las asociaciones existentes para ese `scale_id`
+- Luego **inserta** las nuevas asociaciones
+- Esto significa que cada guardado es idempotente — no duplica relaciones
+
+---
+
+### 2.2 Autor Original ✅
+
+**Funciona correctamente.**
+
+```
+UI (ScaleBuilder)           -> Schema (config.original_author)
+Schema                      -> publishScale -> INSERT/UPDATE medical_scales.original_author
+BD (medical_scales)         -> getScaleById -> config.original_author ✅
+```
+
+---
+
+### 2.3 Información de Validación ✅
+
+**Estado: CORREGIDO**
+
+[publishScale](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#311-569) ahora envía `evidence_level: scaleData.current_version?.config.validation_info` en insert y update.
+[getScaleById](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#207-295) carga `validation_info: data.evidence_level`.
+
+```typescript
+// ScaleService.ts — publishScale INSERT/UPDATE (corregido)
+{
+    name, acronym, description, category, tags, status,
+    instructions, time_to_complete, language, original_author,
+    evidence_level: scaleData.current_version?.config.validation_info // ✅
+}
+```
+
+---
+
+### 2.4 Idioma ✅
+
+**Funciona correctamente.**
+
+- Guardado: [publishScale()](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#311-569) -> `language: scaleData.current_version?.config.language`
+- Carga: [getScaleById()](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#207-295) -> `language: data.language`
+
+---
+
+### 2.5 Referencias Bibliográficas ✅
+
+**Funciona correctamente.**
+
+```
+UI (bibliography[])  -> publishScale PASO 4 -> DELETE + INSERT scale_references
+BD (scale_references) -> getScaleById -> config.bibliography
+```
+
+Tabla `scale_references` con columnas: `scale_id`, `title`, `authors` (text[]), `year`, `journal`, `doi`, `pmid`, `url`, `reference_type`, `is_primary`.
+
+---
+
+## 3. Carga al Editar (Corregido)
+
+Cuando se **edita una escala existente**, todos los campos se cargan correctamente:
+
+| Campo | ¿Se carga al editar? | Detalle |
+|-------|---------------------|---------|
+| `original_author` | ✅ Sí | [getScaleById](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#207-295) -> `config.original_author: data.original_author` |
+| `validation_info` / `evidence_level` | ✅ Sí | [getScaleById](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#207-295) -> `config.validation_info: data.evidence_level` |
+| `language` | ✅ Sí | [getScaleById](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#207-295) -> `config.language: data.language` |
+| Taxonomy IDs | ✅ Sí | [ScaleBuilder](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx#52-1382) carga via `useEffect` -> `TaxonomyService.getScaleTaxonomies()` |
+
+---
+
+## 4. Importador JSON
+
+El [JSONImporter.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/JSONImporter.tsx) llama directamente a `ScaleService.publishScale(scaleToImport)`, por lo tanto:
+
+- ✅ Guarda todo lo que [publishScale](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#311-569) soporta (name, acronym, scoring, questions, references, language, original_author, evidence_level)
+- ⚠️ Taxonomy no se guarda desde el importador JSON (no tiene UI de selección de taxonomía)
+- Las taxonomías se asignan desde la UI del Constructor al editar la escala importada
+
+---
+
+## 5. Mapa de Tablas en Supabase
+
+```mermaid
+erDiagram
+    medical_scales {
+        uuid id PK
+        text name
+        text acronym
+        text description
+        text category
+        text[] tags
+        text status
+        text original_author
+        text evidence_level
+        text language
+        text instructions
+        text time_to_complete
+        uuid created_by FK
+    }
+
+    scale_references {
+        uuid id PK
+        uuid scale_id FK
+        text title
+        text[] authors
+        int year
+        text journal
+        text doi
+        text pmid
+        text url
+        text reference_type
+        bool is_primary
+    }
+
+    medical_categories {
+        uuid id PK
+        text name_es
+        text name_en
+        text icon
+        text color
+    }
+
+    scale_medical_categories {
+        uuid scale_id FK
+        uuid category_id FK
+    }
+
+    medical_specialties {
+        uuid id PK
+        text name_es
+        text name_en
+    }
+
+    scale_specialties {
+        uuid scale_id FK
+        uuid specialty_id FK
+    }
+
+    body_systems {
+        uuid id PK
+        text name_es
+        text name_en
+    }
+
+    scale_body_systems {
+        uuid scale_id FK
+        uuid system_id FK
+    }
+
+    target_populations {
+        uuid id PK
+        text name_es
+        text name_en
+        text age_range
+    }
+
+    scale_populations {
+        uuid scale_id FK
+        uuid population_id FK
+    }
+
+    scale_types {
+        uuid id PK
+        text name_es
+        text name_en
+    }
+
+    scale_scale_types {
+        uuid scale_id FK
+        uuid type_id FK
+    }
+
+    medical_scales ||--o{ scale_references : "has"
+    medical_scales ||--o{ scale_medical_categories : "classified by"
+    scale_medical_categories }o--|| medical_categories : "references"
+    medical_scales ||--o{ scale_specialties : "belongs to"
+    scale_specialties }o--|| medical_specialties : "references"
+    medical_scales ||--o{ scale_body_systems : "targets"
+    scale_body_systems }o--|| body_systems : "references"
+    medical_scales ||--o{ scale_populations : "applies to"
+    scale_populations }o--|| target_populations : "references"
+    medical_scales ||--o{ scale_scale_types : "is type of"
+    scale_scale_types }o--|| scale_types : "references"
+```
+
+---
+
+## 6. Archivos Involucrados
+
+| Archivo | Rol |
+|---------|-----|
+| [ScaleBuilder.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx) | UI + [handleSave](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx#362-405) guarda taxonomía, carga IDs via `useEffect` |
+| [ScaleService.ts](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts) | [publishScale()](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#311-569) guarda todos los campos incluyendo `evidence_level` |
+| [TaxonomyService.ts](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/TaxonomyService.ts) | Métodos `assign*` invocados desde [handleSave](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx#362-405) |
+| [TaxonomySelector.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/TaxonomySelector.tsx) | Componente UI de búsqueda/selección de taxonomías |
+| [JSONImporter.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/JSONImporter.tsx) | Llama [publishScale](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#311-569) — guarda todo excepto taxonomía (requiere UI) |
+| [medical-scale.schema.ts](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/medical-scale.schema.ts) | Schema Zod con `config.validation_info` y `config.original_author` |
+| [20260210120000_add_medical_taxonomy.sql](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/supabase/migrations/20260210120000_add_medical_taxonomy.sql) | Migración de tablas de taxonomía — ya aplicada |
