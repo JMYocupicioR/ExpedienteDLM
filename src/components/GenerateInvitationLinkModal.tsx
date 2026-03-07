@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Link as LinkIcon, Copy, ListChecks, Clock, CheckSquare, MessageSquare, QrCode, Send, Sparkles } from 'lucide-react';
+import { X, Link as LinkIcon, Copy, ListChecks, Clock, CheckSquare, MessageSquare, QrCode, Send, Sparkles, Search, Download, Dumbbell } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import PatientSelector from '@/components/PatientSelector';
@@ -87,7 +87,7 @@ const defaultCustomTask = (): CustomTaskDraft => ({
 const invitationTemplates: InvitationTemplate[] = [
   {
     id: 'first_consultation',
-    name: 'Primera consulta',
+    name: '🆕 Primera consulta',
     description: 'Registro completo con bienvenida y tarea inicial.',
     allowedSections: ['personal', 'pathological', 'non_pathological', 'hereditary', 'emergency_contact', 'lifestyle'],
     createConversation: true,
@@ -104,7 +104,7 @@ const invitationTemplates: InvitationTemplate[] = [
   },
   {
     id: 'follow_up',
-    name: 'Seguimiento',
+    name: '📋 Seguimiento',
     description: 'Actualización breve con escalas y contacto.',
     allowedSections: ['personal', 'pathological', 'non_pathological'],
     createConversation: true,
@@ -115,7 +115,7 @@ const invitationTemplates: InvitationTemplate[] = [
   },
   {
     id: 'post_surgery',
-    name: 'Postquirúrgico',
+    name: '🏥 Postquirúrgico',
     description: 'Escalas prioritarias y monitoreo frecuente.',
     allowedSections: ['personal', 'pathological', 'emergency_contact', 'lifestyle'],
     createConversation: true,
@@ -132,12 +132,23 @@ const invitationTemplates: InvitationTemplate[] = [
   },
   {
     id: 'questionnaire',
-    name: 'Aplicación de cuestionarios',
-    description: 'Envío de escalas y cuestionarios seleccionados. Sin historial médico.',
+    name: '📊 Solo cuestionarios',
+    description: 'Envío de escalas seleccionadas. Sin historial médico.',
     allowedSections: [],
     createConversation: false,
     messageTemplate: 'Tu médico te ha enviado cuestionarios clínicos para completar. Por favor respóndelos hoy.',
     expiryAmount: 7,
+    expiryUnit: 'days',
+    customTasks: [],
+  },
+  {
+    id: 'exercises',
+    name: '🏋️ Ejercicios terapéuticos',
+    description: 'Asignación de rutinas y ejercicios. Sin historial médico.',
+    allowedSections: [],
+    createConversation: true,
+    messageTemplate: 'Tu médico te ha asignado ejercicios terapéuticos. Revisa tu rutina y completa las actividades indicadas.',
+    expiryAmount: 14,
     expiryUnit: 'days',
     customTasks: [],
   },
@@ -163,6 +174,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<InvitationResult | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [scaleSearchQuery, setScaleSearchQuery] = useState('');
 
   useEffect(() => {
     if (isOpen && preselectedPatientId) {
@@ -489,7 +501,11 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
 
           {activeTemplate === 'questionnaire' ? (
             <div className="p-3 bg-cyan-900/20 border border-cyan-700/50 rounded-lg text-cyan-200 text-sm">
-              Esta plantilla no solicita historial médico, solo escalas.
+              📊 Esta plantilla no solicita historial médico, solo escalas/cuestionarios.
+            </div>
+          ) : activeTemplate === 'exercises' ? (
+            <div className="p-3 bg-emerald-900/20 border border-emerald-700/50 rounded-lg text-emerald-200 text-sm flex items-center gap-2">
+              <Dumbbell className="h-4 w-4 shrink-0" /> Esta plantilla es exclusiva para asignar ejercicios terapéuticos al paciente.
             </div>
           ) : (
             <div>
@@ -505,19 +521,48 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
             </div>
           )}
 
+          {activeTemplate !== 'exercises' && (
           <div>
-            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2"><ListChecks className="h-4 w-4" /> Escalas médicas (ordenadas por nombre)</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-gray-300 text-sm flex items-center gap-2"><ListChecks className="h-4 w-4" /> Escalas médicas</div>
+              {selectedScaleIds.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-800/60 text-cyan-200">
+                    {selectedScaleIds.length} seleccionada{selectedScaleIds.length !== 1 ? 's' : ''}
+                  </span>
+                  {requiredScaleIds.filter(id => selectedScaleIds.includes(id)).length > 0 && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-800/60 text-amber-200">
+                      {requiredScaleIds.filter(id => selectedScaleIds.includes(id)).length} obligatoria{requiredScaleIds.filter(id => selectedScaleIds.includes(id)).length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            {scales.length > 3 && (
+              <div className="relative mb-2">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="Buscar escala..."
+                  value={scaleSearchQuery}
+                  onChange={(e) => setScaleSearchQuery(e.target.value)}
+                  className="w-full bg-gray-800 text-gray-200 border border-gray-700 rounded pl-8 pr-3 py-1.5 text-sm placeholder:text-gray-500"
+                />
+              </div>
+            )}
             <div className="max-h-64 overflow-auto space-y-2">
               {loadingCatalog ? (
                 <div className="text-gray-400">Cargando escalas...</div>
               ) : scales.length === 0 ? (
                 <div className="text-gray-400">No hay escalas activas.</div>
               ) : (
-                scales.map(s => {
+                scales
+                  .filter(s => !scaleSearchQuery.trim() || s.name.toLowerCase().includes(scaleSearchQuery.trim().toLowerCase()) || (s.description || '').toLowerCase().includes(scaleSearchQuery.trim().toLowerCase()))
+                  .map(s => {
                   const isRequired = requiredScaleIds.includes(s.id);
                   const isSelected = selectedScaleIds.includes(s.id);
                   return (
-                    <label key={s.id} className={`flex items-start justify-between gap-3 p-2 rounded hover:bg-gray-800 border ${isRequired ? 'border-amber-600/50 bg-amber-900/20' : 'border-gray-700/60'}`}>
+                    <label key={s.id} className={`flex items-start justify-between gap-3 p-2 rounded hover:bg-gray-800 border transition-colors ${isRequired ? 'border-amber-600/50 bg-amber-900/20' : isSelected ? 'border-cyan-700/50 bg-cyan-900/10' : 'border-gray-700/60'}`}>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <input
@@ -551,9 +596,18 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
               )}
             </div>
           </div>
+          )}
 
+          {(activeTemplate === 'exercises' || activeTemplate === 'follow_up' || activeTemplate === 'post_surgery') && (
           <div>
-            <div className="text-gray-300 text-sm mb-2">Ejercicios a asignar</div>
+            <div className="text-gray-300 text-sm mb-2 flex items-center gap-2">
+              <Dumbbell className="h-4 w-4" /> Ejercicios a asignar
+              {selectedExerciseIds.length > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-800/60 text-emerald-200">
+                  {selectedExerciseIds.length} seleccionado{selectedExerciseIds.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
             <div className="max-h-44 overflow-auto space-y-2">
               {loadingCatalog ? (
                 <div className="text-gray-400">Cargando ejercicios...</div>
@@ -561,7 +615,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
                 <div className="text-gray-400">No hay ejercicios activos.</div>
               ) : (
                 exercises.map((exercise) => (
-                  <label key={exercise.id} className="flex items-start gap-2 rounded border border-gray-700/60 p-2 hover:bg-gray-800">
+                  <label key={exercise.id} className={`flex items-start gap-2 rounded border p-2 hover:bg-gray-800 transition-colors ${selectedExerciseIds.includes(exercise.id) ? 'border-emerald-700/50 bg-emerald-900/10' : 'border-gray-700/60'}`}>
                     <input
                       type="checkbox"
                       className="mt-1"
@@ -577,6 +631,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
               )}
             </div>
           </div>
+          )}
 
           <div>
             <div className="text-gray-300 text-sm mb-2">Tareas personalizadas</div>
@@ -671,7 +726,7 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
 
           <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
             <button
-              disabled={!canGenerate || generating || (allowedSections.length === 0 && selectedScaleIds.length === 0)}
+              disabled={!canGenerate || generating || (activeTemplate === 'exercises' ? selectedExerciseIds.length === 0 : (allowedSections.length === 0 && selectedScaleIds.length === 0))}
               onClick={handleGenerate}
               className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded disabled:opacity-50 flex items-center"
             >
@@ -757,9 +812,18 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
                   <div className="h-24 w-24 rounded bg-white p-1 flex items-center justify-center">
                     <img src={result.qrDataUrl} alt="QR de invitación" className="h-full w-full object-contain" />
                   </div>
-                  <div className="text-xs text-gray-300 flex items-center gap-1.5">
-                    <QrCode className="h-4 w-4" />
-                    El paciente puede escanear este QR para abrir el registro.
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-xs text-gray-300 flex items-center gap-1.5">
+                      <QrCode className="h-4 w-4" />
+                      El paciente puede escanear este QR para abrir el registro.
+                    </div>
+                    <a
+                      href={result.qrDataUrl}
+                      download={`qr-invitacion-${result.token}.png`}
+                      className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded w-fit transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" /> Descargar QR
+                    </a>
                   </div>
                 </div>
               )}

@@ -5,7 +5,8 @@ import {
   Monitor, Globe, Shield, Save, CheckCircle, Building, Palette,
   UploadCloud, Image as ImageIcon, Loader2, Eye, EyeOff,
   Camera, Mail, Calendar, Clock, Smartphone, Key,
-  Stethoscope, FileText, Activity, AlertCircle, Info
+  Stethoscope, FileText, Activity, AlertCircle, Info,
+  Link2, UserPlus, Copy, Send
 } from 'lucide-react';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -14,6 +15,7 @@ import { useProfilePhotos } from '@/hooks/shared/useProfilePhotos';
 import { useMedicalPracticeSettings } from '@/hooks/useMedicalPracticeSettings';
 import { PersonalClinicSettings } from '@/components/settings/PersonalClinicSettings';
 import { ClinicAssociationManager } from '@/components/settings/ClinicAssociationManager';
+import GenerateInvitationLinkModal from '@/components/GenerateInvitationLinkModal';
 
 interface SettingSection {
   id: string;
@@ -243,55 +245,115 @@ export default function Settings() {
     }
   }, [searchParams]);
 
-  const sections: SettingSection[] = [
-    {
-      id: 'profile',
-      title: 'Perfil y Clínica',
-      description: 'Información personal y de la clínica',
-      icon: User
-    },
-    {
-      id: 'clinic',
-      title: 'Configuración Médica',
-      description: 'Especialidades y configuraciones médicas',
-      icon: Stethoscope
-    },
-    {
-      id: 'notifications',
-      title: 'Notificaciones',
-      description: 'Configurar alertas y avisos',
-      icon: Bell
-    },
-    {
-      id: 'security',
-      title: 'Seguridad',
-      description: 'Contraseña y autenticación',
-      icon: Lock
-    },
-    {
-      id: 'appearance',
-      title: 'Apariencia',
-      description: 'Tema y configuración visual',
-      icon: Palette
-    }
-  ];
+  const isPatient = profile?.role === 'patient';
+
+  const sections: SettingSection[] = isPatient
+    ? [
+        { id: 'profile', title: 'Mi Perfil', description: 'Información personal', icon: User },
+        { id: 'linking', title: 'Vincular Médico', description: 'Conectar con tu doctor', icon: Link2 },
+        { id: 'security', title: 'Seguridad', description: 'Contraseña y acceso', icon: Lock },
+        { id: 'appearance', title: 'Apariencia', description: 'Tema y configuración visual', icon: Palette },
+      ]
+    : [
+        { id: 'profile', title: 'Perfil y Clínica', description: 'Información personal y de la clínica', icon: User },
+        { id: 'clinic', title: 'Configuración Médica', description: 'Especialidades y configuraciones médicas', icon: Stethoscope },
+        { id: 'notifications', title: 'Notificaciones', description: 'Configurar alertas y avisos', icon: Bell },
+        { id: 'security', title: 'Seguridad', description: 'Contraseña y autenticación', icon: Lock },
+        { id: 'appearance', title: 'Apariencia', description: 'Tema y configuración visual', icon: Palette },
+      ];
 
   if (profile?.role === 'super_admin') {
     sections.push(
-      {
-        id: 'system',
-        title: 'Sistema',
-        description: 'Configuraciones del sistema',
-        icon: Database
-      },
-      {
-        id: 'privacy',
-        title: 'Privacidad',
-        description: 'Políticas de datos y HIPAA',
-        icon: Shield
-      }
+      { id: 'system', title: 'Sistema', description: 'Configuraciones del sistema', icon: Database },
+      { id: 'privacy', title: 'Privacidad', description: 'Políticas de datos y HIPAA', icon: Shield }
     );
   }
+
+  // ── Patient linking state ──
+  const [linkToken, setLinkToken] = useState('');
+  const [linkingLoading, setLinkingLoading] = useState(false);
+  const [linkedDoctor, setLinkedDoctor] = useState<{ full_name: string | null; specialty: string | null; phone: string | null } | null>(null);
+  const [linkedDoctorLoading, setLinkedDoctorLoading] = useState(false);
+
+  // Load linked doctor info for patient
+  useEffect(() => {
+    if (!isPatient || !user?.id) return;
+    (async () => {
+      setLinkedDoctorLoading(true);
+      try {
+        // Find patient record
+        const { data: patients } = await supabase
+          .from('patients')
+          .select('primary_doctor_id')
+          .eq('patient_user_id', user.id)
+          .not('primary_doctor_id', 'is', null)
+          .limit(1);
+        if (patients && patients.length > 0 && patients[0].primary_doctor_id) {
+          const { data: doc } = await supabase
+            .from('profiles')
+            .select('full_name, specialty, phone')
+            .eq('id', patients[0].primary_doctor_id)
+            .maybeSingle();
+          if (doc) setLinkedDoctor(doc);
+        }
+      } catch { /* silent */ }
+      finally { setLinkedDoctorLoading(false); }
+    })();
+  }, [isPatient, user?.id]);
+
+  // ── Invitation modal + quick token state ──
+  const [showInvitationModal, setShowInvitationModal] = useState(false);
+  const [quickToken, setQuickToken] = useState<{ token: string; link: string; copied: string | null } | null>(null);
+  const [quickTokenLoading, setQuickTokenLoading] = useState(false);
+
+  const handleQuickGenerateToken = async () => {
+    if (!user?.id || !profile?.clinic_id) {
+      showNotification('error', 'No hay clínica asociada a tu perfil');
+      return;
+    }
+    setQuickTokenLoading(true);
+    try {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+      const array = new Uint8Array(5);
+      (window.crypto || (window as any).msCrypto).getRandomValues(array);
+      const token = Array.from(array).map(n => alphabet[n % alphabet.length]).join('');
+
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(); // 72 hours
+      const { data, error } = await supabase
+        .from('patient_registration_tokens')
+        .insert({
+          token,
+          doctor_id: user.id,
+          clinic_id: profile.clinic_id as string,
+          allowed_sections: ['personal', 'pathological', 'non_pathological', 'hereditary'],
+          create_conversation: true,
+          message_template: 'Hola, bienvenido(a). Completa tu registro inicial.',
+          invitation_template: 'first_consultation',
+          expires_at: expiresAt,
+          status: 'pending',
+        } as any)
+        .select('token')
+        .single();
+
+      if (error) throw error;
+      const origin = window.location.origin;
+      const link = `${origin}/register/patient/${encodeURIComponent(data.token)}`;
+      setQuickToken({ token: data.token, link, copied: null });
+      showNotification('success', `Token generado: ${data.token}`);
+    } catch (err: any) {
+      showNotification('error', err.message || 'Error al generar token');
+    } finally {
+      setQuickTokenLoading(false);
+    }
+  };
+
+  const handleCopyQuickToken = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setQuickToken(prev => prev ? { ...prev, copied: label } : null);
+      setTimeout(() => setQuickToken(prev => prev ? { ...prev, copied: null } : null), 2000);
+    } catch (_e) { /* silent */ }
+  };
 
   interface NotificationPreferences {
     email: {
@@ -733,9 +795,117 @@ export default function Settings() {
     showNotification('success', 'Configuración guardada correctamente');
   };
 
+  // ── Handle token linking ──
+  const handleLinkWithToken = async () => {
+    const cleanToken = linkToken.trim();
+    if (cleanToken.length < 3 || cleanToken.length > 10) {
+      showNotification('error', 'El token debe tener entre 3 y 10 caracteres');
+      return;
+    }
+    setLinkingLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('link-patient-account', {
+        body: { token: cleanToken }
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      showNotification('success', data?.message || 'Vinculación exitosa');
+      setLinkToken('');
+
+      // Refresh doctor info
+      if (data?.doctor_name) {
+        setLinkedDoctor({ full_name: data.doctor_name, specialty: data.doctor_specialty || null, phone: null });
+      } else {
+        // Re-query
+        const { data: patients } = await supabase
+          .from('patients')
+          .select('primary_doctor_id')
+          .eq('patient_user_id', user!.id)
+          .not('primary_doctor_id', 'is', null)
+          .limit(1);
+        if (patients && patients.length > 0 && patients[0].primary_doctor_id) {
+          const { data: doc } = await supabase
+            .from('profiles')
+            .select('full_name, specialty, phone')
+            .eq('id', patients[0].primary_doctor_id)
+            .maybeSingle();
+          if (doc) setLinkedDoctor(doc);
+        }
+      }
+    } catch (err: any) {
+      showNotification('error', err.message || 'Error al vincular con el médico');
+    } finally {
+      setLinkingLoading(false);
+    }
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case 'profile':
+        // ── Patient Profile (simplified) ──
+        if (isPatient) {
+          return (
+            <form onSubmit={handleProfileSave} className="space-y-8">
+              <div className="section-header">
+                <h3 className="section-title flex items-center">
+                  <User className="h-6 w-6 mr-3 text-cyan-400" />
+                  Mi Perfil
+                </h3>
+                <p className="section-subtitle">
+                  Gestiona tu información personal.
+                </p>
+              </div>
+
+              {/* Profile Picture */}
+              <div className="card">
+                <h4 className="text-lg font-semibold mb-6 flex items-center">
+                  <Camera className="h-5 w-5 mr-2 text-cyan-400" />
+                  Foto de Perfil
+                </h4>
+                <ImageUploader
+                  label="Foto de Perfil"
+                  description="Esta imagen aparecerá en tu perfil"
+                  currentImageUrl={profileData.photo_url}
+                  onFileSelect={setProfilePictureFile}
+                  aspectRatio="aspect-square"
+                />
+              </div>
+
+              {/* Personal Info */}
+              <div className="card">
+                <h4 className="text-lg font-semibold mb-6 flex items-center">
+                  <User className="h-5 w-5 mr-2 text-cyan-400" />
+                  Información Personal
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Nombre Completo *</label>
+                    <input type="text" name="full_name" defaultValue={profileData.full_name} required className="form-input" placeholder="Tu nombre completo" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                    <input type="email" value={profileData.email} disabled className="w-full px-4 py-3 bg-gray-600 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed" />
+                    <p className="text-xs text-gray-400 mt-1">El email no se puede modificar</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Teléfono</label>
+                    <input type="tel" name="phone" defaultValue={profileData.phone} className="form-input" placeholder="+52 555 123 4567" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Save */}
+              <div className="flex justify-end">
+                <button type="submit" disabled={isSaving} className="flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium">
+                  {isSaving ? (<><Loader2 className="h-5 w-5 animate-spin" /><span>Guardando...</span></>) : (<><Save className="h-5 w-5" /><span>Guardar Cambios</span></>)}
+                </button>
+              </div>
+            </form>
+          );
+        }
+
+        // ── Doctor/Admin Profile (original) ──
         return (
           <form onSubmit={handleProfileSave} className="space-y-8">
             {/* Header */}
@@ -797,86 +967,37 @@ export default function Settings() {
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Nombre Completo *
-                  </label>
-                  <input
-                    type="text"
-                    name="full_name"
-                    defaultValue={profileData.full_name}
-                    required
-                    className="form-input"
-                    placeholder="Dr. Juan Pérez García"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Nombre Completo *</label>
+                  <input type="text" name="full_name" defaultValue={profileData.full_name} required className="form-input" placeholder="Dr. Juan Pérez García" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={profileData.email}
-                    disabled
-                    className="w-full px-4 py-3 bg-gray-600 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                  <input type="email" value={profileData.email} disabled className="w-full px-4 py-3 bg-gray-600 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed" />
                   <p className="text-xs text-gray-400 mt-1">El email no se puede modificar</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Teléfono
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    defaultValue={profileData.phone}
-                    className="form-input"
-                    placeholder="+52 555 123 4567"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Teléfono</label>
+                  <input type="tel" name="phone" defaultValue={profileData.phone} className="form-input" placeholder="+52 555 123 4567" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Especialidad *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Especialidad *</label>
                   {loadingSpecialties ? (
                     <div className="text-gray-400 text-sm py-3">Cargando especialidades...</div>
                   ) : specialties.length > 0 ? (
-                    <select
-                      name="specialty_id"
-                      defaultValue={(profile as any)?.specialty_id || ''}
-                      required
-                      className="form-input"
-                    >
+                    <select name="specialty_id" defaultValue={(profile as any)?.specialty_id || ''} required className="form-input">
                       <option value="">Seleccionar especialidad</option>
-                      {specialties.map(opt => (
-                        <option key={opt.id} value={opt.id}>{opt.name}</option>
-                      ))}
+                      {specialties.map(opt => (<option key={opt.id} value={opt.id}>{opt.name}</option>))}
                     </select>
                   ) : (
-                    <select
-                      name="specialty_name_fallback"
-                      defaultValue={profileData.specialty || ''}
-                      required
-                      className="form-input"
-                    >
+                    <select name="specialty_name_fallback" defaultValue={profileData.specialty || ''} required className="form-input">
                       <option value="">Seleccionar especialidad</option>
-                      {DEFAULT_SPECIALTIES.map(name => (
-                        <option key={name} value={name}>{name}</option>
-                      ))}
+                      {DEFAULT_SPECIALTIES.map(name => (<option key={name} value={name}>{name}</option>))}
                     </select>
                   )}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Cédula Profesional *
-                  </label>
-                  <input
-                    type="text"
-                    name="license_number"
-                    defaultValue={profileData.license_number}
-                    required
-                    className="form-input"
-                    placeholder="12345678"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Cédula Profesional *</label>
+                  <input type="text" name="license_number" defaultValue={profileData.license_number} required className="form-input" placeholder="12345678" />
                 </div>
               </div>
             </div>
@@ -899,65 +1020,25 @@ export default function Settings() {
                   </label>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Nombre de la Clínica
-                  </label>
-                  <input
-                    type="text"
-                    name="clinic_name"
-                    defaultValue={profileData.clinic_name}
-                    className="form-input"
-                    placeholder="Clínica Médica Integral"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Nombre de la Clínica</label>
+                  <input type="text" name="clinic_name" defaultValue={profileData.clinic_name} className="form-input" placeholder="Clínica Médica Integral" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Dirección
-                  </label>
-                  <input
-                    type="text"
-                    name="clinic_street"
-                    defaultValue={profileData.clinic_address.street}
-                    className="form-input"
-                    placeholder="Av. Revolución 1234, Col. Centro"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Dirección</label>
+                  <input type="text" name="clinic_street" defaultValue={profileData.clinic_address.street} className="form-input" placeholder="Av. Revolución 1234, Col. Centro" />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Ciudad
-                    </label>
-                    <input
-                      type="text"
-                      name="clinic_city"
-                      defaultValue={profileData.clinic_address.city}
-                      className="form-input"
-                      placeholder="Ciudad de México"
-                    />
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Ciudad</label>
+                    <input type="text" name="clinic_city" defaultValue={profileData.clinic_address.city} className="form-input" placeholder="Ciudad de México" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Estado
-                    </label>
-                    <input
-                      type="text"
-                      name="clinic_state"
-                      defaultValue={profileData.clinic_address.state}
-                      className="form-input"
-                      placeholder="CDMX"
-                    />
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Estado</label>
+                    <input type="text" name="clinic_state" defaultValue={profileData.clinic_address.state} className="form-input" placeholder="CDMX" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Código Postal
-                    </label>
-                    <input
-                      type="text"
-                      name="clinic_zip"
-                      defaultValue={profileData.clinic_address.zip}
-                      className="form-input"
-                      placeholder="06000"
-                    />
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Código Postal</label>
+                    <input type="text" name="clinic_zip" defaultValue={profileData.clinic_address.zip} className="form-input" placeholder="06000" />
                   </div>
                 </div>
               </div>
@@ -965,25 +1046,99 @@ export default function Settings() {
 
             {/* Save Button */}
             <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Guardando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-5 w-5" />
-                    <span>Guardar Cambios</span>
-                  </>
-                )}
+              <button type="submit" disabled={isSaving} className="flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium">
+                {isSaving ? (<><Loader2 className="h-5 w-5 animate-spin" /><span>Guardando...</span></>) : (<><Save className="h-5 w-5" /><span>Guardar Cambios</span></>)}
               </button>
             </div>
           </form>
+        );
+
+      case 'linking':
+        return (
+          <div className="space-y-8">
+            <div className="section-header">
+              <h3 className="section-title flex items-center">
+                <Link2 className="h-6 w-6 mr-3 text-cyan-400" />
+                Vincular con Médico
+              </h3>
+              <p className="section-subtitle">
+                Ingresa el token de vinculación que te proporcionó tu médico para conectar tu cuenta.
+              </p>
+            </div>
+
+            {/* Current Doctor */}
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-4 flex items-center">
+                <Stethoscope className="h-5 w-5 mr-2 text-blue-400" />
+                Médico Actual
+              </h4>
+              {linkedDoctorLoading ? (
+                <div className="flex items-center gap-3 py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                  <span className="text-gray-400">Cargando información...</span>
+                </div>
+              ) : linkedDoctor ? (
+                <div className="flex items-center gap-4 bg-gray-750 rounded-xl p-4 border border-gray-700/50">
+                  <div className="h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-md flex-shrink-0">
+                    {(linkedDoctor.full_name || 'D').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold text-lg truncate">Dr. {linkedDoctor.full_name || 'No disponible'}</p>
+                    {linkedDoctor.specialty && <p className="text-cyan-400 text-sm mt-0.5">{linkedDoctor.specialty}</p>}
+                    {linkedDoctor.phone && <p className="text-gray-400 text-xs mt-1">Tel: {linkedDoctor.phone}</p>}
+                  </div>
+                  <div className="bg-green-500/10 text-green-400 text-xs px-3 py-1.5 rounded-full border border-green-500/20 flex items-center gap-1.5 flex-shrink-0">
+                    <div className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                    Vinculado
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-750 rounded-xl p-4 border border-amber-500/20 text-center">
+                  <UserPlus className="h-8 w-8 text-amber-400 mx-auto mb-2" />
+                  <p className="text-gray-300 text-sm font-medium">No estás vinculado a ningún médico</p>
+                  <p className="text-gray-500 text-xs mt-1">Ingresa un token de vinculación para conectar con tu doctor</p>
+                </div>
+              )}
+            </div>
+
+            {/* Token Input */}
+            <div className="card">
+              <h4 className="text-lg font-semibold mb-4 flex items-center">
+                <Key className="h-5 w-5 mr-2 text-cyan-400" />
+                {linkedDoctor ? 'Cambiar Médico' : 'Ingresar Token de Vinculación'}
+              </h4>
+              <p className="text-gray-400 text-sm mb-4">
+                Tu médico te proporcionará un código de vinculación. Ingrésalo aquí para conectar tu cuenta con su consultorio.
+              </p>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={linkToken}
+                  onChange={(e) => setLinkToken(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                  className="form-input flex-1 font-mono text-xl tracking-[0.3em] text-center uppercase"
+                  placeholder="ABC12"
+                  maxLength={10}
+                />
+                <button
+                  type="button"
+                  onClick={handleLinkWithToken}
+                  disabled={linkingLoading || linkToken.trim().length < 3}
+                  className="flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
+                >
+                  {linkingLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Link2 className="h-5 w-5" />}
+                  <span>{linkingLoading ? 'Vinculando...' : 'Vincular'}</span>
+                </button>
+              </div>
+              <div className="mt-4 p-3 bg-gray-700/30 rounded-lg border border-gray-700">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-gray-400 text-xs">
+                    El token es un código alfanumérico de 5 caracteres que tu médico genera desde su panel. Si no tienes uno, solicítalo a tu doctor.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         );
 
       case 'clinic':
@@ -1002,6 +1157,95 @@ export default function Settings() {
 
             {/* Personal Clinic Settings - Only for doctors */}
             {profile?.role === 'doctor' && <PersonalClinicSettings />}
+
+            {/* Token de Vinculación para Pacientes */}
+            <div className="card mb-6">
+              <h4 className="text-lg font-semibold mb-4 flex items-center">
+                <Link2 className="h-5 w-5 mr-2 text-cyan-400" />
+                Token de Vinculación para Pacientes
+              </h4>
+              <p className="text-gray-400 text-sm mb-4">
+                Genera un código de vinculación para que tus pacientes conecten su cuenta contigo.
+              </p>
+
+              <div className="flex flex-wrap gap-3 mb-4">
+                <button
+                  type="button"
+                  onClick={handleQuickGenerateToken}
+                  disabled={quickTokenLoading}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  {quickTokenLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+                  <span>{quickTokenLoading ? 'Generando...' : 'Generar Token Rápido'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowInvitationModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  <Send className="h-4 w-4" />
+                  <span>Invitación Avanzada</span>
+                </button>
+              </div>
+
+              {quickToken && (
+                <div className="bg-gray-750 border border-cyan-700/30 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs">Código (5 chars):</span>
+                    <code className="text-lg font-bold text-cyan-300 tracking-[0.3em] font-mono">{quickToken.token}</code>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyQuickToken(quickToken.token, 'token')}
+                      className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                      title="Copiar código"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-gray-300" />
+                    </button>
+                    {quickToken.copied === 'token' && <span className="text-xs text-green-400">¡Copiado!</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs">Link:</span>
+                    <input readOnly value={quickToken.link} className="flex-1 bg-gray-800 text-gray-300 border border-gray-700 rounded px-2 py-1 text-xs" />
+                    <button
+                      type="button"
+                      onClick={() => handleCopyQuickToken(quickToken.link, 'link')}
+                      className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                      title="Copiar link"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-gray-300" />
+                    </button>
+                    {quickToken.copied === 'link' && <span className="text-xs text-green-400">¡Copiado!</span>}
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(`Hola, este es tu acceso de registro:\nCódigo: ${quickToken.token}\nLink: ${quickToken.link}`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-medium"
+                    >
+                      <Send className="h-3.5 w-3.5" /> WhatsApp
+                    </a>
+                    <a
+                      href={`mailto:?subject=${encodeURIComponent('Invitación de registro')}&body=${encodeURIComponent(`Hola, usa este código para vincularte: ${quickToken.token}\nO registrarte aquí: ${quickToken.link}`)}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded text-xs font-medium"
+                    >
+                      <Mail className="h-3.5 w-3.5" /> Email
+                    </a>
+                  </div>
+                  <p className="text-gray-500 text-xs">Vigencia: 72 horas · El paciente ingresa este código en su panel de configuración.</p>
+                </div>
+              )}
+
+              <div className="mt-3 p-3 bg-gray-700/30 rounded-lg border border-gray-700">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-gray-400 text-xs">
+                    <strong>Token Rápido:</strong> genera un código de 5 caracteres con configuración básica (72h, registro de primera consulta).
+                    <strong> Invitación Avanzada:</strong> permite seleccionar escalas, ejercicios, tareas y plantilla de invitación.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Medical Specialties */}
             <div className="card">
@@ -2160,6 +2404,7 @@ export default function Settings() {
   };
 
   return (
+    <>
     <div className="min-h-screen" style={{ background: 'var(--app-gradient)' }}>
       {/* Notification Component */}
       {notification.show && (
@@ -2246,7 +2491,7 @@ export default function Settings() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-white font-medium truncate">{profileData.full_name || 'Usuario'}</p>
-                    <p className="text-gray-400 text-xs truncate">{profileData.specialty || 'Médico'}</p>
+                    <p className="text-gray-400 text-xs truncate">{isPatient ? 'Paciente' : (profileData.specialty || 'Médico')}</p>
                   </div>
                 </div>
               </div>
@@ -2264,5 +2509,14 @@ export default function Settings() {
         </div>
       </div>
     </div>
+
+    {/* Invitation Modal for doctors */}
+    {!isPatient && (
+      <GenerateInvitationLinkModal
+        isOpen={showInvitationModal}
+        onClose={() => setShowInvitationModal(false)}
+      />
+    )}
+  </>
   );
 }

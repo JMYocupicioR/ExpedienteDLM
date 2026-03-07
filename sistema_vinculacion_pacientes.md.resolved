@@ -1,0 +1,204 @@
+# Sistema de Vinculación de Pacientes mediante Token
+
+## Descripción General
+
+El sistema de vinculación paciente-médico utiliza un flujo basado en **tokens de invitación de 5 caracteres** para establecer una relación clínica segura entre un doctor y un paciente. Este mecanismo permite dos vías de registro e incorporación:
+
+1. **El médico genera un token** (con configuración clínica personalizada).
+2. **El paciente consume el token** para registrarse y/o vincularse automáticamente.
+
+---
+
+## Flujo Completo
+
+```mermaid
+sequenceDiagram
+    participant D as 👨‍⚕️ Médico
+    participant S as 🗄️ Supabase
+    participant P as 🧑 Paciente
+
+    D->>S: Genera token de invitación (5 chars)
+    S-->>D: Token + URL + QR Code
+    D->>P: Comparte enlace / QR / token
+    P->>S: Accede a /register/patient/:token
+    S-->>P: Formulario de registro pre-configurado
+    P->>S: Completa registro + crea cuenta (opcional)
+    S->>S: Edge Function: complete-patient-registration
+    S->>S: Vincula patient → doctor (primary_doctor_id)
+    S-->>P: Registro exitoso ✅
+    P->>S: Primer login
+    S->>S: Trigger: link-patient-account
+    S-->>P: Dashboard de paciente con info del doctor
+```
+
+---
+
+## Paso 1: Generación del Token por el Médico
+
+### ¿Cómo funciona?
+
+El médico accede al modal **GenerateInvitationLinkModal** desde su panel, donde configura la invitación:
+
+| Parámetro | Descripción |
+|---|---|
+| **Token** | Código alfanumérico de 5 caracteres, legible y único |
+| **Plantilla** | Tipo de consulta: `first_consultation`, `questionnaire`, `follow_up`, `post_surgery`, `exercises` |
+| **Escalas obligatorias** | Escalas clínicas que el paciente debe completar antes de enviar |
+| **Escalas opcionales** | Escalas sugeridas pero no obligatorias |
+| **Ejercicios** | Rutinas terapéuticas asignadas como tareas |
+| **Secciones habilitadas** | Qué partes del historial clínico se solicitan (personal, patológico, heredo-familiar, etc.) |
+| **Expiración** | Periodo de validez configurable (por defecto: 72 horas) |
+| **Paciente asignado** | Opcional — para seguimientos de pacientes existentes |
+
+### Productos generados
+
+Al crear el token, el sistema genera automáticamente:
+
+- **🔗 Enlace directo**: `https://app.dominio.com/register/patient/{TOKEN}`
+- **📱 Código QR**: Escaneable con cualquier dispositivo, descargable como PNG para impresión
+- **🔑 Token de texto**: El código de 5 caracteres para ingreso manual
+
+### Almacenamiento
+
+El token se persiste en la tabla `patient_registration_tokens`:
+
+```
+┌────────────────────────────────┐
+│  patient_registration_tokens   │
+├────────────────────────────────┤
+│ token (5-char, unique)         │
+│ doctor_id (UUID)               │
+│ clinic_id (UUID)               │
+│ invitation_template (string)   │
+│ selected_scale_ids (UUID[])    │
+│ required_scale_ids (UUID[])    │
+│ selected_exercise_ids (UUID[]) │
+│ allowed_sections (string[])    │
+│ assigned_patient_id (UUID?)    │
+│ status: 'pending' | 'completed'│
+│ expires_at (timestamp)         │
+└────────────────────────────────┘
+```
+
+> [!IMPORTANT]
+> El sistema incluye un mecanismo de **reintentos** (`maxTokenAttempts`) para evitar colisiones de tokens en la tabla, generando un nuevo código si el primero ya existe.
+
+---
+
+## Paso 2: Consumo del Token por el Paciente
+
+### Vía Enlace o QR
+
+El paciente accede a la ruta pública `/register/patient/:token`. No requiere autenticación previa.
+
+### Vía Ingreso Manual (Configuración del Paciente)
+
+Si el paciente ya tiene una cuenta, puede ingresar el token manualmente desde su **panel de configuración** para vincularse con un nuevo médico. Esto dispara el mismo flujo de asociación interna.
+
+### Proceso de Registro (Multi-paso)
+
+| Paso | Contenido | Herramientas UX |
+|---|---|---|
+| **1. Identidad** | Datos biométricos básicos, contacto | `VoiceInputButton` para dictado |
+| **2. Perfil Clínico** | Historial médico según secciones habilitadas | `ChipSelector` con catálogos normalizados |
+| **3. Tareas Clínicas** | Escalas y cuestionarios asignados | `ScaleStepper`, indicadores de obligatoriedad |
+
+> [!TIP]
+> Se utiliza **caché en localStorage** para prevenir pérdida de datos entre los pasos del formulario.
+
+### Creación de Cuenta (Opcional)
+
+Durante el registro, el paciente puede **optar por crear una cuenta** con email y contraseña:
+
+- El email se auto-sincroniza con el contacto proporcionado en el Paso 1
+- Validación en tiempo real de disponibilidad de email (debounce 800ms)
+- Indicador visual de fortaleza de contraseña: Débil / Media / Fuerte
+- El `signUp` incluye `metadata: { role: 'patient' }` para asignación correcta de rol
+
+---
+
+## Paso 3: Vinculación Automática
+
+### ¿Cómo se liga el paciente al doctor?
+
+```mermaid
+flowchart TB
+    A[Paciente completa formulario] --> B[Edge Function: complete-patient-registration]
+    B --> C{¿assigned_patient_id existe?}
+    C -->|Sí| D[Actualiza registro existente]
+    C -->|No| E[Crea nuevo registro de paciente]
+    E --> F[Asigna primary_doctor_id del token]
+    E --> G[Asigna clinic_id del token]
+    D --> F
+    B --> H[Persiste historial clínico]
+    B --> I[Guarda evaluaciones de escalas]
+    B --> J[Marca token como 'completed']
+    
+    K[Paciente hace primer login] --> L[Trigger: link-patient-account]
+    L --> M[Vincula patient_user_id con auth.users.id]
+    L --> N[Verifica y corrige rol a 'patient']
+```
+
+### Relaciones del Modelo de Datos
+
+| Relación | Campo | Tabla |
+|---|---|---|
+| **Usuario → Paciente** | `patient_user_id` → `auth.users.id` | `patients` |
+| **Paciente → Doctor** | `primary_doctor_id` → `profiles.id` | `patients` |
+| **Token → Doctor** | `doctor_id` → `profiles.id` | `patient_registration_tokens` |
+| **Token → Paciente** | `assigned_patient_id` → `patients.id` | `patient_registration_tokens` |
+
+---
+
+## Mecanismos de Auto-Curación
+
+El sistema implementa estrategias robustas para manejar datos incompletos o fragmentados:
+
+### 1. Fallback por Token
+Si el registro del paciente existe pero no tiene `primary_doctor_id`, el dashboard consulta la tabla `patient_registration_tokens` para recuperar el `doctor_id` original y actualiza el registro automáticamente.
+
+### 2. Fallback por Email
+Si existen registros duplicados (un "ghost" creado por el trigger de signup + un registro clínico), el sistema reconcilia buscando por email y fusionando los registros.
+
+### 3. Corrección de Rol
+La Edge Function `link-patient-account` verifica el rol del perfil post-registro. Si fue creado incorrectamente como "doctor", lo corrige a "patient".
+
+> [!NOTE]
+> Estos mecanismos garantizan que el paciente siempre vea correctamente la información de su médico asociado en el Dashboard, sin intervención manual.
+
+---
+
+## Seguridad y Cumplimiento
+
+| Aspecto | Implementación |
+|---|---|
+| **Autenticación** | La Edge Function usa `SERVICE_ROLE_KEY` para bypasear RLS durante el registro público |
+| **Expiración** | Tokens con validez temporal configurable |
+| **Colisión** | Retry loop para garantizar unicidad de tokens |
+| **Rol** | Asignación automática vía metadata + trigger + corrección post-registro |
+| **Privacidad** | Cumplimiento NOM-024 y LFPDPPP — acceso ARCO desde el dashboard del paciente |
+| **Principio de mínimo privilegio** | El paciente solo ve sus propios datos y la información de contacto de su médico |
+
+---
+
+## Plantillas de Invitación Disponibles
+
+| Plantilla | Uso Clínico | Historial | Escalas | Ejercicios |
+|---|---|---|---|---|
+| `first_consultation` | Primera consulta | ✅ Completo | ✅ | ❌ |
+| `questionnaire` | Solo cuestionarios | ❌ | ✅ | ❌ |
+| `follow_up` | Seguimiento | ✅ Parcial | ✅ | ❌ |
+| `post_surgery` | Postquirúrgico | ✅ Emergencia/Estilo de vida | ✅ | ❌ |
+| `exercises` | Ejercicios terapéuticos | ❌ | ❌ | ✅ |
+
+---
+
+## Resumen del Flujo
+
+1. 👨‍⚕️ El **médico genera un token** desde su panel, configurando plantilla, escalas y secciones.
+2. 📤 El **médico comparte** el enlace, QR o token de 5 caracteres con el paciente.
+3. 🧑 El **paciente accede** al formulario público o ingresa el token en su configuración.
+4. 📝 El **paciente completa** el registro multi-paso con validaciones en tiempo real.
+5. ⚙️ El **sistema vincula** automáticamente al paciente con el doctor mediante `primary_doctor_id`.
+6. 🔐 Los **triggers y edge functions** aseguran la correcta asignación de roles y linkeo de cuentas.
+7. 🏠 El **paciente accede** a su dashboard personalizado con la información de su médico asociado.

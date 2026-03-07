@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -28,6 +28,7 @@ type TokenRow = {
   doctor_id: string;
   clinic_id: string;
   selected_scale_ids: string[] | null;
+  required_scale_ids?: string[] | null;
   allowed_sections?: string[] | null;
   invitation_template?: string | null;
   message_template?: string | null;
@@ -106,6 +107,8 @@ export default function PatientPublicRegistration() {
   const [accountPassword, setAccountPassword] = useState('');
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
   const [postSubmitMessage, setPostSubmitMessage] = useState<string | null>(null);
+  const [emailCheckStatus, setEmailCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const emailCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [chronicDiseasesOther, setChronicDiseasesOther] = useState('');
   const [currentTreatmentsOther, setCurrentTreatmentsOther] = useState('');
   const [surgeriesOther, setSurgeriesOther] = useState('');
@@ -125,7 +128,7 @@ export default function PatientPublicRegistration() {
         setLoading(true);
         const { data, error } = await supabase
           .from('patient_registration_tokens')
-          .select('id, token, doctor_id, clinic_id, selected_scale_ids, allowed_sections, invitation_template, message_template, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name, specialty), clinic:clinics(name)')
+          .select('id, token, doctor_id, clinic_id, selected_scale_ids, required_scale_ids, allowed_sections, invitation_template, message_template, assigned_patient_id, expires_at, status, created_at, doctor:profiles(full_name, specialty), clinic:clinics(name)')
           .eq('token', token)
           .single();
         if (error) throw error;
@@ -243,6 +246,63 @@ export default function PatientPublicRegistration() {
     const cleanCurrent = (current || '').trim();
     return cleanCurrent ? `${cleanCurrent} ${cleanIncoming}` : cleanIncoming;
   };
+
+  // Auto-fill account email from personal info when switching to step 3
+  useEffect(() => {
+    if (step === 3 && !accountEmail && personal.email) {
+      setAccountEmail(personal.email.trim());
+    }
+  }, [step]);
+
+  // Password strength calculator
+  const passwordStrength = useMemo(() => {
+    if (!accountPassword) return { level: 0, label: '', color: '' };
+    let score = 0;
+    if (accountPassword.length >= 6) score++;
+    if (accountPassword.length >= 10) score++;
+    if (/[A-Z]/.test(accountPassword)) score++;
+    if (/[0-9]/.test(accountPassword)) score++;
+    if (/[^A-Za-z0-9]/.test(accountPassword)) score++;
+    if (score <= 1) return { level: 1, label: 'Débil', color: 'bg-red-500' };
+    if (score <= 3) return { level: 2, label: 'Media', color: 'bg-amber-500' };
+    return { level: 3, label: 'Fuerte', color: 'bg-green-500' };
+  }, [accountPassword]);
+
+  // Debounced email duplicate check — uses profiles table (reliable)
+  const checkEmailExists = useCallback(async (email: string) => {
+    if (!email || !email.includes('@')) {
+      setEmailCheckStatus('idle');
+      return;
+    }
+    setEmailCheckStatus('checking');
+    try {
+      // Check profiles table for existing user with this email
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (error) {
+        setEmailCheckStatus('idle');
+        return;
+      }
+      setEmailCheckStatus(data ? 'taken' : 'available');
+    } catch {
+      setEmailCheckStatus('idle');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (emailCheckTimeoutRef.current) clearTimeout(emailCheckTimeoutRef.current);
+    const email = accountEmail.trim().toLowerCase();
+    if (!email || !email.includes('@') || email.length < 5) {
+      setEmailCheckStatus('idle');
+      return;
+    }
+    emailCheckTimeoutRef.current = setTimeout(() => checkEmailExists(email), 800);
+    return () => { if (emailCheckTimeoutRef.current) clearTimeout(emailCheckTimeoutRef.current); };
+  }, [accountEmail, checkEmailExists]);
 
   const normalizeMultiValue = (values: string[], otherValue?: string) => {
     const filtered = values.filter((item) => item !== 'Otra' && item !== 'Otro' && item !== 'Ninguna');
@@ -804,10 +864,14 @@ export default function PatientPublicRegistration() {
             <div className="space-y-2">
               {(tokenRow.selected_scale_ids || []).map((sid: string) => {
                 const answered = Boolean(scaleAnswers[sid]);
+                const isRequired = (tokenRow.required_scale_ids || []).includes(sid);
                 return (
-                  <div key={sid} className="flex items-center justify-between bg-gray-900/80 border border-gray-600 rounded-lg p-3 shadow-sm">
+                  <div key={sid} className={`flex items-center justify-between rounded-lg p-3 shadow-sm ${isRequired ? 'bg-amber-900/20 border border-amber-600/40' : 'bg-gray-900/80 border border-gray-600'}`}>
                     <div className="text-sm text-gray-200 min-w-0 flex-1">
                       <span className="font-medium">{scaleDefs[sid]?.name || sid}</span>
+                      {isRequired && (
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-600/40 text-amber-200 font-medium">Obligatoria</span>
+                      )}
                       {answered && <span className="ml-2 text-xs text-green-400 inline-flex items-center"><CheckCircle className="h-3.5 w-3.5 mr-0.5" />Completada</span>}
                     </div>
                     <button
@@ -847,15 +911,31 @@ export default function PatientPublicRegistration() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="md:col-span-2">
                     <label htmlFor="reg-account-email" className="text-sm text-gray-300">Correo para la cuenta</label>
-                    <input
-                      id="reg-account-email"
-                      name="account_email"
-                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white ${fieldErrors.account_email ? 'border-2 border-red-500' : 'border border-gray-700'}`}
-                      value={accountEmail}
-                      placeholder={personal.email ? `Usar ${personal.email}` : 'paciente@correo.com'}
-                      onChange={(e) => { setAccountEmail(e.target.value); clearFieldError('account_email'); }}
-                    />
+                    <div className="relative">
+                      <input
+                        id="reg-account-email"
+                        name="account_email"
+                        type="email"
+                        className={`w-full bg-gray-800 rounded px-3 py-2 text-white ${fieldErrors.account_email ? 'border-2 border-red-500' : emailCheckStatus === 'taken' ? 'border-2 border-amber-500' : emailCheckStatus === 'available' ? 'border-2 border-green-500' : 'border border-gray-700'}`}
+                        value={accountEmail}
+                        placeholder={personal.email ? `Usar ${personal.email}` : 'paciente@correo.com'}
+                        onChange={(e) => { setAccountEmail(e.target.value); clearFieldError('account_email'); }}
+                      />
+                      {emailCheckStatus === 'checking' && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">Verificando...</span>
+                      )}
+                    </div>
                     {fieldErrors.account_email && <p className="text-red-400 text-sm mt-1">{fieldErrors.account_email}</p>}
+                    {emailCheckStatus === 'taken' && (
+                      <p className="text-amber-400 text-sm mt-1 flex items-center gap-1">
+                        ⚠️ Este correo ya tiene cuenta. Usa tu contraseña existente para vincularlo.
+                      </p>
+                    )}
+                    {emailCheckStatus === 'available' && (
+                      <p className="text-green-400 text-sm mt-1 flex items-center gap-1">
+                        ✅ Correo disponible
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="reg-account-password" className="text-sm text-gray-300">Contraseña</label>
@@ -867,6 +947,19 @@ export default function PatientPublicRegistration() {
                       value={accountPassword}
                       onChange={(e) => { setAccountPassword(e.target.value); clearFieldError('account_password'); }}
                     />
+                    {accountPassword && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${passwordStrength.color}`}
+                            style={{ width: `${(passwordStrength.level / 3) * 100}%` }}
+                          />
+                        </div>
+                        <span className={`text-xs ${passwordStrength.level === 1 ? 'text-red-400' : passwordStrength.level === 2 ? 'text-amber-400' : 'text-green-400'}`}>
+                          {passwordStrength.label}
+                        </span>
+                      </div>
+                    )}
                     {fieldErrors.account_password && <p className="text-red-400 text-sm mt-1">{fieldErrors.account_password}</p>}
                   </div>
                   <div>
@@ -875,10 +968,13 @@ export default function PatientPublicRegistration() {
                       id="reg-account-confirm"
                       name="account_confirm"
                       type="password"
-                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white ${fieldErrors.account_confirm ? 'border-2 border-red-500' : 'border border-gray-700'}`}
+                      className={`w-full bg-gray-800 rounded px-3 py-2 text-white ${fieldErrors.account_confirm ? 'border-2 border-red-500' : accountConfirmPassword && accountPassword === accountConfirmPassword ? 'border-2 border-green-500' : 'border border-gray-700'}`}
                       value={accountConfirmPassword}
                       onChange={(e) => { setAccountConfirmPassword(e.target.value); clearFieldError('account_confirm'); }}
                     />
+                    {accountConfirmPassword && accountPassword === accountConfirmPassword && (
+                      <p className="text-green-400 text-xs mt-1">✅ Las contraseñas coinciden</p>
+                    )}
                     {fieldErrors.account_confirm && <p className="text-red-400 text-sm mt-1">{fieldErrors.account_confirm}</p>}
                   </div>
                 </div>

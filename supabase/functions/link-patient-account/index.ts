@@ -174,6 +174,8 @@ serve(async (req) => {
         .update({
           patient_user_id: currentUser.id,
           email: currentUser.email || null,
+          primary_doctor_id: tokenRow.doctor_id,
+          clinic_id: tokenRow.clinic_id,
           updated_at: new Date().toISOString(),
         })
         .eq('id', patientId);
@@ -184,6 +186,17 @@ serve(async (req) => {
           headers: buildCorsHeaders(req),
         });
       }
+
+      // Asegurar que el perfil tenga rol 'patient' y esté activo
+      await supabase
+        .from('profiles')
+        .update({
+          role: 'patient',
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentUser.id)
+        .neq('role', 'super_admin'); // No sobreescribir super_admin
 
       // Si existe un paciente asignado al token, desasocia duplicados huérfanos del mismo usuario.
       // Previene que el portal lea el paciente equivocado cuando hay más de un registro vinculado.
@@ -390,10 +403,28 @@ serve(async (req) => {
       } as any)
       .eq('id', tokenRow.id);
 
+    // Fetch doctor info for the response
+    let doctorName: string | null = null;
+    let doctorSpecialty: string | null = null;
+    if (tokenRow.doctor_id) {
+      const { data: doctorProfile } = await supabase
+        .from('profiles')
+        .select('full_name, specialty')
+        .eq('id', tokenRow.doctor_id)
+        .single();
+      if (doctorProfile) {
+        doctorName = doctorProfile.full_name;
+        doctorSpecialty = doctorProfile.specialty;
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
+        message: doctorName ? `Vinculado exitosamente con Dr. ${doctorName}` : 'Vinculación exitosa',
         patient_id: patientId,
+        doctor_name: doctorName,
+        doctor_specialty: doctorSpecialty,
         created_tasks_count: createdTaskIds.length,
         conversation_id: conversationId,
       }),

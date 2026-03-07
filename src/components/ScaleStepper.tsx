@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { X, Printer, CheckCircle } from 'lucide-react';
 
 type ScaleOption = { label: string; value: number | string };
-type ScaleItem = { id: string; text: string; type: 'select'; options: ScaleOption[] };
+type ScaleItem = { id: string; text: string; type: string; options: ScaleOption[] };
 
 export interface ScaleDefinition {
   items?: ScaleItem[];
@@ -120,7 +120,7 @@ export default function ScaleStepper({ isOpen, onClose, scaleId, scaleName, defi
               >
                 <div className="text-white text-base sm:text-lg mb-4 leading-relaxed">{it.text}</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {it.type === 'select' && it.options.map(opt => (
+                  {it.options && it.options.length > 0 && it.options.map(opt => (
                     <button
                       key={`${it.id}-${String(opt.value)}`}
                       className="w-full px-4 py-3 min-h-[44px] text-left rounded-lg bg-gray-800 hover:bg-gray-700 focus:bg-gray-700 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-gray-900 border border-gray-600 text-gray-200 whitespace-normal break-words min-w-0 transition-colors duration-150"

@@ -1,4 +1,6 @@
 import AssistantDashboard from '@/pages/AssistantDashboard';
+import PatientHomeDashboard from '@/components/PatientHomeDashboard';
+import { useAuth } from '@/features/authentication/hooks/useAuth';
 import ClinicStatusCard from '@/components/ClinicStatusCard';
 import GenerateInvitationLinkModal from '@/components/GenerateInvitationLinkModal';
 import QuickStartModal from '@/components/QuickStartModal';
@@ -39,8 +41,10 @@ import KeyboardShortcutsHelp from '@/components/KeyboardShortcutsHelp';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { profile: authProfile, user: authUser } = useAuth();
   const { activeClinic, userClinics, isIndependentDoctor, isLoading: isClinicLoading, setActiveClinic } =
     useClinic();
+
 
   const currentMembership = activeClinic ? userClinics?.find(m => m.clinic_id === activeClinic.id) : null;
   const isAssistant = currentMembership?.role === 'administrative_assistant';
@@ -200,6 +204,11 @@ const Dashboard = () => {
     const count = (patientsQuery.data || []).length;
     setRealStats(prev => (prev.patients === count ? prev : { ...prev, patients: count }));
   }, [patientsQuery.data]);
+
+  // If the user is a patient, render the patient-specific dashboard
+  if (authProfile?.role === 'patient') {
+    return <PatientHomeDashboard user={authUser} profile={authProfile} />;
+  }
 
   if (isAssistant) {
     return <AssistantDashboard />;
