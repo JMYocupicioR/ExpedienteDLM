@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Activity, Plus, Calendar, ChevronDown, ChevronUp, Trash2, Filter, TrendingUp, TrendingDown, Minus, Eye, X } from 'lucide-react';
+import { Activity, Plus, Calendar, ChevronDown, ChevronUp, Trash2, Filter, TrendingUp, TrendingDown, Minus, Eye } from 'lucide-react';
 import { usePhysicalExam } from '../features/medical-records/hooks/usePhysicalExam';
 import MedicalScalesPanel from './MedicalScalesPanel';
 import { formatAssessmentDate, type ScaleAssessmentViewModel } from '@/features/medical-records/utils/scaleAssessmentViewModel';
 import { buildScaleTimelineSummary, filterAssessmentsByTimeRange, type ScaleGroupBy, type ScaleTimeRange, type ScaleTrendDirection } from '@/features/medical-records/utils/scaleTimeline';
+import { ScaleAssessmentDetailModal } from './ScaleAssessmentDetailModal';
 import { useNavigate } from 'react-router-dom';
 
 interface PatientRecordScalesProps {
@@ -457,118 +458,12 @@ export default function PatientRecordScales({ patientId, doctorId }: PatientReco
       </div>
 
       {detailAssessment && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl">
-            <div className="sticky top-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-700 px-5 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Sesión de Escala Médica</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{detailAssessment.scaleName}</p>
-              </div>
-              <button
-                onClick={() => setDetailAssessment(null)}
-                className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300"
-                title="Cerrar"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Médico aplicador</div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white mt-1">{detailAssessment.doctorName || 'No disponible'}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">ID: {detailAssessment.doctorId}</div>
-                </div>
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Fecha de registro</div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white mt-1">{formatAssessmentDate(detailAssessment.createdAt)}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Actualizado: {formatAssessmentDate(detailAssessment.updatedAt)}</div>
-                </div>
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Resultado</div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white mt-1">
-                    Score: {typeof detailAssessment.score === 'number' ? detailAssessment.score : '-'}
-                  </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Severidad: {detailAssessment.severity || 'No disponible'}
-                  </div>
-                </div>
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Escala</div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white mt-1">{detailAssessment.scaleName}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    ID: {detailAssessment.scaleId}
-                    {detailAssessment.scaleVersion ? ` • v${detailAssessment.scaleVersion}` : ''}
-                  </div>
-                </div>
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Vinculación clínica</div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white mt-1">
-                    Consulta: {detailAssessment.consultationId || 'No vinculada'}
-                  </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Evaluado: {detailAssessment.evaluatedAt ? formatAssessmentDate(detailAssessment.evaluatedAt) : 'No disponible'}
-                  </div>
-                </div>
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Sesión</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 break-all">Assessment ID: {detailAssessment.id}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 break-all">Patient ID: {detailAssessment.patientId}</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-4">
-                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">Interpretación clínica</h4>
-                  {(detailAssessment.clinicalSummary || detailAssessment.recommendationList.length > 0 || detailAssessment.interpretation) ? (
-                    <div className="space-y-3">
-                      {detailAssessment.clinicalSummary && (
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
-                          {detailAssessment.clinicalSummary}
-                        </p>
-                      )}
-                      {detailAssessment.recommendationList.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">Recomendaciones:</p>
-                            <ul className="list-disc list-inside space-y-1">
-                              {detailAssessment.recommendationList.map((item, idx) => (
-                                <li key={idx} className="text-xs text-gray-600 dark:text-gray-400">{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Sin interpretación disponible</p>
-                  )}
-                </div>
-
-                <div className="rounded border border-gray-200 dark:border-gray-700 p-4">
-                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">Respuestas capturadas</h4>
-                  {detailAssessment.answerDetails.length > 0 ? (
-                    <div className="space-y-2">
-                      {detailAssessment.answerDetails.map((entry) => (
-                        <div key={entry.questionId} className="rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-2">
-                          <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">{entry.questionText}</div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{entry.valueLabel}</div>
-                        </div>
-                      ))}
-                      <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
-                        <pre className="whitespace-pre-wrap break-all font-mono">
-                          {JSON.stringify(detailAssessment.answers, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Sin respuestas registradas</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ScaleAssessmentDetailModal
+          assessment={detailAssessment}
+          onClose={() => setDetailAssessment(null)}
+        />
       )}
     </div>
   );
 }
+

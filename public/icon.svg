@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="108" fill="url(#g)"/>
+  <!-- D letter - left half -->
+  <path d="M120 112h80c88 0 140 52 140 144s-52 144-140 144h-80V112zm56 48v192h24c60 0 96-36 96-96s-36-96-96-96h-24z" fill="white" opacity="0.95"/>
+  <!-- L letter - right side, overlapping stylishly -->
+  <path d="M296 112h56v232h80v56H296V112z" fill="white" opacity="0.85"/>
+  <!-- Accent dot - represents "lux" (light) -->
+  <circle cx="416" cy="136" r="20" fill="url(#g2)" opacity="0.9"/>
+</svg>

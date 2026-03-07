@@ -122,12 +122,14 @@ export default function MedicalScaleBoston() {
         .from('scale_assessments')
         .insert({
           patient_id: patientId,
-          doctor_id: user.id,
-          consultation_id: consultationId,
+          user_id: user.id,
           scale_id: 'boston_carpal_tunnel',
-          answers: { sss, fss },
-          score: Number(((sssAvg + fssAvg) / 2).toFixed(2)),
-          severity: `${interpretSSS(sssAvg)} / ${interpretFSS(fssAvg)}`
+          responses: { sss, fss },
+          total_score: Number(((sssAvg + fssAvg) / 2).toFixed(2)),
+          interpretation: JSON.stringify({ severity: `${interpretSSS(sssAvg)} / ${interpretFSS(fssAvg)}` }),
+          status: 'completed',
+          completion_percentage: 100,
+          completed_at: new Date().toISOString(),
         });
       if (insertError) throw insertError;
       setMessage({ type: 'success', text: 'Evaluación guardada en el expediente.' });

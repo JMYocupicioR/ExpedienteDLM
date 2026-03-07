@@ -79,8 +79,13 @@ const parseJsonString = (value: string): unknown => {
 const normalizeInterpretation = (raw: unknown): ScaleAssessmentInterpretation | null => {
   if (raw === null || raw === undefined) return null;
   const parsed = typeof raw === 'string' ? parseJsonString(raw) : raw;
-  if (!isPlainRecord(parsed)) return null;
-  return parsed as ScaleAssessmentInterpretation;
+  // If it parsed to a plain object, use it directly
+  if (isPlainRecord(parsed)) return parsed as ScaleAssessmentInterpretation;
+  // If it's still a plain text string (non-JSON), treat it as clinical_significance
+  if (typeof parsed === 'string' && parsed.trim().length > 0) {
+    return { clinical_significance: parsed };
+  }
+  return null;
 };
 
 const normalizeAnswers = (raw: unknown): unknown | null => {
@@ -196,14 +201,31 @@ const buildAnswerDetails = (answers: unknown, definition: ScaleDefinition | null
   if (!answers) return [];
 
   const items = definition?.items || [];
-  const itemMap = new Map(items.map((item) => [item.id, item]));
 
   const buildValueLabel = (item: ScaleItemDef | undefined, rawValue: unknown): string => {
     if (!item?.options || item.options.length === 0) return valueToString(rawValue);
     const match = item.options.find((opt) => String(opt.value) === String(rawValue));
-    return match ? `${match.label} (${String(match.value)})` : valueToString(rawValue);
+    return match ? `${match.label} (${String(rawValue)})` : valueToString(rawValue);
   };
 
+  // PRIMARY PATH: if we have a definition with items, iterate ITEMS IN ORDER
+  // This is the correct approach — the definition is already ordered by order_index
+  if (items.length > 0 && isPlainRecord(answers)) {
+    const answersRecord = answers as Record<string, unknown>;
+    return items.map((item, index) => {
+      const rawValue = answersRecord[item.id];
+      return {
+        questionId: item.id,
+        questionText: item.text || `Pregunta ${index + 1}`,
+        rawValue: rawValue ?? null,
+        valueLabel: rawValue !== undefined && rawValue !== null
+          ? buildValueLabel(item, rawValue)
+          : 'Sin respuesta',
+      };
+    });
+  }
+
+  // ARRAY FALLBACK: answers stored as positional array
   if (Array.isArray(answers)) {
     return answers.map((value, index) => {
       const itemByIndex = items[index];
@@ -216,39 +238,18 @@ const buildAnswerDetails = (answers: unknown, definition: ScaleDefinition | null
     });
   }
 
+  // LAST RESORT: no definition, iterate raw object keys
   if (isPlainRecord(answers)) {
     const entries = Object.entries(answers);
-
-    // Check how many answer keys match definition items by ID.
-    const matchedCount = entries.filter(([key]) => itemMap.has(key)).length;
-    const useIndexFallback = items.length > 0 && matchedCount === 0;
-
-    return entries.map(([questionId, rawValue], index) => {
-      // Try exact ID match first.
-      let item = itemMap.get(questionId);
-
-      // Fallback: when NO keys matched by ID, map by position (index).
-      if (!item && useIndexFallback && index < items.length) {
-        item = items[index];
-      }
-
-      return {
-        questionId,
-        questionText: item?.text || (isUuidLike(questionId) ? `Pregunta ${index + 1}` : questionId),
-        rawValue,
-        valueLabel: buildValueLabel(item, rawValue),
-      };
-    });
+    return entries.map(([questionId, rawValue], index) => ({
+      questionId,
+      questionText: isUuidLike(questionId) ? `Pregunta ${index + 1}` : questionId,
+      rawValue,
+      valueLabel: valueToString(rawValue),
+    }));
   }
 
-  return [
-    {
-      questionId: 'response',
-      questionText: 'Respuesta',
-      rawValue: answers,
-      valueLabel: valueToString(answers),
-    },
-  ];
+  return [{ questionId: 'response', questionText: 'Respuesta', rawValue: answers, valueLabel: valueToString(answers) }];
 };
 
 const buildClinicalSummary = (
@@ -277,7 +278,9 @@ const normalizeScaleAssessment = (
 ): ScaleAssessmentViewModel => {
   const legacyRow = row as unknown as Record<string, unknown>;
   const interpretation = normalizeInterpretation(row.interpretation ?? legacyRow.interpretation ?? null);
-  const doctorName = doctorNames.get(row.doctor_id) ?? null;
+  // Support both old 'doctor_id' column and new 'user_id' column
+  const userId = (legacyRow.user_id as string) || row.doctor_id || '';
+  const doctorName = doctorNames.get(userId) ?? null;
   const scaleInfo = scaleMeta.get(row.scale_id);
   const derivedScaleName =
     typeof interpretation?.scale_name === 'string'
@@ -286,17 +289,21 @@ const normalizeScaleAssessment = (
       ? interpretation.scale
       : null;
   const scaleName = scaleInfo?.name || derivedScaleName || row.scale_id;
-  const legacyScore = typeof legacyRow.total_score === 'number' ? legacyRow.total_score : null;
+  // Support both 'score' and 'total_score' column names
+  const columnTotalScore = typeof legacyRow.total_score === 'number' ? legacyRow.total_score : null;
   const derivedScore =
-    typeof row.score === 'number'
+    columnTotalScore !== null
+      ? columnTotalScore
+      : typeof row.score === 'number'
       ? row.score
       : typeof interpretation?.score === 'number'
       ? interpretation.score
-      : legacyScore;
+      : null;
   const derivedSeverity =
     row.severity ||
     (typeof interpretation?.severity === 'string' ? interpretation.severity : null);
-  const rawAnswers = row.answers ?? legacyRow.answers ?? legacyRow.responses ?? null;
+  // Support both 'responses' (new) and 'answers' (old) column names
+  const rawAnswers = legacyRow.responses ?? legacyRow.answers ?? null;
   const normalizedAnswers = normalizeAnswers(rawAnswers);
 
   const answerDetails = buildAnswerDetails(normalizedAnswers, scaleInfo?.definition || null);
@@ -308,7 +315,7 @@ const normalizeScaleAssessment = (
   return {
     id: row.id,
     patientId: row.patient_id,
-    doctorId: row.doctor_id,
+    doctorId: userId,
     doctorName,
     consultationId: row.consultation_id,
     scaleId: row.scale_id,
@@ -334,6 +341,8 @@ const fetchScaleMeta = async (
   if (scaleIds.length === 0) return map;
 
   const scales = (await fetchActiveMedicalScalesSafe()) as MedicalScaleRow[];
+
+  // First pass: use JSONB definition or hardcoded fallback
   scales.forEach((scale) => {
     const dbDef = normalizeScaleDefinition(scale.definition);
     const fallbackDef = getFallbackDefinition(scale.id, scale.name);
@@ -347,20 +356,82 @@ const fetchScaleMeta = async (
     if (!map.has(id)) map.set(id, { name: id, definition: null });
   });
 
+  // Second pass: for scales still missing a definition, load from relational tables
+  const missingIds = scaleIds.filter((id) => {
+    const entry = map.get(id);
+    return !entry?.definition;
+  });
+
+  if (missingIds.length > 0) {
+    // Fetch questions for all missing scale IDs in one query
+    const { data: questions } = await supabase
+      .from('scale_questions')
+      .select('id, scale_id, question_text, question_type, order_index, description, image_url')
+      .in('scale_id', missingIds)
+      .order('order_index', { ascending: true });
+
+    if (questions && questions.length > 0) {
+      const questionIds = questions.map((q: { id: string }) => q.id);
+
+      // Fetch options for all questions in bulk
+      const { data: options } = await supabase
+        .from('question_options')
+        .select('question_id, option_label, option_value, order_index')
+        .in('question_id', questionIds)
+        .order('order_index', { ascending: true });
+
+      // Group options by question
+      const optsByQuestion = new Map<string, Array<{ label: string; value: number | string }>>();
+      (options || []).forEach((opt: { question_id: string; option_label: string; option_value: number | string }) => {
+        const arr = optsByQuestion.get(opt.question_id) || [];
+        arr.push({ label: opt.option_label || String(opt.option_value), value: opt.option_value });
+        optsByQuestion.set(opt.question_id, arr);
+      });
+
+      // Group questions by scale_id
+      const qByScale = new Map<string, ScaleItemDef[]>();
+      questions.forEach((q: {
+        id: string;
+        scale_id: string;
+        question_text: string;
+        question_type: string;
+        order_index: number;
+      }) => {
+        const arr = qByScale.get(q.scale_id) || [];
+        arr.push({
+          id: q.id,
+          text: q.question_text || `Pregunta ${q.order_index}`,
+          type: (q.question_type as ScaleItemDef['type']) || 'select',
+          options: optsByQuestion.get(q.id) || [],
+        });
+        qByScale.set(q.scale_id, arr);
+      });
+
+      // Update map entries with the relational definition
+      qByScale.forEach((items, scaleId) => {
+        const existing = map.get(scaleId);
+        if (existing) {
+          map.set(scaleId, { ...existing, definition: { items } });
+        }
+      });
+    }
+  }
+
   return map;
 };
 
-const fetchDoctorNames = async (doctorIds: string[]): Promise<Map<string, string | null>> => {
+const fetchDoctorNames = async (userIds: string[]): Promise<Map<string, string | null>> => {
   const map = new Map<string, string | null>();
-  if (doctorIds.length === 0) return map;
+  const ids = userIds.filter(Boolean);
+  if (ids.length === 0) return map;
 
   const { data, error } = await supabase
     .from('profiles')
     .select('id, full_name')
-    .in('id', doctorIds);
+    .in('id', ids);
 
   if (error) {
-    doctorIds.forEach((id) => map.set(id, UNKNOWN_DOCTOR_LABEL));
+    ids.forEach((id) => map.set(id, UNKNOWN_DOCTOR_LABEL));
     return map;
   }
 
@@ -369,15 +440,20 @@ const fetchDoctorNames = async (doctorIds: string[]): Promise<Map<string, string
     map.set(profile.id, profile.full_name || UNKNOWN_DOCTOR_LABEL);
   });
 
-  doctorIds.forEach((id) => {
+  ids.forEach((id) => {
     if (!map.has(id)) map.set(id, UNKNOWN_DOCTOR_LABEL);
   });
 
   return map;
 };
 
+// Helper to extract user_id (new) or doctor_id (old) from a row
+const extractUserId = (row: Record<string, unknown>): string => {
+  return (row.user_id as string) || (row.doctor_id as string) || '';
+};
+
 const normalizeScaleAssessments = async (rows: RawScaleAssessmentRow[]): Promise<ScaleAssessmentViewModel[]> => {
-  const doctorIds = Array.from(new Set(rows.map((row) => row.doctor_id).filter(Boolean)));
+  const doctorIds = Array.from(new Set(rows.map((row) => extractUserId(row as unknown as Record<string, unknown>)).filter(Boolean)));
   const scaleIds = Array.from(new Set(rows.map((row) => row.scale_id).filter(Boolean)));
   const doctorNames = await fetchDoctorNames(doctorIds);
   const scaleMeta = await fetchScaleMeta(scaleIds);

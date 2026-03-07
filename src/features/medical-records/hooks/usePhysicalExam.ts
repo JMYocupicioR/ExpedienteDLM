@@ -600,17 +600,24 @@ export function usePhysicalExam({
       interpretation?: Record<string, unknown>;
     }
   ): Promise<{ id: string }> => {
+    const interpretationPayload = params.interpretation
+      ? JSON.stringify(params.interpretation)
+      : params.severity
+      ? JSON.stringify({ severity: params.severity, score: params.score })
+      : null;
+
     const { data, error } = await supabase
       .from('scale_assessments')
       .insert({
         patient_id: patientId,
-        doctor_id: doctorId,
-        consultation_id: params.consultationId || null,
+        user_id: doctorId,
         scale_id: params.scaleId,
-        answers: params.answers,
-        score: params.score ?? null,
-        severity: params.severity ?? null,
-        interpretation: params.interpretation ?? null
+        responses: params.answers,
+        total_score: params.score ?? null,
+        interpretation: interpretationPayload,
+        status: 'completed',
+        completion_percentage: 100,
+        completed_at: new Date().toISOString(),
       })
       .select('id')
       .single();

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
-  Menu, X, Stethoscope, User, Users, FileText, Calendar, 
+  Menu, X, User, Users, FileText, Calendar, 
   Settings, LogOut, Bell, Search, Home, Activity, Building,
-  ChevronRight, ChevronLeft, Sliders, Shield
+  ChevronRight, ChevronLeft, Sliders, Shield, Stethoscope
 } from 'lucide-react';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { useClinic } from '@/features/clinic/context/ClinicContext';
 import { supabase } from '@/lib/supabase';
 import ClinicSwitcher from '@/components/Layout/ClinicSwitcher';
 import NotificationBell from '@/components/NotificationBell';
+import { DeepLuxLogo } from '@/components/Brand';
 
 interface NavItem {
   id: string;
@@ -243,22 +244,18 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
         transition-all duration-300 ease-in-out
         border-r border-gray-800
       `}>
-        {/* Header */}
+        {/* Header — Brand */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          {!isCollapsed && (
-            <Link to="/dashboard" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
-                <Stethoscope className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-white text-lg font-bold">ExpedienteDLM</span>
-            </Link>
+          {isCollapsed ? (
+            <DeepLuxLogo variant="compact" />
+          ) : (
+            <DeepLuxLogo variant="full" />
           )}
           
           <button
             onClick={() => {
               const newCollapsedState = !isCollapsed;
               setIsCollapsed(newCollapsedState);
-              // Emit custom event for layout to listen
               window.dispatchEvent(new CustomEvent('navbar-toggle', { 
                 detail: { isCollapsed: newCollapsedState } 
               }));
@@ -342,12 +339,7 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
         }}
       >
         <div className="flex items-center justify-between h-full">
-          <Link to="/dashboard" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
-              <Stethoscope className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-white text-lg font-bold">ExpedienteDLM</span>
-          </Link>
+          <DeepLuxLogo variant="header" />
 
           <div className="flex items-center space-x-2">
             {/* Search button for mobile */}

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { DeepLuxLogo } from '@/components/Brand';
 
 export default function EnhancedSignupQuestionnaire() {
   const navigate = useNavigate();
@@ -1639,8 +1640,8 @@ export default function EnhancedSignupQuestionnaire() {
           <div className='flex items-center justify-between'>
             <div>
               <div className='flex items-center mb-2'>
-                <Stethoscope className='h-8 w-8 text-white mr-3' />
-                <h1 className='text-2xl font-bold text-white'>Registro Completo</h1>
+                <DeepLuxLogo variant='header' />
+                <h1 className='text-2xl font-bold text-white ml-3'>Registro Completo</h1>
               </div>
               <p className='text-cyan-100'>
                 Paso {currentStep} de {totalSteps}: {getStepTitle(currentStep)}
@@ -1658,7 +1659,7 @@ export default function EnhancedSignupQuestionnaire() {
             </div>
             <div className='text-right'>
               <div className='text-white/80 text-sm'>Sistema:</div>
-              <div className='text-white font-medium'>ExpedienteDLM</div>
+              <div className='text-white font-medium'>Expediente DLM</div>
               {location.state?.fromRegistration && (
                 <div className='text-cyan-200 text-xs mt-1'>✨ Registro iniciado</div>
               )}
@@ -1776,7 +1777,7 @@ export default function EnhancedSignupQuestionnaire() {
                   </h3>
                   <p className='text-green-200 text-sm mb-2'>
                     Tu cuenta ha sido verificada correctamente. Ahora necesitamos completar tu perfil 
-                    médico para personalizar tu experiencia en ExpedienteDLM.
+                    médico para personalizar tu experiencia en Expediente DLM.
                   </p>
                   <div className='text-green-100 text-xs bg-green-800/30 rounded p-2'>
                     <strong>✓ Email verificado:</strong> {formData.personalInfo.email}<br/>

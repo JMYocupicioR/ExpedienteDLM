@@ -1,8 +1,9 @@
 import OAuthButtons from '@/features/authentication/components/OAuthButtons';
 import { supabase } from '@/lib/supabase';
-import { AlertCircle, Eye, EyeOff, Lock, Mail, Stethoscope, User } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DeepLuxLogo } from '@/components/Brand';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 
 export default function Auth() {
@@ -373,8 +374,8 @@ export default function Auth() {
           >
             <form onSubmit={handleSubmit} className='w-full max-w-md mx-auto space-y-6'>
               <div className='text-center mb-8'>
-                <Stethoscope className='h-12 w-12 text-cyan-400 mx-auto mb-4' />
-                <h1 className='text-3xl font-bold text-white mb-2'>Iniciar Sesión</h1>
+                <DeepLuxLogo variant='auth' showProduct={false} />
+                <h1 className='text-3xl font-bold text-white mb-2 mt-4'>Iniciar Sesión</h1>
                 <p className='text-gray-400'>Accede a Expediente DLM</p>
               </div>
 
@@ -519,9 +520,9 @@ export default function Auth() {
           >
             <form onSubmit={handleSubmit} className='w-full max-w-md mx-auto space-y-6'>
               <div className='text-center mb-8'>
-                <Stethoscope className='h-12 w-12 text-cyan-400 mx-auto mb-4' />
-                <h1 className='text-3xl font-bold text-white mb-2'>Crear Cuenta</h1>
-                <p className='text-gray-400'>Únete a DeepLuxMed</p>
+                <DeepLuxLogo variant='auth' showProduct={false} />
+                <h1 className='text-3xl font-bold text-white mb-2 mt-4'>Crear Cuenta</h1>
+                <p className='text-gray-400'>Únete a DeepLux MED</p>
               </div>
 
               {error && (
@@ -737,13 +738,13 @@ export default function Auth() {
                 {isLogin ? (
                   <>
                     <div className='mb-6'>
-                      <div className='w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4'>
-                        <User className='h-8 w-8 text-white' />
+                      <div className='w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4'>
+                        <DeepLuxLogo variant='compact' />
                       </div>
                     </div>
                     <h2 className='text-3xl font-bold mb-4'>¡Bienvenido!</h2>
                     <p className='text-cyan-100 mb-8 text-lg'>
-                      ¿Aún no tienes una cuenta? Únete a DeepLuxMed y accede a la tecnología médica
+                      ¿Aún no tienes una cuenta? Únete a DeepLux MED y accede a la tecnología médica
                       más avanzada
                     </p>
                     <button
@@ -759,13 +760,13 @@ export default function Auth() {
                 ) : (
                   <>
                     <div className='mb-6'>
-                      <div className='w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4'>
-                        <Stethoscope className='h-8 w-8 text-white' />
+                      <div className='w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4'>
+                        <DeepLuxLogo variant='compact' />
                       </div>
                     </div>
                     <h2 className='text-3xl font-bold mb-4'>¡Te esperamos!</h2>
                     <p className='text-cyan-100 mb-8 text-lg'>
-                      ¿Ya eres parte de DeepLuxMed? Inicia sesión y continúa transformando la
+                      ¿Ya eres parte de DeepLux MED? Inicia sesión y continúa transformando la
                       medicina
                     </p>
                     <button

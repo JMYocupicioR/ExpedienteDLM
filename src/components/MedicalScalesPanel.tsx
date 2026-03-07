@@ -1,23 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { usePhysicalExam } from '@/features/medical-records/hooks/usePhysicalExam';
 import { formatAssessmentDate, type ScaleAssessmentViewModel } from '@/features/medical-records/utils/scaleAssessmentViewModel';
 import { fetchMedicalScalesSafe, getScaleDefinitionById } from '@/lib/services/medical-scales-service';
-import { Save, ListChecks } from 'lucide-react';
+import { PlayCircle, ListChecks } from 'lucide-react';
+import { GuidedScaleWizard } from './medical-scales/GuidedScaleWizard';
+import { ScaleDefinition as UnifiedScaleDefinition } from '@/features/medical-records/types/medical-scale.types';
 
-type ScaleDefinition = {
-  version?: string;
-  items?: Array<{
-    id: string;
-    text: string;
-    type: 'select' | 'number' | 'text';
-    options?: Array<{ label: string; value: number | string }>;
-  }>;
-  scoring?: {
-    sum?: 'value';
-    average?: boolean;
-    ranges?: Array<{ min: number; max: number; severity: string }>;
-  };
-};
+
 
 interface MedicalScalesPanelProps {
   patientId: string;
@@ -30,10 +19,10 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
   const { listActiveScales, saveScaleAssessment, getScaleAssessmentsByConsultation } = usePhysicalExam({ patientId, doctorId });
   const [scales, setScales] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedScaleId, setSelectedScaleId] = useState<string>('');
-  const [selectedScaleDef, setSelectedScaleDef] = useState<ScaleDefinition | null>(null);
+  const [selectedScaleDef, setSelectedScaleDef] = useState<UnifiedScaleDefinition | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
-  const [saving, setSaving] = useState(false);
   const [existingAssessments, setExistingAssessments] = useState<ScaleAssessmentViewModel[]>([]);
+  const [showGuidedWizard, setShowGuidedWizard] = useState(false);
 
   const loadScales = useCallback(async () => {
     const data = await listActiveScales();
@@ -59,80 +48,82 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
     const definition = await getScaleDefinitionById(scaleId);
     if (definition) {
       setSelectedScaleDef(definition);
+      setShowGuidedWizard(true);
     } else {
       const rows = await fetchMedicalScalesSafe();
       const selected = rows.find((row) => row.id === scaleId);
       if (selected?.definition) {
-        setSelectedScaleDef((selected.definition as unknown) as ScaleDefinition);
+        setSelectedScaleDef((selected.definition as unknown) as UnifiedScaleDefinition);
+        setShowGuidedWizard(true);
       }
     }
   };
 
-  const computedScore = useMemo(() => {
-    if (!selectedScaleDef?.items) return null;
-    const items = selectedScaleDef.items;
-    const values: number[] = [];
-    for (const item of items) {
-      const val = answers[item.id];
-      if (typeof val === 'number') values.push(val);
-      if (typeof val === 'string' && !isNaN(Number(val))) values.push(Number(val));
-    }
-    if (values.length === 0) return 0;
-    if (selectedScaleDef.scoring?.average) {
-      return values.reduce((a, b) => a + b, 0) / values.length;
-    }
-    return values.reduce((a, b) => a + b, 0);
-  }, [answers, selectedScaleDef]);
-
-  const computedSeverity = useMemo(() => {
-    if (!selectedScaleDef?.scoring?.ranges || typeof computedScore !== 'number') return null;
-    const r = selectedScaleDef.scoring.ranges.find(x => computedScore >= x.min && computedScore <= x.max);
-    return r?.severity || null;
-  }, [computedScore, selectedScaleDef]);
-
-  const computedInterpretation = useMemo(() => {
-    if (!selectedScaleDef || typeof computedScore !== 'number' || !computedSeverity) return null;
-    
-    // Generate clinical interpretation based on severity
-    const recommendations: string[] = [];
-    const severityLower = computedSeverity.toLowerCase();
-    
-    if (severityLower.includes('severo') || severityLower.includes('severe') || severityLower.includes('alto')) {
-      recommendations.push('Considerar intervención terapéutica inmediata');
-      recommendations.push('Evaluación especializada recomendada');
-      recommendations.push('Seguimiento estrecho del paciente');
-    } else if (severityLower.includes('moderado') || severityLower.includes('moderate')) {
-      recommendations.push('Monitoreo regular recomendado');
-      recommendations.push('Considerar terapia preventiva');
-      recommendations.push('Reevaluación en 2-4 semanas');
-    } else {
-      recommendations.push('Mantener observación');
-      recommendations.push('Promover medidas preventivas');
-      recommendations.push('Reevaluación según evolución clínica');
-    }
-
-    return {
-      severity: computedSeverity,
-      score: computedScore,
-      clinical_significance: `Puntuación de ${computedScore.toFixed(2)} indica ${computedSeverity}`,
-      recommendations,
-      evaluated_at: new Date().toISOString(),
-      scale_version: selectedScaleDef.version || '1.0'
-    };
-  }, [selectedScaleDef, computedScore, computedSeverity]);
-
-  const handleSave = async () => {
+  const handleWizardSave = async (wizardAnswers: Record<string, unknown>) => {
     if (!selectedScaleId || !selectedScaleDef) return;
+    
+    // We need to calculate score/severity based on the answers from wizard
+    // Since computedScore/computedSeverity depend on the 'answers' state, 
+    // we'll update the state first, but for the save call we'll calculate them manually or 
+    // use the wizard data.
+    
+    // Helper to calculate score manually for the save call
+    const calculateScore = (data: Record<string, unknown>) => {
+      if (!selectedScaleDef?.items) return 0;
+      const vals: number[] = [];
+      for (const item of selectedScaleDef.items) {
+        const val = data[item.id];
+        if (typeof val === 'number') vals.push(val);
+        if (typeof val === 'string' && !isNaN(Number(val))) vals.push(Number(val));
+      }
+      if (vals.length === 0) return 0;
+      if (selectedScaleDef.scoring?.average) {
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+      }
+      return vals.reduce((a, b) => a + b, 0);
+    };
+
+    const wizardScore = calculateScore(wizardAnswers);
+    const wizardSeverity = selectedScaleDef.scoring?.ranges?.find(x => wizardScore >= x.min && wizardScore <= x.max)?.severity || null;
+
+    let computedInterpretation: Record<string, unknown> | undefined = undefined;
+    if (wizardSeverity && selectedScaleDef) {
+       const recommendations: string[] = [];
+       const severityLower = wizardSeverity.toLowerCase();
+       if (severityLower.includes('severo') || severityLower.includes('severe') || severityLower.includes('alto')) {
+         recommendations.push('Considerar intervención terapéutica inmediata');
+         recommendations.push('Evaluación especializada recomendada');
+         recommendations.push('Seguimiento estrecho del paciente');
+       } else if (severityLower.includes('moderado') || severityLower.includes('moderate')) {
+         recommendations.push('Monitoreo regular recomendado');
+         recommendations.push('Considerar terapia preventiva');
+         recommendations.push('Reevaluación en 2-4 semanas');
+       } else {
+         recommendations.push('Mantener observación');
+         recommendations.push('Promover medidas preventivas');
+         recommendations.push('Reevaluación según evolución clínica');
+       }
+       computedInterpretation = {
+         severity: wizardSeverity,
+         score: wizardScore,
+         clinical_significance: `Puntuación de ${wizardScore.toFixed(2)} indica ${wizardSeverity}`,
+         recommendations,
+         evaluated_at: new Date().toISOString(),
+         scale_version: selectedScaleDef.version || '1.0'
+       };
+    }
+
     try {
-      setSaving(true);
       await saveScaleAssessment({
         consultationId,
         scaleId: selectedScaleId,
-        answers,
-        score: typeof computedScore === 'number' ? computedScore : undefined,
-        severity: computedSeverity ?? undefined,
-        interpretation: computedInterpretation ?? undefined,
+        answers: wizardAnswers,
+        score: wizardScore,
+        severity: wizardSeverity ?? undefined,
+        interpretation: computedInterpretation,
       });
+      
+      setShowGuidedWizard(false);
       setSelectedScaleId('');
       setSelectedScaleDef(null);
       setAnswers({});
@@ -141,9 +132,7 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
         onAssessmentSaved();
       }
     } catch {
-      // Error log removed for security;
-    } finally {
-      setSaving(false);
+      alert('Error al guardar la evaluación asistida');
     }
   };
 
@@ -155,70 +144,44 @@ export default function MedicalScalesPanel({ patientId, doctorId, consultationId
           <select
             value={selectedScaleId}
             onChange={(e) => handleSelectScale(e.target.value)}
-            className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
+            className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2 min-w-[200px]"
           >
             <option value="">Seleccionar escala...</option>
             {scales.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!selectedScaleDef || saving}
-            className="px-3 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:opacity-50 flex items-center"
-            title="Guardar evaluación"
-          >
-            <Save className="h-4 w-4 mr-1" /> Guardar
-          </button>
+          {selectedScaleDef && (
+            <button
+              type="button"
+              onClick={() => setShowGuidedWizard(true)}
+              className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center font-medium shadow-lg shadow-emerald-500/20"
+              title="Comenzar evaluación interactivamente"
+            >
+              <PlayCircle className="h-5 w-5 mr-2" /> Comenzar Evaluación
+            </button>
+          )}
         </div>
       </div>
 
-      {selectedScaleDef?.items && (
-        <div className="space-y-3">
-          {selectedScaleDef.items.map(item => (
-            <div key={item.id} className="grid grid-cols-1 md:grid-cols-2 gap-2 items-center">
-              <label className="text-sm text-gray-300">{item.text}</label>
-              {item.type === 'select' ? (
-                <select
-                  value={(answers[item.id] as string | number | undefined) ?? ''}
-                  onChange={(e) => {
-                    const optVal = e.target.value;
-                    const num = Number(optVal);
-                    setAnswers(prev => ({ ...prev, [item.id]: isNaN(num) ? optVal : num }));
-                  }}
-                  className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
-                >
-                  <option value="">Seleccionar...</option>
-                  {item.options?.map(opt => (
-                    <option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>
-                  ))}
-                </select>
-              ) : item.type === 'number' ? (
-                <input
-                  type="number"
-                  className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
-                  value={(answers[item.id] as number | undefined) ?? ''}
-                  onChange={(e) => setAnswers(prev => ({ ...prev, [item.id]: Number(e.target.value) }))}
-                />
-              ) : (
-                <input
-                  type="text"
-                  className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
-                  value={(answers[item.id] as string | undefined) ?? ''}
-                  onChange={(e) => setAnswers(prev => ({ ...prev, [item.id]: e.target.value }))}
-                />
-              )}
-            </div>
-          ))}
-          <div className="text-sm text-gray-300">
-            Puntuación: <span className="font-semibold text-white">{typeof computedScore === 'number' ? computedScore.toFixed(2) : '-'}</span>
-            {computedSeverity && (
-              <span className="ml-3">Severidad: <span className="font-semibold text-white">{computedSeverity}</span></span>
-            )}
+      {showGuidedWizard && selectedScaleDef && (
+        <div className="fixed inset-0 z-[60] bg-white dark:bg-gray-900 flex flex-col">
+          <div className="w-full h-full">
+            <GuidedScaleWizard
+              definition={{
+                ...selectedScaleDef,
+                id: selectedScaleId,
+                name: scales.find(s => s.id === selectedScaleId)?.name
+              } as UnifiedScaleDefinition}
+              onSave={handleWizardSave}
+              onCancel={() => setShowGuidedWizard(false)}
+              initialAnswers={answers}
+            />
           </div>
         </div>
       )}
+
+
 
       <div>
         <h4 className="text-gray-300 font-medium mb-2">Evaluaciones registradas</h4>

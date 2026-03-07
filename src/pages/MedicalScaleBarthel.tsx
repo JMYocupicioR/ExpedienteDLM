@@ -146,12 +146,14 @@ export default function MedicalScaleBarthel() {
         .from('scale_assessments')
         .insert({
           patient_id: patientId,
-          doctor_id: user.id,
-          consultation_id: consultationId,
+          user_id: user.id,
           scale_id: 'barthel',
-          answers: numericAnswers,
-          score: finalScore,
-          severity: finalSeverity
+          responses: numericAnswers,
+          total_score: finalScore,
+          interpretation: JSON.stringify({ severity: finalSeverity }),
+          status: 'completed',
+          completion_percentage: 100,
+          completed_at: new Date().toISOString(),
         });
 
       if (insertError) throw insertError;

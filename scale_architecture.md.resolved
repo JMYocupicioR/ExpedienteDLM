@@ -1,0 +1,396 @@
+# Arquitectura: Guardado y Visualización de Escalas e Imágenes
+
+Este documento describe en detalle cómo funciona el ciclo completo de una pregunta con imagen: desde que el usuario la crea en el Constructor, hasta que es visualizada por otro usuario en el Runner.
+
+---
+
+## 1. Modelo de Datos en la Base de Datos
+
+Las tablas principales que participan en el guardado de escalas y sus preguntas son:
+
+```mermaid
+erDiagram
+    medical_scales {
+        UUID id PK
+        TEXT name
+        TEXT acronym
+        TEXT status "active | draft | deprecated"
+        TEXT instructions
+        TEXT image_url "(imagen de portada de la escala)"
+        UUID created_by FK
+    }
+    scale_questions {
+        UUID id PK
+        UUID scale_id FK
+        TEXT question_id "(ID interno, ej: moca_q1)"
+        TEXT question_text
+        TEXT description
+        TEXT question_type
+        INT order_index
+        TEXT image_url "(NUEVO: imagen opcional por pregunta)"
+        JSONB conditional_logic
+        JSONB validation_rules
+    }
+    question_options {
+        UUID id PK
+        UUID question_id FK
+        NUMERIC option_value
+        TEXT option_label
+        INT order_index
+    }
+    scale_scoring {
+        UUID id PK
+        UUID scale_id FK
+        TEXT scoring_method
+    }
+    scoring_ranges {
+        UUID id PK
+        UUID scoring_id FK
+        NUMERIC min_value
+        NUMERIC max_value
+        TEXT interpretation_level
+        TEXT interpretation_text
+    }
+    medical_scales ||--o{ scale_questions : "tiene"
+    scale_questions ||--o{ question_options : "tiene"
+    medical_scales ||--o| scale_scoring : "tiene"
+    scale_scoring ||--o{ scoring_ranges : "tiene"
+```
+
+> [!IMPORTANT]
+> El campo `image_url` en `scale_questions` fue agregado mediante la migración [20260215000000_add_image_url_to_questions.sql](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/supabase/migrations/20260215000000_add_image_url_to_questions.sql). Guarda la **ruta relativa** dentro del bucket de Supabase Storage (ej: `scales/MFM/q1_1234567890.jpg`), **no una URL completa**.
+
+---
+
+## 2. El Bucket de Almacenamiento (`scales-assets`)
+
+Las imágenes de las preguntas se almacenan en **Supabase Storage** dentro del bucket `scales-assets`.
+
+**Estructura de rutas en el bucket:**
+```
+scales-assets/
+└── scales/
+    └── {acronimo_escala}/
+        └── {question_id}_{timestamp}.{ext}
+```
+
+**Ejemplo real:**
+```
+scales-assets/scales/MFM-32/q1_acostado_1772833453328.jpg
+```
+
+### Políticas del Bucket
+| Operación | Quién puede | Regla |
+|-----------|-------------|-------|
+| `SELECT` (leer/ver) | **Cualquier persona** (anónimo o autenticado) | Bucket público |
+| `INSERT` (subir) | Solo **usuarios autenticados** | `auth.role() = 'authenticated'` |
+| `UPDATE` (reemplazar) | Solo **usuarios autenticados** | `auth.role() = 'authenticated'` |
+
+---
+
+## 3. Flujo de Guardado de una Pregunta con Imagen
+
+### 3.1 Subida de la imagen ([ScaleBuilder.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx) → [ScaleService.ts](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts))
+
+Cuando el usuario selecciona un archivo en el Constructor, se ejecuta [handleFileUpload](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx#310-332):
+
+```tsx
+// components/ScaleBuilder.tsx
+const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const fileName = `${selectedQuestion.id}_${Date.now()}.${fileExt}`;
+    
+    // 1. Se llama al servicio para subir la imagen
+    const storagePath = await ScaleService.uploadScaleImage(file, path);
+    
+    // 2. Se guarda la RUTA RELATIVA en el estado local (no la URL completa)
+    updateQuestion(selectedQuestion.id, { image_url: storagePath });
+};
+```
+
+El servicio `ScaleService.uploadScaleImage` realiza la subida a Supabase Storage:
+
+```typescript
+// services/ScaleService.ts
+static async uploadScaleImage(file: File, path: string): Promise<string> {
+    const { data, error } = await supabase.storage
+        .from('scales-assets')   // ← Nombre del bucket
+        .upload(path, file, {
+            upsert: true,        // ← Sobreescribe si ya existe
+            cacheControl: '3600' // ← Cache de 1 hora
+        });
+    
+    return data.path; // ← Devuelve la RUTA RELATIVA, ej: "scales/MFM/q1_123.jpg"
+}
+```
+
+### 3.2 Guardado de la escala completa ([publishScale](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#310-566))
+
+Al presionar "Publicar", se llama a `ScaleService.publishScale`. Esta función:
+
+1. **Crea o actualiza** el registro en `medical_scales`.
+2. **Limpia y re-inserta** el registro en `scale_scoring` + `scoring_ranges`.
+3. **Limpia y re-inserta** todas las preguntas en `scale_questions`, conservando el campo `image_url` con la ruta relativa.
+4. **Re-inserta** todas las opciones en `question_options`.
+
+```typescript
+// Fragmento de publishScale — guardado de preguntas
+const questionsToInsert = versionData.questions.map((q, idx) => ({
+    scale_id: scaleId,
+    question_id: q.id,
+    question_text: q.text,
+    description: q.description,
+    question_type: q.type,
+    order_index: q.order_index,
+    image_url: q.image_url,  // ← Se guarda la ruta relativa del bucket
+    conditional_logic: q.logic,
+    validation_rules: q.validation
+}));
+await supabase.from('scale_questions').insert(questionsToInsert);
+```
+
+---
+
+## 4. Flujo de Obtención y Resolución de Imágenes
+
+### 4.1 Carga de datos ([getScales](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#92-199) / [getScaleById](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#207-294))
+
+Cuando se carga el catálogo o una escala específica, [ScaleService](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#6-631) realiza una **única consulta JOIN** que trae todas las tablas relacionadas:
+
+```typescript
+// services/ScaleService.ts — consulta de getScales
+const query = supabase
+    .from('medical_scales')
+    .select(`
+        *,
+        questions:scale_questions(
+            *,
+            options:question_options!question_id(*)  // ← Opciones de cada pregunta
+        ),
+        scoring:scale_scoring(
+            *,
+            ranges:scoring_ranges(*)                  // ← Rangos de puntuación
+        ),
+        references:scale_references(id)
+    `)
+    .order('created_at', { ascending: false });
+```
+
+### 4.2 Transformación y resolución de URLs ([getPublicUrl](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#59-72))
+
+Después de obtener los datos, el servicio **transforma** cada pregunta y **resuelve** la imagen:
+
+```typescript
+// services/ScaleService.ts — dentro del .map() de transformación
+questions: scale.questions.sort(...).map((q: any) => ({
+    id: q.question_id,
+    text: q.question_text,
+    ...
+    image_url: this.getPublicUrl(q.image_url) // ← AQUÍ se resuelve la URL
+}))
+```
+
+La función [getPublicUrl](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#59-72) es inteligente: detecta si el valor es una URL externa o una ruta interna:
+
+```typescript
+// services/ScaleService.ts
+static getPublicUrl(path: string | null): string {
+    if (!path) return '';
+    
+    // Si ya es una URL completa (importada o externa), la devuelve tal cual
+    if (path.startsWith('http')) return path;
+    
+    // Si es una ruta relativa del bucket, genera la URL pública de Supabase
+    const { data } = supabase.storage
+        .from('scales-assets')
+        .getPublicUrl(path);
+    
+    // Devuelve algo como:
+    // https://qcelbrzjrmjxpjxllyhk.supabase.co/storage/v1/object/public/scales-assets/scales/MFM/q1_123.jpg
+    return data.publicUrl;
+}
+```
+
+---
+
+## 5. Renderizado de Preguntas e Imágenes
+
+### 5.1 [ScaleRunner.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleRunner.tsx)
+
+Este componente orquesta la escala completa. Itera sobre las preguntas y renderiza un [QuestionRenderer](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/QuestionRenderer.tsx#17-161) por cada una.
+
+### 5.2 [QuestionRenderer.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/QuestionRenderer.tsx)
+
+Este es el componente que renderiza **cada pregunta individual**. Para cada pregunta, renderiza 4 secciones en orden:
+
+```tsx
+// components/QuestionRenderer.tsx
+return (
+    <div className="p-4 border rounded-lg bg-white shadow-sm">
+        
+        {/* 1. Número y texto principal */}
+        <Label required={question.validation?.required}>
+            {question.order_index}. {question.text}
+        </Label>
+        
+        {/* 2. Descripción/instrucciones específicas */}
+        {question.description && (
+            <p className="text-xs text-gray-500 mb-3">{question.description}</p>
+        )}
+        
+        {/* 3. IMAGEN — solo se muestra si existe image_url */}
+        {question.image_url && (
+            <div className="mb-4">
+                <img 
+                    {/* La URL ya llega completamente resuelta desde ScaleService */}
+                    src={ScaleService.getPublicUrl(question.image_url)} 
+                    alt="Pregunta"
+                    className="max-w-full h-auto rounded-lg max-h-64 object-contain mx-auto"
+                />
+            </div>
+        )}
+        
+        {/* 4. Opciones de respuesta (radio buttons, checkboxes, etc.) */}
+        <Controller
+            control={control}
+            name={question.id}
+            render={({ field: { onChange, value } }) => {
+                switch (question.type) {
+                    case 'single_choice': return <> ... radio buttons ... </>;
+                    case 'multi_choice':  return <> ... checkboxes ... </>;
+                    case 'slider':        return <> ... range input ... </>;
+                    case 'text':          return <> ... textarea ... </>;
+                    case 'number':        return <> ... number input ... </>;
+                    case 'info':          return <></>; // Solo muestra imagen/texto
+                }
+            }}
+        />
+    </div>
+);
+```
+
+> [!NOTE]
+> [getPublicUrl](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#59-72) se llama **dos veces** por seguridad: una vez en [ScaleService](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#6-631) al transformar los datos (pre-resuelve la URL antes de pasar la prop), y otra vez de forma defensiva en [QuestionRenderer](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/QuestionRenderer.tsx#17-161). Esto garantiza que escalas importadas con URLs externas también se muestren correctamente.
+
+---
+
+## 6. Políticas de Seguridad (Row Level Security)
+
+Todas las tablas tienen RLS habilitado. A continuación, las políticas vigentes más importantes:
+
+### 6.1 Política principal: Escalas Activas son Públicas
+
+```sql
+-- migration: 20250823000000_complete_medical_scales_schema.sql
+CREATE POLICY "Public read access for active scales"
+ON medical_scales FOR SELECT
+USING (status = 'active');
+```
+
+> **Efecto**: Cualquier persona, incluso sin iniciar sesión, puede leer las escalas cuyo `status = 'active'`. Las escalas con `status = 'draft'` o `'deprecated'` **NO** son visibles para el público general.
+
+### 6.2 Políticas en cascada para las tablas hijas
+
+Los componentes de una escala (preguntas, opciones, scoring, rangos) **heredan** la visibilidad de la escala padre. La versión más completa (migración [20260211100000_fix_rls_for_drafts.sql](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/supabase/migrations/20260211100000_fix_rls_for_drafts.sql)) permite 3 casos de acceso:
+
+```sql
+-- Aplica para: scale_questions, question_options, scale_scoring,
+--              scoring_ranges y scale_references
+CREATE POLICY "Questions inherit scale visibility"
+ON scale_questions FOR SELECT
+USING (EXISTS (
+    SELECT 1 FROM medical_scales ms
+    WHERE ms.id = scale_questions.scale_id
+    AND (
+        -- Caso 1: La escala es pública (activa)
+        ms.status = 'active'
+        OR
+        -- Caso 2: El usuario autenticado es el creador (puede ver sus borradores)
+        (auth.role() = 'authenticated' AND ms.created_by = auth.uid())
+        OR
+        -- Caso 3: El usuario autenticado es un profesional, admin o superadmin
+        (auth.role() = 'authenticated' AND EXISTS (
+            SELECT 1 FROM profiles
+            WHERE id = auth.uid()
+            AND role IN ('practitioner', 'admin', 'super_admin')
+        ))
+    )
+));
+```
+
+### 6.3 Gestión de Escalas (Escritura)
+
+```sql
+-- Solo practitioners y admins pueden crear/editar/eliminar escalas
+CREATE POLICY "Practitioners can manage scales"
+ON medical_scales FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+        AND role IN ('practitioner', 'admin')
+    )
+);
+```
+
+### 6.4 Resumen de Políticas por Tabla
+
+| Tabla | Quién puede LEER | Quién puede ESCRIBIR |
+|-------|-----------------|---------------------|
+| `medical_scales` | Todos (si `status='active'`) / Practitioner, Admin, SuperAdmin | Solo `practitioner` o `admin` |
+| `scale_questions` | Heredado de `medical_scales` | Heredado (no política explícita, usa FK+CASCADE) |
+| `question_options` | Heredado vía JOIN con `scale_questions` | Heredado |
+| `scale_scoring` | Heredado de `medical_scales` | Heredado |
+| `scoring_ranges` | Heredado vía JOIN con `scale_scoring` | Heredado |
+| `scale_references` | Heredado de `medical_scales` | Heredado |
+| `patients` | Solo el creador (`created_by = auth.uid()`) | Solo el creador |
+| `scale_assessments` | Solo el evaluador (`user_id = auth.uid()`) | Solo el evaluador |
+
+### 6.5 Bucket de Storage (`scales-assets`)
+
+| Operación | Regla |
+|-----------|-------|
+| Leer imágenes | **Público** — cualquiera con la URL puede ver la imagen |
+| Subir imágenes | Requiere `auth.role() = 'authenticated'` |
+
+---
+
+## 7. Diagrama de Flujo Completo
+
+```mermaid
+sequenceDiagram
+    participant User as Usuario
+    participant Builder as ScaleBuilder.tsx
+    participant Service as ScaleService.ts
+    participant Storage as Supabase Storage
+    participant DB as Supabase DB
+
+    Note over User,DB: === FLUJO DE GUARDADO ===
+    User->>Builder: Selecciona imagen para pregunta
+    Builder->>Service: uploadScaleImage(file, path)
+    Service->>Storage: upload to 'scales-assets/scales/MFM/q1_123.jpg'
+    Storage-->>Service: data.path = 'scales/MFM/q1_123.jpg'
+    Service-->>Builder: storagePath (ruta relativa)
+    Builder->>Builder: updateQuestion({ image_url: storagePath })
+
+    User->>Builder: Presiona "Publicar"
+    Builder->>Service: publishScale(scaleData)
+    Service->>DB: INSERT into medical_scales
+    Service->>DB: INSERT into scale_questions (image_url = 'scales/...')
+    Service->>DB: INSERT into question_options
+    Service->>DB: INSERT into scale_scoring + scoring_ranges
+
+    Note over User,DB: === FLUJO DE VISUALIZACIÓN ===
+    User->>Service: getScales() o getScaleById()
+    Service->>DB: SELECT * FROM medical_scales JOIN scale_questions JOIN ...
+    Note right of DB: RLS verifica status='active'
+    DB-->>Service: Datos crudos con image_url = 'scales/MFM/q1_123.jpg'
+    Service->>Service: getPublicUrl('scales/MFM/q1_123.jpg')
+    Service->>Storage: getPublicUrl(path)
+    Storage-->>Service: 'https://....supabase.co/storage/v1/object/public/...'
+    Service-->>User: MedicalScale con image_url como URL completa
+
+    User->>Builder: Renderiza QuestionRenderer
+    Builder->>Builder: <img src={ScaleService.getPublicUrl(question.image_url)} />
+    Note right of Builder: getPublicUrl ve 'https://', lo devuelve tal cual
+```

@@ -1,0 +1,404 @@
+# Arquitectura: Scoring e Interpretación Clínica
+
+Este documento explica en detalle cómo funciona el sistema de puntuación de escalas médicas: desde su configuración en el Constructor, su guardado en la base de datos, el cálculo en tiempo real y la presentación de resultados clínicos.
+
+---
+
+## 1. Conceptos Fundamentales
+
+El sistema de scoring tiene **dos niveles** que pueden usarse conjuntamente:
+
+| Nivel | Descripción | Caso de uso |
+|-------|-------------|-------------|
+| **Global** | Un único score calculado sobre TODAS las preguntas | Escalas simples (ej. PHQ-9, HAM-A) |
+| **Dominios** | Múltiples sub-scores, cada uno sobre un subconjunto de preguntas | Escalas complejas (ej. MFM-32 con Dominio 1, 2, 3) |
+
+Ambos niveles tienen su propio **motor de cálculo** y sus propios **rangos de interpretación clínica**.
+
+---
+
+## 2. Configuración en el Constructor (UI)
+
+La pestaña **"Scoring"** en [ScaleBuilder.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleBuilder.tsx) permite configurar:
+
+### 2.1 Motor de Scoring (Engine)
+
+```
+Motor de Scoring: [ Suma de Puntos ▼ ]
+                    Promedio
+                    JSON-Logic (Avanzado)
+```
+
+| Opción UI | Valor interno | Descripción |
+|-----------|--------------|-------------|
+| Suma de Puntos | `'sum'` | Suma los `score` de las opciones seleccionadas |
+| Promedio | `'average'` | Divide la suma entre el número de preguntas respondidas |
+| JSON-Logic | `'json-logic'` | Reglas complejas (guardado como `'complex'` en BD) |
+
+### 2.2 Rangos de Interpretación Global
+
+Cada rango tiene 5 campos:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Rango 1                                              🗑️ │
+│  Min [0]    Max [32]    Color [████ Rojo]             │
+│  Etiqueta: [ Afectación Severa ]                      │
+│  Interpretación: [ El paciente presenta una limitación... ]│
+└─────────────────────────────────────────────────────────┘
+```
+
+Estos campos se mapean al tipo [ScoringRange](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/types.ts#117-129) del schema:
+
+```typescript
+// medical-scale.schema.ts
+export const ScoringRangeSchema = z.object({
+    min: z.number(),           // Límite inferior del rango
+    max: z.number(),           // Límite superior del rango
+    label: z.string(),         // Etiqueta corta (ej: "Afectación Severa")
+    color: z.string().optional(),      // Color HEX para la UI
+    interpretation: z.string(),        // Texto clínico largo
+    alert_level: z.enum(['none', 'low', 'medium', 'high', 'critical'])
+});
+```
+
+### 2.3 Dominios (Sub-escalas)
+
+Un **dominio** agrupa un conjunto específico de preguntas y tiene su propio engine y rangos:
+
+```typescript
+// medical-scale.schema.ts
+const ScoringDomainSchema = z.object({
+    id: z.string(),
+    label: z.string(),                         // Nombre del dominio (ej: "Bipedestación y transferencias")
+    question_ids: z.array(z.string()),         // IDs de las preguntas que pertenecen a este dominio
+    engine: z.enum(['sum', 'average', 'json-logic']),
+    ranges: z.array(ScoringRangeSchema).optional(),  // Rangos propios del dominio
+    custom_rules: z.any().optional()
+});
+```
+
+> [!IMPORTANT]
+> Los dominios se guardan como un campo **`JSONB` dentro de `scale_scoring`**, no en una tabla separada. Esto permite máxima flexibilidad sin necesitar migraciones al añadir o modificar dominios.
+
+---
+
+## 3. Guardado en la Base de Datos
+
+El guardado ocurre en `ScaleService.publishScale()` y sigue este orden:
+
+### 3.1 Estrategia: "Borrar y Re-insertar"
+
+Para simplificar la actualización, al guardar siempre se limpia el scoring anterior y se re-inserta desde cero:
+
+```typescript
+// services/ScaleService.ts
+// PASO 1: Borrar scoring anterior
+await supabase.from('scale_scoring').delete().eq('scale_id', scaleId);
+
+// PASO 2: Insertar el nuevo registro de scoring
+const { data: scoringComp } = await supabase
+    .from('scale_scoring')
+    .insert({
+        scale_id: scaleId,
+        // 'json-logic' → 'complex' para cumplir con el ENUM de la BD
+        scoring_method: versionData.scoring.engine === 'json-logic' 
+            ? 'complex' 
+            : versionData.scoring.engine,
+        domains: versionData.scoring.domains || []  // ← JSONB array de dominos
+    })
+    .select().single();
+```
+
+> [!NOTE]
+> El campo `scoring_method` en la BD usa un `ENUM('sum', 'average', 'weighted', 'complex', 'custom')`. El valor `json-logic` del schema interno se transforma a `complex`.
+
+### 3.2 Guardado de Rangos Globales
+
+Los rangos globales se guardan en la tabla `scoring_ranges`, con una transformación de nombres de campo (el schema usa nombres cortos, la BD usa nombres descriptivos):
+
+```typescript
+// services/ScaleService.ts
+const rangesToInsert = versionData.scoring.ranges.map((r, idx) => ({
+    scoring_id: scoringComp.id,
+    min_value:          r.min,           // schema: min       → BD: min_value
+    max_value:          r.max,           // schema: max       → BD: max_value
+    interpretation_level: r.label,      // schema: label     → BD: interpretation_level
+    interpretation_text:  r.interpretation, // schema: interpretation → BD: interpretation_text
+    color_code:         r.color,         // schema: color     → BD: color_code
+    severity_level:     r.alert_level,   // schema: alert_level → BD: severity_level
+    order_index:        idx + 1
+}));
+
+await supabase.from('scoring_ranges').insert(rangesToInsert);
+```
+
+### 3.3 Tabla de Mapeo Completo
+
+| Campo en Schema ([ScoringRange](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/types.ts#117-129)) | Campo en BD (`scoring_ranges`) |
+|----------------------------------|-------------------------------|
+| [min](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#7-28) | `min_value` |
+| `max` | `max_value` |
+| `label` | `interpretation_level` |
+| `interpretation` | `interpretation_text` |
+| `color` | `color_code` |
+| `alert_level` | `severity_level` |
+| *(posición automática)* | `order_index` |
+
+---
+
+## 4. Carga y Transformación (Fetch)
+
+Al cargar la escala ([getScales](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#92-199) / [getScaleById](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/services/ScaleService.ts#207-294)), los datos de BD se transforman de vuelta al formato del schema:
+
+```typescript
+// services/ScaleService.ts — Transformación de scoring
+const scoringSchema = {
+    engine: scoringData.scoring_method === 'weighted' 
+        ? 'sum'                      // 'weighted' → se mapea a 'sum' en el schema
+        : (scoringData.scoring_method || 'sum'),
+    
+    ranges: scoringData.ranges?.map((r: any) => ({
+        min:            r.min_value,
+        max:            r.max_value,
+        label:          r.interpretation_level,
+        color:          r.color_code,
+        interpretation: r.interpretation_text,
+        alert_level:    r.severity_level || 'none'
+    })) || [],
+    
+    domains: scoringData.domains || []  // ← Los dominios llegan ya como JSON desde el JSONB
+};
+```
+
+> [!TIP]
+> Los **dominios no necesitan transformación** porque se guardan y cargan como JSONB nativo. Los **rangos globales sí requieren transformación** porque viven en su propia tabla relacional con nombres de columna distintos.
+
+---
+
+## 5. Cálculo de Puntuación en Tiempo Real
+
+Todo el cálculo ocurre en [ScaleRunner.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleRunner.tsx) usando `useMemo` que se re-ejecuta cada vez que el usuario cambia una respuesta (`watch()` de React Hook Form).
+
+### 5.1 Función [calculateScore](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleRunner.tsx#61-94)
+
+```typescript
+// components/ScaleRunner.tsx
+const calculateScore = (engine: string, questions: ScaleQuestion[], answers: any) => {
+    let total = 0;
+    let count = 0;
+
+    if (engine === 'sum' || engine === 'average') {
+        questions.forEach(q => {
+            const answer = answers[q.id]; // Las respuestas están indexadas por question.id
+            
+            if (answer !== undefined && answer !== null) {
+                let value = 0;
+                
+                // Caso 1: La respuesta ya contiene el score directamente
+                if (typeof answer === 'object' && 'score' in answer) {
+                    value = Number(answer.score) || 0;
+                    
+                // Caso 2: La respuesta es el VALUE de la opción → buscar el score
+                } else if (q.options) {
+                    const selectedOption = q.options.find(opt => opt.value === answer);
+                    if (selectedOption) value = selectedOption.score;
+                    
+                // Caso 3: Preguntas numéricas o de slider
+                } else if (typeof answer === 'number') {
+                    value = answer;
+                }
+                
+                total += value;
+                count++;
+            }
+        });
+        
+        // Para 'average', divide por el número de preguntas respondidas
+        if (engine === 'average' && count > 0) {
+            return Number((total / count).toFixed(2));
+        }
+    }
+    return total;
+};
+```
+
+> [!IMPORTANT]
+> El valor numérico de cada opción proviene del campo `score` en `QuestionOptionSchema`. Al guardar una pregunta, `option_value` en la BD almacena el valor semántico que también funciona como score (`selectedOption.score`).
+
+### 5.2 Función [getInterpretation](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleRunner.tsx#95-99)
+
+Matchea el score actual contra los rangos para encontrar la interpretación clínica:
+
+```typescript
+// components/ScaleRunner.tsx
+const getInterpretation = (score: number, ranges?: any[]) => {
+    if (!ranges) return null;
+    // Devuelve el primer rango donde min <= score <= max
+    return ranges.find(r => score >= r.min && score <= r.max);
+};
+```
+
+### 5.3 Cálculo Global y por Dominios (`useMemo`)
+
+```typescript
+// components/ScaleRunner.tsx
+const results = useMemo(() => {
+    if (!version.scoring) return { total: 0, domains: [] };
+
+    // 1. Score Global — usa TODAS las preguntas
+    const globalScore = calculateScore(
+        version.scoring.engine, 
+        version.questions,   // ← todas las preguntas
+        allAnswers
+    );
+    const globalInterpretation = getInterpretation(globalScore, version.scoring.ranges);
+
+    // 2. Scores por Dominio — cada dominio filtra SUS preguntas
+    const domainResults = (version.scoring.domains || []).map((domain: any) => {
+        const domainQuestions = version.questions.filter(
+            q => domain.question_ids.includes(q.id)  // ← filtro por IDs del dominio
+        );
+        const score = calculateScore(domain.engine, domainQuestions, allAnswers);
+        const inter = getInterpretation(score, domain.ranges);  // ← rangos propios del dominio
+        
+        return { id: domain.id, label: domain.label, score, interpretation: inter };
+    });
+
+    return { total: globalScore, globalInterpretation, domains: domainResults };
+}, [allAnswers, version]); // ← Se recalcula SOLO cuando cambian respuestas o la versión
+```
+
+---
+
+## 6. Presentación de Resultados (UI)
+
+[ScaleRunner.tsx](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/components/ScaleRunner.tsx) tiene **dos modos de presentación** en el footer inferior, dependiendo de si hay dominios o no:
+
+### 6.1 Modo Multi-Dominio (cuando `results.domains.length > 0`)
+
+Muestra cada dominio con su score e interpretación individual. Esto corresponde a lo visto en la segunda captura de pantalla:
+
+```tsx
+{results.domains.map(d => (
+    <div key={d.id} className="border-b pb-2">
+        <div className="flex justify-between items-center">
+            <span className="font-semibold text-gray-700">{d.label}:</span>
+            <div className="flex items-center gap-2">
+                <span className="text-xl font-bold">{d.score}</span>
+                {d.interpretation && (
+                    // Badge coloreado con el color del rango
+                    <span className="px-2 py-0.5 rounded text-xs font-bold text-white"
+                          style={{ backgroundColor: d.interpretation.color || '#666' }}>
+                        {d.interpretation.label}
+                    </span>
+                )}
+            </div>
+        </div>
+        {/* Texto clínico completo en cursiva */}
+        {d.interpretation && (
+            <p className="text-xs text-gray-600 italic mt-1">
+                {d.interpretation.interpretation}
+            </p>
+        )}
+    </div>
+))}
+```
+
+**Ejemplo de lo que se ve:**
+```
+Bipedestación y transferencias:   2   [Rango]
+  Afección Severa de la Bipedestación y transferencias
+
+Motricidad axial y proximal:     18   [Rango]
+  Afección Moderada de la Motricidad axial y proximal
+```
+
+### 6.2 Modo Score Único (cuando no hay dominios)
+
+```tsx
+<div className="flex justify-between items-center">
+    <span>Puntaje Actual: <strong>{results.total}</strong></span>
+    {results.globalInterpretation && (
+        <div className="px-3 py-1 rounded-full text-white"
+             style={{ backgroundColor: results.globalInterpretation.color || '#666' }}>
+            {results.globalInterpretation.label}
+        </div>
+    )}
+</div>
+{results.globalInterpretation && (
+    <p className="text-sm italic">{results.globalInterpretation.interpretation}</p>
+)}
+```
+
+### 6.3 Payload enviado al finalizar
+
+Al presionar "Finalizar Evaluación", se construye un payload completo:
+
+```typescript
+// components/ScaleRunner.tsx — handleFormSubmit
+const payload = {
+    raw_responses: data,                          // { "q1": 2, "q2": 0, "q3": 1, ... }
+    total_score: results.total,                   // Ej: 21
+    interpretation: results.globalInterpretation?.interpretation,
+    domain_results: results.domains,              // Array con score e interpretación por dominio
+    scale_id: scaleData.name,
+    version: version.version_number,
+    completed_at: new Date().toISOString()
+};
+```
+
+---
+
+## 7. Diagrama de Flujo Completo
+
+```mermaid
+flowchart TD
+    A[Usuario configura scoring\nen ScaleBuilder] --> B{¿Tiene dominios?}
+    B -- Sí --> C[Define question_ids\npor dominio\n+ rangos propios]
+    B -- No --> D[Solo rangos globales]
+    C --> E[publishScale]
+    D --> E
+
+    E --> F[INSERT scale_scoring\nscoring_method + domains JSONB]
+    E --> G[INSERT scoring_ranges\npor rango global]
+
+    H[Usuario abre la escala\nen ScaleRunner] --> I[getScaleById]
+    I --> J[SELECT scale_scoring + scoring_ranges]
+    J --> K[Transformar BD → Schema\nmin_value→min, interpretation_level→label...]
+    K --> L[ScaleRunner recibe MedicalScale]
+
+    L --> M[watch - React Hook Form\nEscucha cambios en respuestas]
+    M --> N[useMemo - calculateScore]
+    N --> O{¿tiene dominios?}
+    O -- Sí --> P[calculateScore por dominio\nfiltra preguntas por question_ids]
+    O -- No --> Q[calculateScore global\ntodas las preguntas]
+    P --> R[getInterpretation\nbusca rango donde min<=score<=max]
+    Q --> R
+    R --> S[Renderiza resultado\ncon color + label + interpretation]
+```
+
+---
+
+## 8. Políticas RLS del Scoring
+
+| Migración | Política | Efecto |
+|-----------|----------|--------|
+| `20250823000000` | `Scoring inherit scale visibility` | Solo usuarios auth. ven scoring de escalas activas |
+| `20250825000000` | *(misma política replicada)* | — |
+| `20260211100000` | Reemplaza la anterior para añadir acceso por rol | Practitioner/Admin/SuperAdmin ven scoring de borradores |
+| `20260212000000` | **`Authenticated users can read all scoring`** | Cualquier usuario autenticado lee el scoring, sin importar el estado de la escala |
+
+> [!IMPORTANT]
+> La migración [20260212000000_fix_scoring_rls.sql](file:///c:/Users/JmYoc/OneDrive/Documentos/DeepLuxMed/Escalas/Nuevas%20Escalas/supabase/migrations/20260212000000_fix_scoring_rls.sql) es la **política definitiva vigente**. Simplifica el acceso: cualquier usuario con sesión activa puede leer el scoring y los rangos. Esto es correcto porque el scoring **no contiene datos clínicos sensibles** de pacientes — es solo la configuración de la escala.
+
+```sql
+-- Política vigente (20260212000000)
+CREATE POLICY "Authenticated users can read all scoring" 
+    ON scale_scoring FOR SELECT 
+    USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can read all scoring ranges" 
+    ON scoring_ranges FOR SELECT 
+    USING (auth.role() = 'authenticated');
+```

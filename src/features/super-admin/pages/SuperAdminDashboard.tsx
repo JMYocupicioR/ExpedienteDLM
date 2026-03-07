@@ -19,7 +19,7 @@ export default function SuperAdminDashboard() {
               Panel de Super Administrador
             </h1>
             <p className="text-gray-400 mt-1">
-              Gestión centralizada de la plataforma ExpedienteDLM
+              Gestión centralizada de la plataforma Expediente DLM — DeepLux MED
             </p>
           </div>
         </div>

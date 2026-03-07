@@ -5,6 +5,7 @@ import {
   User, Shield, FileText, LogOut, Menu, X, 
   Heart, Calendar, TestTube, Eye
 } from 'lucide-react';
+import { DeepLuxLogo } from '@/components/Brand';
 
 const PatientPortalLayout: React.FC = () => {
   const { signOut, profile } = useAuth();
@@ -81,14 +82,10 @@ const PatientPortalLayout: React.FC = () => {
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <div className="flex items-center space-x-3">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Heart className="w-5 h-5 text-white" />
-                </div>
-              </div>
+              <DeepLuxLogo variant="compact" />
               <div>
                 <h1 className="text-lg font-semibold text-gray-900">Portal Paciente</h1>
-                <p className="text-sm text-gray-500">DeepLux Med</p>
+                <p className="text-sm text-gray-500">DeepLux MED</p>
               </div>
             </div>
             <button
@@ -215,7 +212,15 @@ const PatientPortalLayout: React.FC = () => {
           <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <p className="text-sm text-gray-500">
-                Portal del Paciente - DeepLux Med
+                Portal del Paciente —{' '}
+                <a
+                  href="https://deeplux.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sky-600 hover:text-sky-500 font-medium transition-colors"
+                >
+                  DeepLux MED
+                </a>
               </p>
               <p className="text-xs text-gray-400 mt-1">
                 Sus datos están protegidos bajo la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP)

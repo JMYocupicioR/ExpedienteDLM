@@ -6,10 +6,10 @@ import {
   RefreshCw, 
   ArrowLeft, 
   Clock,
-  AlertCircle,
-  Stethoscope
+  AlertCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { DeepLuxLogo } from '@/components/Brand';
 
 interface EmailVerificationProps {}
 
@@ -157,11 +157,8 @@ const EmailVerification: React.FC<EmailVerificationProps> = () => {
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-8 animate-fadeInUp">
-            <div className="flex items-center justify-center mb-4">
-              <Stethoscope className="h-12 w-12 text-cyan-400 mr-3" />
-              <h1 className="text-3xl font-bold text-white">ExpedienteDLM</h1>
-            </div>
-            <p className="text-cyan-200">Sistema de Gestión Médica</p>
+            <DeepLuxLogo variant="auth" />
+            <p className="text-cyan-200 mt-3">Sistema de Gestión Médica</p>
           </div>
 
           {/* Main Card */}
