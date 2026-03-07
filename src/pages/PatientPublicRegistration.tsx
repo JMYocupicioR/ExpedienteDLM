@@ -140,30 +140,36 @@ export default function PatientPublicRegistration() {
           return;
         }
         setTokenRow(data as unknown as TokenRow);
-        const sections = (data.allowed_sections && Array.isArray(data.allowed_sections) && (data.allowed_sections as string[]).length > 0)
-          ? (data.allowed_sections as string[])
-          : ['personal','pathological','non_pathological','hereditary'];
+        // Determine allowed sections:
+        // - If the token has an explicit allowed_sections array (even empty), use it directly
+        // - Only fall back to all sections when allowed_sections is null/undefined (legacy tokens)
+        const rawSections = data.allowed_sections;
+        const sections: string[] = (rawSections !== null && rawSections !== undefined && Array.isArray(rawSections))
+          ? (rawSections as string[])
+          : ['personal', 'pathological', 'non_pathological', 'hereditary'];
         setAllowedSections(sections);
         const isQuestionnaireOnly = sections.length === 0;
 
         if (isQuestionnaireOnly) {
           setStep(3);
-          if (data.assigned_patient_id) {
-            const { data: patient } = await supabase
-              .from('patients')
-              .select('full_name, birth_date, gender, email, phone, address')
-              .eq('id', data.assigned_patient_id)
-              .single();
-            if (patient) {
-              setPersonal({
-                full_name: patient.full_name ?? '',
-                birth_date: patient.birth_date ? String(patient.birth_date).slice(0, 10) : '',
-                gender: (patient.gender as string) || 'unspecified',
-                email: patient.email ?? '',
-                phone: patient.phone ?? '',
-                address: patient.address ?? '',
-              });
-            }
+        }
+
+        // Pre-fill patient data whenever a patient is assigned — regardless of template type
+        if (data.assigned_patient_id) {
+          const { data: patient } = await supabase
+            .from('patients')
+            .select('full_name, birth_date, gender, email, phone, address')
+            .eq('id', data.assigned_patient_id)
+            .single();
+          if (patient) {
+            setPersonal({
+              full_name: patient.full_name ?? '',
+              birth_date: patient.birth_date ? String(patient.birth_date).slice(0, 10) : '',
+              gender: (patient.gender as string) || 'unspecified',
+              email: patient.email ?? '',
+              phone: patient.phone ?? '',
+              address: patient.address ?? '',
+            });
           }
         }
 
