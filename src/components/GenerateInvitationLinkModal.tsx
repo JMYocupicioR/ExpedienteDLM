@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Link as LinkIcon, Copy, ListChecks, Clock, CheckSquare, MessageSquare, QrCode, Send, Sparkles, Search, Download, Dumbbell } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
@@ -27,6 +27,7 @@ type CustomTaskDraft = {
 type InvitationResult = {
   link: string;
   token: string;
+  dbId: string;
   whatsappUrl: string;
   emailUrl: string;
   qrDataUrl: string | null;
@@ -175,6 +176,8 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
   const [result, setResult] = useState<InvitationResult | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [scaleSearchQuery, setScaleSearchQuery] = useState('');
+  const [tokenStatus, setTokenStatus] = useState<string>('pending');
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     if (isOpen && preselectedPatientId) {
@@ -183,12 +186,50 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
   }, [isOpen, preselectedPatientId]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      // Clean up Realtime subscription when modal closes
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+      return;
+    }
     setResult(null);
     setError(null);
     setCopyFeedback(null);
+    setTokenStatus('pending');
     applyTemplate(activeTemplate);
   }, [isOpen]);
+
+  // Subscribe to Realtime updates for the generated token
+  useEffect(() => {
+    if (!result?.dbId) return;
+
+    const channelName = `token-status-${result.dbId}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'patient_registration_tokens',
+          filter: `id=eq.${result.dbId}`,
+        },
+        (payload) => {
+          const newStatus = (payload.new as { status: string }).status;
+          if (newStatus) setTokenStatus(newStatus);
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      realtimeChannelRef.current = null;
+    };
+  }, [result?.dbId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -430,9 +471,11 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
 
       // Notificaciones creadas por trigger de BD (notify_clinic_staff_on_registration_token) para todo el personal de la clínica
 
+      setTokenStatus(data.status || 'pending');
       setResult({
         link,
         token: data.token,
+        dbId: data.id,
         whatsappUrl,
         emailUrl,
         qrDataUrl,
@@ -752,7 +795,16 @@ export default function GenerateInvitationLinkModal({ isOpen, onClose, preselect
             <div className="border border-cyan-700/40 rounded p-3 space-y-3 bg-cyan-900/10">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-cyan-200 font-medium">Invitación generada</div>
-                <span className="text-xs px-2 py-0.5 rounded bg-emerald-800/40 text-emerald-300">Pendiente</span>
+                {tokenStatus === 'completed' ? (
+                  <span className="text-xs px-2 py-0.5 rounded bg-cyan-800/60 text-cyan-300 font-semibold animate-pulse">✅ Completado</span>
+                ) : tokenStatus === 'expired' ? (
+                  <span className="text-xs px-2 py-0.5 rounded bg-red-800/40 text-red-300">Expirado</span>
+                ) : (
+                  <span className="text-xs px-2 py-0.5 rounded bg-amber-800/40 text-amber-300 flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    Pendiente
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
