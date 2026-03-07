@@ -420,6 +420,7 @@ export default function PatientPublicRegistration() {
 
       if (createPatientAccount) {
         let accountInfoMessage: string | null = null;
+        let hasValidSession = false;
 
         const signUpPayload = {
           email: normalizedAccountEmail,
@@ -442,6 +443,7 @@ export default function PatientPublicRegistration() {
             throw new Error(`Se guardó el expediente, pero no se pudo crear la cuenta: ${message}`);
           }
 
+          // User already exists — try to sign in
           const { error: signInError } = await supabase.auth.signInWithPassword({
             email: normalizedAccountEmail,
             password: accountPassword,
@@ -450,15 +452,23 @@ export default function PatientPublicRegistration() {
           if (signInError) {
             throw new Error('El expediente se guardó, pero el correo ya existe y la contraseña no coincide. Usa "Recuperar contraseña".');
           }
-        } else if (!signUpData.session) {
-          accountInfoMessage = 'Cuenta creada. Revisa tu correo para confirmar y luego iniciar sesión.';
+          hasValidSession = true;
+        } else if (signUpData.session) {
+          // Signup succeeded and we got a session immediately (no email confirmation needed)
+          hasValidSession = true;
+        } else {
+          // Signup succeeded but email confirmation is required — no session available
+          accountInfoMessage = 'Cuenta creada. Revisa tu correo para confirmar. Al iniciar sesión, ingresa tu token en Configuración → Vincular con Médico.';
         }
 
-        const { error: linkError } = await supabase.functions.invoke('link-patient-account', {
-          body: { token: tokenRow.token },
-        });
-        if (linkError) {
-          accountInfoMessage = accountInfoMessage || 'La cuenta se creó, pero falta vincularla. Inicia sesión y vuelve a abrir el enlace para completar la vinculación.';
+        // Only attempt linking if we have a valid session (Bearer token)
+        if (hasValidSession) {
+          const { error: linkError } = await supabase.functions.invoke('link-patient-account', {
+            body: { token: tokenRow.token },
+          });
+          if (linkError) {
+            accountInfoMessage = accountInfoMessage || 'La cuenta se creó, pero falta vincularla. Inicia sesión y usa tu token en Configuración → Vincular con Médico.';
+          }
         }
 
         setPostSubmitMessage(accountInfoMessage);

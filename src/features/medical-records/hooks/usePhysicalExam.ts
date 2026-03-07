@@ -618,6 +618,7 @@ export function usePhysicalExam({
         status: 'completed',
         completion_percentage: 100,
         completed_at: new Date().toISOString(),
+        consultation_id: params.consultationId || null,
       })
       .select('id')
       .single();

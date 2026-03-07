@@ -69,6 +69,7 @@ serve(async (req) => {
     const currentUser = authData.user;
     const now = Date.now();
 
+    // ── 1. Validate token ──
     const { data: tokenRow, error: tokenError } = await supabase
       .from('patient_registration_tokens')
       .select('id, token, doctor_id, clinic_id, selected_scale_ids, required_scale_ids, selected_exercise_ids, custom_tasks, assigned_patient_id, expires_at, status, create_conversation, message_template, assigned_task_ids')
@@ -97,31 +98,75 @@ serve(async (req) => {
       });
     }
 
-    const { data: linkedPatients } = await supabase
-      .from('patients')
-      .select('id, clinic_id, primary_doctor_id')
-      .eq('patient_user_id', currentUser.id)
-      .order('created_at', { ascending: false });
+    // ── 2. Resolve patient record (fixed priority order) ──
+    // Priority 1: Use assigned_patient_id from token (set by complete-patient-registration)
+    // Priority 2: Search by email + doctor + clinic (finds records created via public registration)
+    // Priority 3: Look for already-linked patient records for this user
+    // Priority 4: Create a new patient record
 
-    let patientId: string | null = tokenRow.assigned_patient_id || null;
+    let patientId: string | null = null;
 
-    if (!patientId) {
-      patientId = linkedPatients?.[0]?.id || null;
+    // Priority 1: Token's assigned_patient_id
+    if (tokenRow.assigned_patient_id) {
+      const { data: assignedPatient } = await supabase
+        .from('patients')
+        .select('id, patient_user_id')
+        .eq('id', tokenRow.assigned_patient_id)
+        .single();
+
+      if (assignedPatient) {
+        // Verify not linked to a different user
+        if (assignedPatient.patient_user_id && assignedPatient.patient_user_id !== currentUser.id) {
+          return new Response(JSON.stringify({ error: 'Este paciente ya está vinculado a otra cuenta' }), {
+            status: 409,
+            headers: buildCorsHeaders(req),
+          });
+        }
+        patientId = assignedPatient.id;
+      }
     }
 
+    // Priority 2: Search by email + doctor + clinic
     if (!patientId && currentUser.email) {
       const { data: existingByEmail } = await supabase
         .from('patients')
-        .select('id')
-        .eq('clinic_id', tokenRow.clinic_id)
+        .select('id, patient_user_id')
         .eq('primary_doctor_id', tokenRow.doctor_id)
+        .eq('clinic_id', tokenRow.clinic_id)
         .eq('email', currentUser.email)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      patientId = existingByEmail?.id || null;
+
+      if (existingByEmail) {
+        if (existingByEmail.patient_user_id && existingByEmail.patient_user_id !== currentUser.id) {
+          return new Response(JSON.stringify({ error: 'Este paciente ya está vinculado a otra cuenta' }), {
+            status: 409,
+            headers: buildCorsHeaders(req),
+          });
+        }
+        patientId = existingByEmail.id;
+      }
     }
 
+    // Priority 3: Already-linked patient for this user (with same doctor or any)
+    if (!patientId) {
+      const { data: linkedPatients } = await supabase
+        .from('patients')
+        .select('id, clinic_id, primary_doctor_id')
+        .eq('patient_user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (linkedPatients && linkedPatients.length > 0) {
+        // Prefer one with the same doctor, otherwise take first
+        const sameDoctor = linkedPatients.find(
+          (p) => p.primary_doctor_id === tokenRow.doctor_id
+        );
+        patientId = sameDoctor?.id || linkedPatients[0].id;
+      }
+    }
+
+    // Priority 4: Create a new patient record
     if (!patientId) {
       const fallbackName = (currentUser.user_metadata?.full_name as string | undefined)
         || (currentUser.email ? currentUser.email.split('@')[0] : 'Paciente');
@@ -148,80 +193,65 @@ serve(async (req) => {
         });
       }
       patientId = createdPatient.id;
-    } else {
-      const { data: patientRow, error: patientError } = await supabase
-        .from('patients')
-        .select('id, patient_user_id')
-        .eq('id', patientId)
-        .single();
+    }
 
-      if (patientError || !patientRow) {
-        return new Response(JSON.stringify({ error: 'Paciente no encontrado para vinculación' }), {
-          status: 404,
-          headers: buildCorsHeaders(req),
-        });
-      }
+    // ── 3. Link the patient record to the current user ──
+    // Always set patient_user_id, primary_doctor_id, and clinic_id from the token
+    const { error: linkError } = await supabase
+      .from('patients')
+      .update({
+        patient_user_id: currentUser.id,
+        email: currentUser.email || null,
+        primary_doctor_id: tokenRow.doctor_id,
+        clinic_id: tokenRow.clinic_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', patientId);
 
-      if (patientRow.patient_user_id && patientRow.patient_user_id !== currentUser.id) {
-        return new Response(JSON.stringify({ error: 'Este paciente ya está vinculado a otra cuenta' }), {
-          status: 409,
-          headers: buildCorsHeaders(req),
-        });
-      }
+    if (linkError) {
+      return new Response(JSON.stringify({ error: 'No se pudo vincular la cuenta con el paciente' }), {
+        status: 400,
+        headers: buildCorsHeaders(req),
+      });
+    }
 
-      const { error: linkError } = await supabase
-        .from('patients')
-        .update({
-          patient_user_id: currentUser.id,
-          email: currentUser.email || null,
-          primary_doctor_id: tokenRow.doctor_id,
-          clinic_id: tokenRow.clinic_id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', patientId);
+    // ── 4. Ensure the user's profile has role 'patient' and is active ──
+    await supabase
+      .from('profiles')
+      .update({
+        role: 'patient',
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', currentUser.id)
+      .neq('role', 'super_admin');
 
-      if (linkError) {
-        return new Response(JSON.stringify({ error: 'No se pudo vincular la cuenta con el paciente' }), {
-          status: 400,
-          headers: buildCorsHeaders(req),
-        });
-      }
+    // ── 5. Detach orphan patient records ──
+    // If the user has other patient records with no doctor/clinic, detach them
+    // to prevent the portal from reading the wrong record.
+    const { data: allLinkedPatients } = await supabase
+      .from('patients')
+      .select('id, clinic_id, primary_doctor_id')
+      .eq('patient_user_id', currentUser.id)
+      .neq('id', patientId);
 
-      // Asegurar que el perfil tenga rol 'patient' y esté activo
-      await supabase
-        .from('profiles')
-        .update({
-          role: 'patient',
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', currentUser.id)
-        .neq('role', 'super_admin'); // No sobreescribir super_admin
+    if (allLinkedPatients && allLinkedPatients.length > 0) {
+      const orphanIds = allLinkedPatients
+        .filter((row) => !row.clinic_id && !row.primary_doctor_id)
+        .map((row) => row.id);
 
-      // Si existe un paciente asignado al token, desasocia duplicados huérfanos del mismo usuario.
-      // Previene que el portal lea el paciente equivocado cuando hay más de un registro vinculado.
-      if (tokenRow.assigned_patient_id && Array.isArray(linkedPatients) && linkedPatients.length > 0) {
-        const orphanIds = linkedPatients
-          .filter((row) =>
-            row.id !== tokenRow.assigned_patient_id
-            && !row.clinic_id
-            && !row.primary_doctor_id
-          )
-          .map((row) => row.id);
-
-        if (orphanIds.length > 0) {
-          await supabase
-            .from('patients')
-            .update({
-              patient_user_id: null,
-              updated_at: new Date().toISOString(),
-            })
-            .in('id', orphanIds)
-            .eq('patient_user_id', currentUser.id);
-        }
+      if (orphanIds.length > 0) {
+        await supabase
+          .from('patients')
+          .update({
+            patient_user_id: null,
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', orphanIds);
       }
     }
 
+    // ── 6. Create tasks (scales) ──
     const selectedScaleIds = Array.isArray(tokenRow.selected_scale_ids) ? tokenRow.selected_scale_ids.filter((value: string) => isUuid(value)) : [];
     const requiredScaleIds = Array.isArray(tokenRow.required_scale_ids) ? tokenRow.required_scale_ids.filter((value: string) => isUuid(value)) : [];
     const mergedScaleIds = Array.from(new Set([...selectedScaleIds, ...requiredScaleIds]));
@@ -271,6 +301,7 @@ serve(async (req) => {
       }
     }
 
+    // ── 7. Create tasks (exercises) ──
     const selectedExerciseIds = Array.isArray(tokenRow.selected_exercise_ids)
       ? tokenRow.selected_exercise_ids.filter((value: string) => isUuid(value))
       : [];
@@ -284,8 +315,8 @@ serve(async (req) => {
 
       const existingExerciseSet = new Set((existingExerciseTasks || []).map((row: any) => row.exercise_id).filter(Boolean));
       const exerciseRowsToInsert = selectedExerciseIds
-        .filter((exerciseId) => !existingExerciseSet.has(exerciseId))
-        .map((exerciseId) => ({
+        .filter((exerciseId: string) => !existingExerciseSet.has(exerciseId))
+        .map((exerciseId: string) => ({
           patient_id: patientId,
           doctor_id: tokenRow.doctor_id,
           clinic_id: tokenRow.clinic_id,
@@ -316,6 +347,7 @@ serve(async (req) => {
       }
     }
 
+    // ── 8. Create tasks (custom) ──
     const customTasks = Array.isArray(tokenRow.custom_tasks) ? tokenRow.custom_tasks : [];
     if (customTasks.length > 0) {
       const customRowsToInsert = customTasks
@@ -352,6 +384,7 @@ serve(async (req) => {
       }
     }
 
+    // ── 9. Conversation ──
     let conversationId: string | null = null;
     if (tokenRow.create_conversation) {
       const { data: existingConversation } = await supabase
@@ -392,6 +425,7 @@ serve(async (req) => {
       }
     }
 
+    // ── 10. Update token with assigned info ──
     const historicalTaskIds = Array.isArray(tokenRow.assigned_task_ids) ? tokenRow.assigned_task_ids : [];
     const allTaskIds = Array.from(new Set([...historicalTaskIds, ...createdTaskIds]));
 
@@ -403,7 +437,7 @@ serve(async (req) => {
       } as any)
       .eq('id', tokenRow.id);
 
-    // Fetch doctor info for the response
+    // ── 11. Fetch doctor info for response ──
     let doctorName: string | null = null;
     let doctorSpecialty: string | null = null;
     if (tokenRow.doctor_id) {

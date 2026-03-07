@@ -24,17 +24,18 @@ export class AssessmentService {
       .from('scale_assessments')
       .insert({
         patient_id: payload.patient_id,
-        performer_id: user.id,
+        user_id: user.id,
         scale_id: payload.scale_id,
-        version_id: payload.version_id,
         responses: payload.responses,
         total_score: payload.total_score,
-        normalized_score: payload.normalized_score,
-        interpretation: payload.interpretation,
+        interpretation: payload.interpretation
+          ? (typeof payload.interpretation === 'string' ? payload.interpretation : JSON.stringify(payload.interpretation))
+          : null,
         duration_seconds: payload.duration_seconds,
+        status: 'completed' as const,
+        completion_percentage: 100,
         completed_at: new Date().toISOString(),
-        started_at: new Date().toISOString(), // Should be tracked from start
-        created_at: new Date().toISOString()
+        started_at: new Date().toISOString(),
       })
       .select()
       .single()
