@@ -109,6 +109,7 @@ export default function PatientPublicRegistration() {
   const [postSubmitMessage, setPostSubmitMessage] = useState<string | null>(null);
   const [emailCheckStatus, setEmailCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const emailCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [assignedPatientName, setAssignedPatientName] = useState<string | null>(null);
   const [chronicDiseasesOther, setChronicDiseasesOther] = useState('');
   const [currentTreatmentsOther, setCurrentTreatmentsOther] = useState('');
   const [surgeriesOther, setSurgeriesOther] = useState('');
@@ -162,6 +163,8 @@ export default function PatientPublicRegistration() {
             .eq('id', data.assigned_patient_id)
             .single();
           if (patient) {
+            // Capture patient name for personalized greeting
+            setAssignedPatientName(patient.full_name || null);
             setPersonal({
               full_name: patient.full_name ?? '',
               birth_date: patient.birth_date ? String(patient.birth_date).slice(0, 10) : '',
@@ -525,12 +528,24 @@ export default function PatientPublicRegistration() {
     <div className="min-h-screen bg-gray-900 p-3 md:p-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
       <div className="max-w-3xl mx-auto">
         <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-lg p-4 md:p-5 mb-4 space-y-3">
-          {tokenRow.message_template?.trim() && (
-            <div className="p-3 bg-cyan-900/30 border border-cyan-700/50 rounded-lg">
-              <p className="text-cyan-100 text-sm leading-relaxed whitespace-pre-wrap">
-                {tokenRow.message_template.trim()}
+          {/* Personalized greeting banner when patient is known */}
+          {assignedPatientName ? (
+            <div className="p-4 bg-gradient-to-r from-cyan-900/40 to-blue-900/30 border border-cyan-700/50 rounded-xl">
+              <p className="text-2xl font-bold text-white mb-1">
+                Hola, <span className="text-cyan-300">{assignedPatientName.split(' ')[0]}</span> 👋
+              </p>
+              <p className="text-cyan-100 text-sm leading-relaxed">
+                {tokenRow.message_template?.trim() || 'Tu médico te ha asignado un formulario para completar. Por favor completa la información solicitada.'}
               </p>
             </div>
+          ) : (
+            tokenRow.message_template?.trim() && (
+              <div className="p-3 bg-cyan-900/30 border border-cyan-700/50 rounded-lg">
+                <p className="text-cyan-100 text-sm leading-relaxed whitespace-pre-wrap">
+                  {tokenRow.message_template.trim()}
+                </p>
+              </div>
+            )
           )}
           <h1 className="text-white text-xl font-semibold">
             {isQuestionnaireOnly && questionnaireHeader ? questionnaireHeader : 'Registro de paciente'}
@@ -545,9 +560,11 @@ export default function PatientPublicRegistration() {
               Dr(a). {doctorLine}
             </p>
           )}
-          <p className="text-gray-300 text-sm">
-            {isQuestionnaireOnly && questionnaireHeader ? 'Completa los cuestionarios asignados. Los resultados se guardarán en tu expediente.' : welcome}
-          </p>
+          {!assignedPatientName && (
+            <p className="text-gray-300 text-sm">
+              {isQuestionnaireOnly && questionnaireHeader ? 'Completa los cuestionarios asignados. Los resultados se guardarán en tu expediente.' : welcome}
+            </p>
+          )}
         </div>
 
         {submitError && (

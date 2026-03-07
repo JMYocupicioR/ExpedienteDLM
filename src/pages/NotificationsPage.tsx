@@ -47,7 +47,7 @@ const entityTypeConfig: Record<string, { icon: React.ComponentType<{ className?:
   default: { icon: Bell, label: 'General' },
 };
 
-type PendingTokenRow = {
+type TokenHistoryRow = {
   id: string;
   token: string;
   doctor_id: string;
@@ -56,8 +56,9 @@ type PendingTokenRow = {
   selected_scale_ids: string[] | null;
   expires_at: string;
   created_at: string;
+  status: string;
+  invitation_template: string | null;
   doctor?: { full_name: string | null } | null;
-  patient?: { full_name: string } | null;
   patients?: { full_name: string } | null;
 };
 
@@ -68,7 +69,7 @@ export default function NotificationsPage() {
   const [filterPriority, setFilterPriority] = useState<NotificationPriority | 'all'>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'notifications' | 'links'>('notifications');
-  const [pendingTokens, setPendingTokens] = useState<PendingTokenRow[]>([]);
+  const [tokenHistory, setTokenHistory] = useState<TokenHistoryRow[]>([]);
   const [loadingLinks, setLoadingLinks] = useState(false);
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
   const [notificationQrUrls, setNotificationQrUrls] = useState<Record<string, string>>({});
@@ -125,18 +126,17 @@ export default function NotificationsPage() {
         const { data, error } = await supabase
           .from('patient_registration_tokens')
           .select(`
-            id, token, doctor_id, clinic_id, assigned_patient_id, selected_scale_ids, expires_at, created_at,
-            doctor:profiles(full_name),
+            id, token, doctor_id, clinic_id, assigned_patient_id, selected_scale_ids, expires_at, created_at, status, invitation_template,
+            doctor:profiles!patient_registration_tokens_doctor_id_fkey(full_name),
             patients(full_name)
           `)
           .eq('clinic_id', activeClinic.id)
-          .eq('status', 'pending')
-          .gte('expires_at', new Date().toISOString())
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(60);
         if (error) throw error;
-        if (!cancelled) setPendingTokens((data || []) as unknown as PendingTokenRow[]);
+        if (!cancelled) setTokenHistory((data || []) as unknown as TokenHistoryRow[]);
       } catch {
-        if (!cancelled) setPendingTokens([]);
+        if (!cancelled) setTokenHistory([]);
       } finally {
         if (!cancelled) setLoadingLinks(false);
       }
@@ -145,11 +145,11 @@ export default function NotificationsPage() {
   }, [activeTab, activeClinic?.id]);
 
   useEffect(() => {
-    if (pendingTokens.length === 0) return;
+    if (tokenHistory.length === 0) return;
     const origin = window.location.origin;
     const generate = async () => {
       const map: Record<string, string> = {};
-      for (const row of pendingTokens) {
+      for (const row of tokenHistory) {
         const link = `${origin}/register/patient/${encodeURIComponent(row.token)}`;
         try {
           map[row.id] = await QRCodeLib.toDataURL(link, { width: 120, margin: 1 });
@@ -160,7 +160,7 @@ export default function NotificationsPage() {
       setQrUrls(map);
     };
     generate();
-  }, [pendingTokens]);
+  }, [tokenHistory]);
 
   // Generar QR para notificaciones de enlace de registro (para escaneo rápido en tablet)
   const registrationTokenIds = notifications
@@ -242,66 +242,134 @@ export default function NotificationsPage() {
         {activeTab === 'links' && (
           <div className="mb-6">
             <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-              <h2 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
-                <LinkIcon className="h-5 w-5 text-cyan-400" />
-                Enlaces de registro pendientes
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-white flex items-center gap-2">
+                  <LinkIcon className="h-5 w-5 text-cyan-400" />
+                  Historial de enlaces enviados
+                  {tokenHistory.length > 0 && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300 font-normal">{tokenHistory.length}</span>
+                  )}
+                </h2>
+                <button
+                  onClick={() => {
+                    if (!activeClinic?.id) return;
+                    setLoadingLinks(true);
+                    supabase
+                      .from('patient_registration_tokens')
+                      .select('id, token, doctor_id, clinic_id, assigned_patient_id, selected_scale_ids, expires_at, created_at, status, invitation_template, doctor:profiles!patient_registration_tokens_doctor_id_fkey(full_name), patients(full_name)')
+                      .eq('clinic_id', activeClinic.id)
+                      .order('created_at', { ascending: false })
+                      .limit(60)
+                      .then(({ data }) => {
+                        setTokenHistory((data || []) as unknown as TokenHistoryRow[]);
+                        setLoadingLinks(false);
+                      });
+                  }}
+                  className="text-gray-400 hover:text-white p-1 rounded"
+                  title="Actualizar"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingLinks ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
               {!activeClinic ? (
-                <p className="text-gray-400">Selecciona una clínica para ver los enlaces pendientes.</p>
+                <p className="text-gray-400">Selecciona una clínica para ver los enlaces.</p>
               ) : loadingLinks ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400" />
                 </div>
-              ) : pendingTokens.length === 0 ? (
-                <p className="text-gray-400">No hay enlaces de registro pendientes para esta clínica.</p>
+              ) : tokenHistory.length === 0 ? (
+                <p className="text-gray-400">Aún no se han generado enlaces para esta clínica.</p>
               ) : (
-                <div className="space-y-4">
-                  {pendingTokens.map((row) => {
-                    const patientName = row.patient?.full_name ?? row.patients?.full_name ?? (row.assigned_patient_id ? 'Paciente asignado' : 'Sin paciente asignado');
-                    const doctorName = row.doctor?.full_name ?? 'Doctor';
-                    const scaleCount = row.selected_scale_ids?.length ?? 0;
-                    const isExpired = new Date(row.expires_at) < new Date();
-                    const link = `${window.location.origin}/register/patient/${encodeURIComponent(row.token)}`;
-                    return (
-                      <div
-                        key={row.id}
-                        className="bg-gray-900 border border-gray-700 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-white">{doctorName}</span>
-                            <span className="text-xs text-gray-500">→</span>
-                            <span className="text-gray-300">{patientName}</span>
-                          </div>
-                          <p className="text-sm text-gray-400 mt-1">
-                            {scaleCount > 0 ? `${scaleCount} escala(s)` : 'Sin escalas'} · Expira {format(new Date(row.expires_at), "d MMM yyyy", { locale: es })}
-                            {isExpired && <span className="text-amber-400 ml-1">(Expirado)</span>}
-                          </p>
-                          <div className="flex gap-2 mt-2">
-                            <button
-                              onClick={() => handleCopyLink(row.token)}
-                              className="inline-flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-200"
-                            >
-                              <Copy className="h-3 w-3" /> Copiar link
-                            </button>
-                            {row.assigned_patient_id && (
-                              <Link
-                                to={`/expediente/${row.assigned_patient_id}`}
-                                className="inline-flex items-center px-2 py-1 bg-cyan-700 hover:bg-cyan-600 rounded text-sm text-white"
-                              >
-                                Ver expediente
-                              </Link>
-                            )}
-                          </div>
-                        </div>
-                        {qrUrls[row.id] && (
-                          <div className="flex-shrink-0">
-                            <img src={qrUrls[row.id]} alt="QR" className="w-24 h-24 rounded border border-gray-600" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-400 border-b border-gray-700">
+                        <th className="pb-2 pr-3 font-medium">Token</th>
+                        <th className="pb-2 pr-3 font-medium">Paciente</th>
+                        <th className="pb-2 pr-3 font-medium">Escalas</th>
+                        <th className="pb-2 pr-3 font-medium">Estado</th>
+                        <th className="pb-2 pr-3 font-medium">Creado</th>
+                        <th className="pb-2 font-medium">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700/60">
+                      {tokenHistory.map((row) => {
+                        const patientName = row.patients?.full_name ?? (row.assigned_patient_id ? 'Paciente asignado' : <span className="text-gray-500 italic">Sin asignar</span>);
+                        const scaleCount = row.selected_scale_ids?.length ?? 0;
+                        const isExpired = new Date(row.expires_at) < new Date();
+                        const effectiveStatus = row.status === 'pending' && isExpired ? 'expired' : row.status;
+                        const link = `${window.location.origin}/register/patient/${encodeURIComponent(row.token)}`;
+                        return (
+                          <tr key={row.id} className="hover:bg-gray-700/30 transition-colors">
+                            <td className="py-3 pr-3">
+                              <div className="flex items-center gap-1.5">
+                                <code className="text-cyan-300 font-mono font-bold tracking-wide text-xs bg-gray-900 px-1.5 py-0.5 rounded">{row.token}</code>
+                                <button
+                                  onClick={() => navigator.clipboard.writeText(link)}
+                                  className="text-gray-500 hover:text-gray-300 p-0.5"
+                                  title="Copiar link"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-3 pr-3">
+                              <div className="text-gray-200">{patientName}</div>
+                              {row.assigned_patient_id && (
+                                <Link to={`/expediente/${row.assigned_patient_id}`} className="text-xs text-cyan-500 hover:text-cyan-300">
+                                  Ver expediente →
+                                </Link>
+                              )}
+                            </td>
+                            <td className="py-3 pr-3">
+                              {scaleCount > 0 ? (
+                                <span className="text-gray-200">{scaleCount} escala{scaleCount !== 1 ? 's' : ''}</span>
+                              ) : (
+                                <span className="text-gray-500 text-xs">Sin escalas</span>
+                              )}
+                            </td>
+                            <td className="py-3 pr-3">
+                              {effectiveStatus === 'completed' ? (
+                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/50">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                  Completado
+                                </span>
+                              ) : effectiveStatus === 'expired' ? (
+                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-900/30 text-red-400 border border-red-700/30">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                  Expirado
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-300 border border-amber-700/30">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                  Pendiente
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 pr-3 text-gray-400 text-xs whitespace-nowrap">
+                              {format(new Date(row.created_at), "d MMM yyyy", { locale: es })}
+                              <div className="text-gray-600">{format(new Date(row.created_at), "HH:mm", { locale: es })}</div>
+                            </td>
+                            <td className="py-3">
+                              <div className="flex items-center gap-1">
+                                {qrUrls[row.id] && (
+                                  <a
+                                    href={qrUrls[row.id]}
+                                    download={`qr-${row.token}.png`}
+                                    className="p-1 text-gray-400 hover:text-gray-200"
+                                    title="Descargar QR"
+                                  >
+                                    <QrCode className="h-4 w-4" />
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
