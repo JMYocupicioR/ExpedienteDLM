@@ -2,8 +2,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import AppLayout from '@/components/Layout/AppLayout';
 import PatientPortalLayout from '@/components/Layout/PatientPortalLayout';
 import ClinicAdminLayout from '@/components/Layout/ClinicAdminLayout';
-import AdminClinicConfigPanel from '@/components/clinic-config/AdminClinicConfigPanel';
-import DoctorClinicPreferences from '@/components/clinic-config/DoctorClinicPreferences';
+
 import AdherenceDashboardPage from '@/features/adherence-dashboard/pages/AdherenceDashboardPage';
 import { ClinicProvider } from '@/features/clinic/context/ClinicContext';
 import ExerciseManagerPage from '@/features/exercise-manager/pages/ExerciseManagerPage';
@@ -251,18 +250,7 @@ function App() {
                   isAuthenticated ? <Settings /> : <Navigate to='/auth' />
                 }
               />
-              <Route
-                path='/clinic/config'
-                element={
-                  isAuthenticated ? <AdminClinicConfigPanel /> : <Navigate to='/auth' />
-                }
-              />
-              <Route
-                path='/my/preferences'
-                element={
-                  isAuthenticated ? <DoctorClinicPreferences /> : <Navigate to='/auth' />
-                }
-              />
+
               <Route
                 path='/plantillas'
                 element={
@@ -395,12 +383,6 @@ function App() {
                   }
                 />
                 <Route
-                  path='/clinic-admin'
-                  element={
-                    isAuthenticated ? <ClinicAdminPage /> : <Navigate to='/auth' />
-                  }
-                />
-                <Route
                   path='/clinic/summary'
                   element={
                     isAuthenticated ? <ClinicSummary /> : <Navigate to='/auth' />
@@ -436,12 +418,6 @@ function App() {
                   path='/clinic/settings'
                   element={
                     isAuthenticated ? <ClinicSettings /> : <Navigate to='/auth' />
-                  }
-                />
-                <Route
-                  path='/clinic/config'
-                  element={
-                    isAuthenticated ? <AdminClinicConfigPanel /> : <Navigate to='/auth' />
                   }
                 />
               </Route>

@@ -270,31 +270,51 @@ const ClinicSettings: React.FC = () => {
 
     setSaving(true);
     try {
+      // Sanitize: convert empty strings to null for nullable/typed DB columns
+      const sanitize = (val: string) => val.trim() === '' ? null : val.trim();
+
+      const payload = {
+        name: formData.name,
+        type: formData.type,
+        address: sanitize(formData.address),
+        phone: sanitize(formData.phone),
+        email: sanitize(formData.email),
+        website: sanitize(formData.website),
+        license_number: sanitize(formData.license_number),
+        director_name: sanitize(formData.director_name),
+        director_license: sanitize(formData.director_license),
+        tax_id: sanitize(formData.tax_id),
+        founding_date: sanitize(formData.founding_date),   // date column – must be null not ''
+        emergency_phone: sanitize(formData.emergency_phone),
+        appointment_duration_minutes: Number(formData.appointment_duration_minutes) || 30,
+        theme_color: formData.theme_color || '#3B82F6',
+        logo_url: sanitize(formData.logo_url),
+        is_public: formData.is_public,
+        working_hours: workingHours,
+        services,
+        specialties,
+        insurance_providers: insuranceProviders,
+        payment_methods: paymentMethods,
+        updated_at: new Date().toISOString(),
+      };
+
       const { error } = await supabase
         .from('clinics')
-        .update({
-          ...formData,
-          is_public: formData.is_public,
-          working_hours: workingHours,
-          services,
-          specialties,
-          insurance_providers: insuranceProviders,
-          payment_methods: paymentMethods,
-          updated_at: new Date().toISOString()
-        })
+        .update(payload)
         .eq('id', activeClinic.id);
 
       if (error) throw error;
 
       await refreshUserClinics();
       alert('Configuración guardada exitosamente');
-    } catch (error) {
-      // Error log removed for security;
-      alert('Error al guardar la configuración');
+    } catch (error: any) {
+      console.error('Error saving clinic:', error);
+      alert(`Error al guardar: ${error?.message || 'Error desconocido'}`);
     } finally {
       setSaving(false);
     }
   };
+
 
   if (loading) {
     return (

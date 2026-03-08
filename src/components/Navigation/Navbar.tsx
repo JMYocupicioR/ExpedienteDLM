@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   Menu, X, User, Users, FileText, Calendar, 
   Settings, LogOut, Bell, Search, Home, Activity, Building,
-  ChevronRight, ChevronLeft, Sliders, Shield, Stethoscope
+  ChevronRight, ChevronLeft, Shield, Stethoscope
 } from 'lucide-react';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { useClinic } from '@/features/clinic/context/ClinicContext';
-import { supabase } from '@/lib/supabase';
 import ClinicSwitcher from '@/components/Layout/ClinicSwitcher';
 import NotificationBell from '@/components/NotificationBell';
 import { DeepLuxLogo } from '@/components/Brand';
@@ -30,7 +29,6 @@ interface NavbarProps {
 export default function Navbar({ onNewPatientClick }: NavbarProps) {
   const { user, profile, loading, signOut } = useAuth();
   const { activeClinic, userClinics } = useClinic();
-  const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -106,12 +104,6 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
             { id: 'templates-prescripciones', label: 'Prescripciones', icon: FileText, href: '/plantillas?tab=prescripciones' }
           ]
         },
-        {
-          id: 'preferences',
-          label: 'Mis Preferencias',
-          icon: Sliders,
-          href: '/my/preferences'
-        }
       );
     }
 
@@ -122,7 +114,7 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
           id: 'clinic',
           label: 'Clínica',
           icon: Building,
-          href: '/clinic-admin',
+          href: '/clinic/dashboard',
           submenu: [
             { id: 'clinic-dashboard', label: 'Recepción', icon: Activity, href: '/dashboard' },
             { id: 'clinic-patients', label: 'Pacientes', icon: Users, href: '/clinic/patients' },
@@ -169,14 +161,13 @@ export default function Navbar({ onNewPatientClick }: NavbarProps) {
           id: 'clinic',
           label: 'Clínica',
           icon: Building,
-          href: '/clinic-admin',
+          href: '/clinic/dashboard',
             submenu: [
             { id: 'clinic-dashboard', label: 'Panel Admin', icon: Activity, href: '/clinic/dashboard' },
             { id: 'clinic-overview', label: 'Resumen', icon: Activity, href: '/clinic/summary' },
             { id: 'clinic-patients', label: 'Pacientes', icon: Users, href: '/clinic/patients' },
             { id: 'clinic-staff', label: 'Personal', icon: Users, href: '/clinic/staff' },
             { id: 'clinic-schedule', label: 'Agenda', icon: Calendar, href: '/clinic/schedule' },
-            { id: 'clinic-config', label: 'Configuración Clínica', icon: Sliders, href: '/clinic/config' },
             { id: 'clinic-settings', label: 'Ajustes', icon: Settings, href: '/clinic/settings' }
           ]
         }

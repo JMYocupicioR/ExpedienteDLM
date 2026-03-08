@@ -4,7 +4,7 @@ import {
   Settings as SettingsIcon, User, Bell, Lock, Database, 
   Monitor, Globe, Shield, Save, CheckCircle, Building, Palette,
   UploadCloud, Image as ImageIcon, Loader2, Eye, EyeOff,
-  Camera, Mail, Calendar, Clock, Smartphone, Key,
+  Camera, Mail, Calendar, Clock, Smartphone, Key, Sliders,
   Stethoscope, FileText, Activity, AlertCircle, Info,
   Link2, UserPlus, Copy, Send
 } from 'lucide-react';
@@ -16,6 +16,7 @@ import { useMedicalPracticeSettings } from '@/hooks/useMedicalPracticeSettings';
 import { PersonalClinicSettings } from '@/components/settings/PersonalClinicSettings';
 import { ClinicAssociationManager } from '@/components/settings/ClinicAssociationManager';
 import GenerateInvitationLinkModal from '@/components/GenerateInvitationLinkModal';
+import { useClinicConfiguration } from '@/hooks/useClinicConfiguration';
 
 interface SettingSection {
   id: string;
@@ -162,7 +163,225 @@ function ImageUploader({
   );
 }
 
+// ── Extracted Preferences Section Component ──────────────────────────────────
+function PreferencesSection() {
+  const {
+    userPreferences,
+    effectiveConfig,
+    updateUserPreferences,
+    loading,
+    error,
+  } = useClinicConfiguration();
+
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const [formData, setFormData] = useState({
+    preferred_consultation_duration: 30,
+    sidebar_collapsed: false,
+    dashboard_widgets: ['upcoming_appointments', 'recent_patients', 'pending_tasks'] as string[],
+    notification_preferences: {
+      email_appointments: true,
+      email_emergencies: true,
+      desktop_notifications: true,
+      sound_alerts: false,
+    },
+    favorite_diagnoses: [] as string[],
+  });
+
+  useEffect(() => {
+    if (userPreferences) {
+      setFormData({
+        preferred_consultation_duration: (userPreferences as any).preferred_consultation_duration || 30,
+        sidebar_collapsed: (userPreferences as any).sidebar_collapsed || false,
+        dashboard_widgets: (userPreferences as any).dashboard_widgets || ['upcoming_appointments', 'recent_patients', 'pending_tasks'],
+        notification_preferences: (userPreferences as any).notification_preferences || {
+          email_appointments: true,
+          email_emergencies: true,
+          desktop_notifications: true,
+          sound_alerts: false,
+        },
+        favorite_diagnoses: (userPreferences as any).favorite_diagnoses || [],
+      });
+    }
+  }, [userPreferences]);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setSaveSuccess(false);
+      await updateUserPreferences(formData);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error guardando preferencias:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleWidget = (widget: string, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      dashboard_widgets: checked
+        ? [...prev.dashboard_widgets, widget]
+        : prev.dashboard_widgets.filter(w => w !== widget),
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mr-3" />
+        <span className="text-gray-400">Cargando preferencias...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300">
+        Error al cargar preferencias: {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="section-header">
+        <h3 className="section-title flex items-center">
+          <Sliders className="h-6 w-6 mr-3 text-cyan-400" />
+          Mis Preferencias
+        </h3>
+        <p className="section-subtitle">
+          Personaliza tu experiencia de trabajo en esta clínica.
+          {(effectiveConfig as any)?.isUserCustomized && (
+            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-900/50 text-cyan-300 border border-cyan-700/40">
+              <CheckCircle className="h-3 w-3 mr-1" /> Personalizado
+            </span>
+          )}
+        </p>
+      </div>
+
+      {/* Consultas */}
+      <div className="card">
+        <h4 className="text-lg font-semibold mb-6 flex items-center">
+          <Clock className="h-5 w-5 mr-2 text-cyan-400" />
+          Consultas
+        </h4>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Duración preferida de consulta (minutos)
+            </label>
+            {(effectiveConfig as any)?.default_consultation_duration && (
+              <p className="text-xs text-gray-500 mb-2">
+                Configuración de clínica: {(effectiveConfig as any).default_consultation_duration} min
+              </p>
+            )}
+            <input
+              type="number"
+              value={formData.preferred_consultation_duration}
+              onChange={e => setFormData({ ...formData, preferred_consultation_duration: parseInt(e.target.value) })}
+              className="form-input w-40"
+              min="15"
+              step="15"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Dashboard */}
+      <div className="card">
+        <h4 className="text-lg font-semibold mb-6 flex items-center">
+          <Activity className="h-5 w-5 mr-2 text-cyan-400" />
+          Dashboard
+        </h4>
+        <div className="space-y-4">
+          <label className="block text-sm font-medium text-gray-300 mb-3">Widgets visibles</label>
+          {[
+            { id: 'upcoming_appointments', label: 'Próximas citas' },
+            { id: 'recent_patients', label: 'Pacientes recientes' },
+            { id: 'pending_tasks', label: 'Tareas pendientes' },
+          ].map(w => (
+            <label key={w.id} className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={formData.dashboard_widgets.includes(w.id)}
+                onChange={e => toggleWidget(w.id, e.target.checked)}
+                className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+              />
+              <span className="text-gray-300 text-sm">{w.label}</span>
+            </label>
+          ))}
+          <label className="flex items-center gap-3 pt-2 border-t border-gray-700">
+            <input
+              type="checkbox"
+              checked={formData.sidebar_collapsed}
+              onChange={e => setFormData({ ...formData, sidebar_collapsed: e.target.checked })}
+              className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+            />
+            <span className="text-gray-300 text-sm">Sidebar colapsado por defecto</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Notificaciones personales */}
+      <div className="card">
+        <h4 className="text-lg font-semibold mb-6 flex items-center">
+          <Bell className="h-5 w-5 mr-2 text-cyan-400" />
+          Alertas Personales
+        </h4>
+        <div className="space-y-4">
+          {[
+            { key: 'email_appointments', label: 'Correos de nuevas citas' },
+            { key: 'email_emergencies', label: 'Correos de emergencias' },
+            { key: 'desktop_notifications', label: 'Notificaciones de escritorio' },
+            { key: 'sound_alerts', label: 'Alertas sonoras' },
+          ].map(item => (
+            <label key={item.key} className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={(formData.notification_preferences as any)[item.key]}
+                onChange={e =>
+                  setFormData({
+                    ...formData,
+                    notification_preferences: {
+                      ...formData.notification_preferences,
+                      [item.key]: e.target.checked,
+                    },
+                  })
+                }
+                className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500"
+              />
+              <span className="text-gray-300 text-sm">{item.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Save */}
+      <div className="flex items-center justify-end gap-4">
+        {saveSuccess && (
+          <span className="flex items-center text-green-400 text-sm">
+            <CheckCircle className="h-4 w-4 mr-1" /> Preferencias guardadas
+          </span>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium"
+        >
+          {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+          <span>{saving ? 'Guardando...' : 'Guardar Preferencias'}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
+
   const { user, profile } = useAuth();
   const { theme, setTheme, fontScale, setFontScale, accentPrimary, accentSecondary, setAccentColors, contrastMode, setContrastMode } = useTheme();
   const { uploadClinicLogo, uploadProfilePhoto } = useProfilePhotos();
@@ -256,6 +475,7 @@ export default function Settings() {
       ]
     : [
         { id: 'profile', title: 'Perfil y Clínica', description: 'Información personal y de la clínica', icon: User },
+        { id: 'preferences', title: 'Mis Preferencias', description: 'Duración de consulta y widgets', icon: Sliders },
         { id: 'clinic', title: 'Configuración Médica', description: 'Especialidades y configuraciones médicas', icon: Stethoscope },
         { id: 'notifications', title: 'Notificaciones', description: 'Configurar alertas y avisos', icon: Bell },
         { id: 'security', title: 'Seguridad', description: 'Contraseña y autenticación', icon: Lock },
@@ -1584,6 +1804,9 @@ export default function Settings() {
             </div>
           </div>
         );
+
+      case 'preferences':
+        return <PreferencesSection />;
 
       case 'notifications':
         return (
