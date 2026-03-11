@@ -1,4 +1,5 @@
 import Navbar from '@/components/Navigation/Navbar';
+import MfaGate from '@/features/authentication/components/MfaGate';
 import { useAuth } from '@/features/authentication/hooks/useAuth';
 import { useIsAssistant } from '@/hooks/useIsAssistant';
 import NewPatientForm from '@/features/patients/components/NewPatientForm';
@@ -120,21 +121,23 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className='app-container'>
-      <Navbar onNewPatientClick={handleNewPatientClick} />
+    <MfaGate userRole={profile?.role}>
+      <div className='app-container'>
+        <Navbar onNewPatientClick={handleNewPatientClick} />
 
-      {/* Main Content Area */}
-      <div className='main-layout'>
-        <div className={`content-wrapper ${isNavCollapsed ? 'sidebar-collapsed' : ''}`}>
-          <div className='page-container'>{children || <Outlet />}</div>
+        {/* Main Content Area */}
+        <div className='main-layout'>
+          <div className={`content-wrapper ${isNavCollapsed ? 'sidebar-collapsed' : ''}`}>
+            <div className='page-container'>{children || <Outlet />}</div>
+          </div>
         </div>
-      </div>
 
-      <NewPatientForm
-        isOpen={showNewPatientForm}
-        onClose={() => setShowNewPatientForm(false)}
-        onSave={handleNewPatientCreated}
-      />
-    </div>
+        <NewPatientForm
+          isOpen={showNewPatientForm}
+          onClose={() => setShowNewPatientForm(false)}
+          onSave={handleNewPatientCreated}
+        />
+      </div>
+    </MfaGate>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Upload, FlaskConical, Microscope, Pill, Plus, Trash2, FileEdit, Calendar } from 'lucide-react';
+import { Save, X, Clock, AlertCircle, CheckCircle, FileText, Loader2, Upload, FlaskConical, Microscope, Pill, FileEdit, Calendar } from 'lucide-react';
 import UploadDropzone from '@/components/UploadDropzone';
 import { useForm } from 'react-hook-form';
 // ===== IMPORTACIONES DEL SISTEMA CENTRALIZADO =====
@@ -21,7 +21,7 @@ import TemplateRunnerModal, { TemplateResponses } from '@/components/TemplateRun
 import SmartSymptomAnalyzer from '@/components/SmartSymptomAnalyzer';
 import MedicalRecommendationsEngine from '@/components/MedicalRecommendationsEngine';
 import MedicalWidgets from '@/components/MedicalWidgets';
-import AdvancedPrescriptionSystem from '@/components/AdvancedPrescriptionSystem';
+import PrescriptionEmitModal from '@/components/PrescriptionEmitModal';
 import MedicalSafetyValidator from '@/components/MedicalSafetyValidator';
 import CIE10Integration from '@/components/CIE10Integration';
 import RealTimeMedicalGuidance from '@/components/RealTimeMedicalGuidance';
@@ -36,7 +36,7 @@ import type {
   PhysicalExaminationData
 } from '@/lib/database.types';
 import { ConsultationConfig } from '@/features/medical-templates/hooks/useConsultationConfig';
-import { calculatePrescriptionExpiry } from '@/lib/medicalConfig';
+
 
 type PhysicalExamTemplate = Database['public']['Tables']['physical_exam_templates']['Row'];
 
@@ -173,15 +173,8 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   const [stepperScale, setStepperScale] = useState<PendingScaleEntry | null>(null);
   // Archivos a adjuntar a estudios desde la consulta
   const [attachedFiles, setAttachedFiles] = useState<{ category: 'gabinete' | 'laboratorio' | 'otro'; files: File[] }[]>([]);
-  // ===== Nuevo: Emisión rápida de receta al final =====
-  const [showPrescriptionModule, setShowPrescriptionModule] = useState<boolean>(false);
-  const [emitPrescriptionAfterSave, setEmitPrescriptionAfterSave] = useState<boolean>(false);
-  const [prescriptionDiagnosis, setPrescriptionDiagnosis] = useState<string>('');
-  const [prescriptionNotes, setPrescriptionNotes] = useState<string>('');
-  type RxMedication = { name: string; dosage: string; frequency: string; duration: string; instructions?: string };
-  const [rxMedications, setRxMedications] = useState<RxMedication[]>([
-    { name: '', dosage: '', frequency: '', duration: '', instructions: '' }
-  ]);
+  // ===== Estado para modal de emisión de receta post-guardado =====
+  const [showPrescriptionEmitModal, setShowPrescriptionEmitModal] = useState(false);
   
   // ===== NUEVOS ESTADOS PARA PLANTILLAS INTELIGENTES =====
   const [showTemplateAssistant, setShowTemplateAssistant] = useState(false);
@@ -197,7 +190,6 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
   const showSmartAnalyzer = true;
   const showRecommendations = true;
   const showMedicalWidgets = true;
-  const [showAdvancedPrescription, setShowAdvancedPrescription] = useState(false);
   const showSafetyValidator = true;
   const showRealTimeGuidance = true;
   const [showCIE10Integration, setShowCIE10Integration] = useState(true);
@@ -567,17 +559,6 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       const maybeId = await onSave(consultationData);
       if (typeof maybeId === 'string') {
         setSavedConsultationId(maybeId);
-        // Si se solicitó emitir receta, crearla y vincularla a la consulta
-        if (emitPrescriptionAfterSave && showPrescriptionModule) {
-          try {
-            await createAndLinkPrescription(maybeId);
-          } catch {
-            // Error log removed for security;
-            setError('La consulta se guardó, pero hubo un problema al emitir la receta.');
-          } finally {
-            setEmitPrescriptionAfterSave(false);
-          }
-        }
         // Guardar evaluaciones de escalas pendientes ahora que tenemos consultation_id
         if (pendingScales.length > 0) {
           for (const s of pendingScales) {
@@ -657,87 +638,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
     }
   };
 
-  // ===== Nuevo: Crear receta y vincularla a la consulta guardada =====
-  const createAndLinkPrescription = async (consultationId: string) => {
-    const filledMeds = rxMedications.filter(m => m.name && m.dosage && m.frequency && m.duration);
-    if (filledMeds.length === 0) {
-      throw new Error('Debe agregar al menos un medicamento para emitir la receta');
-    }
 
-    const medsValidation = validateMedicationsField(filledMeds);
-    if (!medsValidation.isValid) {
-      throw new Error(`Errores en medicamentos: ${medsValidation.errors.join('; ')}`);
-    }
-
-    const finalDiagnosis = (prescriptionDiagnosis || '').trim() || (watchedData.diagnosis || '').trim();
-    if (!finalDiagnosis) {
-      throw new Error('El diagnóstico de la receta es requerido');
-    }
-
-    let visualLayoutToSave: any = null;
-    const { data: authData } = await supabase.auth.getUser();
-    if (authData?.user) {
-      const { data: layout } = await supabase
-        .from('prescription_layouts')
-        .select('template_elements, canvas_settings, print_settings')
-        .eq('doctor_id', authData.user.id)
-        .eq('is_default', true)
-        .single();
-      
-      if (layout) {
-        visualLayoutToSave = {
-          template_elements: layout.template_elements,
-          canvas_settings: layout.canvas_settings,
-          print_settings: layout.print_settings
-        };
-      } else {
-        // Buscar uno predefinido si no tiene default
-        const { data: publicLayout } = await supabase
-          .from('prescription_layouts')
-          .select('template_elements, canvas_settings, print_settings')
-          .eq('is_predefined', true)
-          .limit(1)
-          .single();
-        
-        if (publicLayout) {
-          visualLayoutToSave = {
-            template_elements: publicLayout.template_elements,
-            canvas_settings: publicLayout.canvas_settings,
-            print_settings: publicLayout.print_settings
-          };
-        }
-      }
-    }
-
-    const expires = calculatePrescriptionExpiry(filledMeds.map(m => m.name)).toISOString();
-
-    const { data: inserted, error: rxError } = await supabase
-      .from('prescriptions')
-      .insert({
-        patient_id: patientId,
-        doctor_id: doctorId,
-        consultation_id: consultationId,
-        medications: filledMeds,
-        diagnosis: finalDiagnosis,
-        notes: (prescriptionNotes || watchedData.treatment || '').toString(),
-        status: 'active',
-        created_at: new Date().toISOString(),
-        expires_at: expires,
-        visual_layout: visualLayoutToSave || null
-      })
-      .select('id')
-      .single();
-
-    if (rxError || !inserted) throw rxError || new Error('No se pudo crear la receta');
-
-    const { error: linkError } = await supabase
-      .from('consultation_prescriptions')
-      .insert({ consultation_id: consultationId, prescription_id: inserted.id });
-    if (linkError) {
-      // Link error occurred but continuing execution
-      throw linkError;
-    }
-  };
 
   // ✅ MEJORADO: Manejar el texto aplicado desde el modal de transcripción
   // Ahora integra el nuevo texto con el contenido existente en lugar de reemplazarlo
@@ -1003,7 +904,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
 
   // ===== FUNCIONES DEL ASISTENTE MÉDICO =====
   const handleAssistantSuggestion = (suggestion: any) => {
-    setAssistantSuggestions(prev => [...prev, suggestion]);
+    // Suggestion logged for reference
 
     // Apply suggestion based on type
     if (suggestion.type === 'diagnosis' && suggestion.content) {
@@ -1066,7 +967,7 @@ export default function ConsultationForm({ patientId, doctorId, onClose, onSave,
       });
     } else if (action.includes('medicación') || action.includes('Antipiréticos')) {
       // Open prescription system
-      setShowAdvancedPrescription(true);
+      // Prescription is now handled via post-save modal
     } else if (action.includes('diagnóstico')) {
       // Focus on diagnosis field
       const diagnosisField = document.querySelector('textarea[name="diagnosis"]') as HTMLTextAreaElement;
@@ -1847,37 +1748,7 @@ ${classicData.therapeutic_plan.physical_therapy}`,
             </div>
           </div>
 
-          {/* ===== NUEVO: ADVANCED PRESCRIPTION SYSTEM ===== */}
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-white">Sistema de Prescripción</h3>
-              <button
-                type="button"
-                onClick={() => setShowAdvancedPrescription(!showAdvancedPrescription)}
-                className="flex items-center px-3 py-2 text-sm font-medium text-green-300 bg-green-900/50 rounded-md hover:bg-green-800/70 transition-colors"
-              >
-                <Pill className="h-4 w-4 mr-2" />
-                {showAdvancedPrescription ? 'Ocultar' : 'Mostrar'} Prescripción Avanzada
-              </button>
-            </div>
 
-            <AdvancedPrescriptionSystem
-              diagnosis={watchedData.diagnosis || ''}
-              patientAge={patientData?.age}
-              patientWeight={parseFloat(watchedData.vital_signs?.weight || '70')}
-              patientAllergies={patientData?.allergies}
-              currentMedications={prescriptionMedications.map(m => m.name)}
-              patientConditions={patientData?.conditions}
-              onPrescriptionUpdate={(medications) => {
-                setPrescriptionMedications(medications);
-                setValue('medications', medications);
-              }}
-              onTemplateSelect={(template) => {
-                console.log('Prescription template selected:', template);
-              }}
-              isVisible={showAdvancedPrescription}
-            />
-          </div>
 
           {/* ===== NUEVO: MEDICAL SAFETY VALIDATOR ===== */}
           <MedicalSafetyValidator
@@ -1946,7 +1817,7 @@ ${classicData.therapeutic_plan.physical_therapy}`,
             <button
               type="submit"
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={loading || !selectedTemplate || !physicalExamData}
+              disabled={loading}
             >
               {loading ? (
                 <>
@@ -1960,134 +1831,13 @@ ${classicData.therapeutic_plan.physical_therapy}`,
                 </>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEmitPrescriptionAfterSave(true);
-                (document.activeElement as HTMLElement)?.blur();
-                // @ts-ignore invoke submit programmatically
-                handleSubmit(onSubmit)();
-              }}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={
-                loading || !selectedTemplate || !physicalExamData || !showPrescriptionModule ||
-                rxMedications.filter(m => m.name && m.dosage && m.frequency && m.duration).length === 0
-              }
-              title={!showPrescriptionModule ? 'Activa el módulo de receta abajo' : 'Guardar consulta y emitir receta'}
-            >
-              <Save className="h-4 w-4 mr-2" />
-              Guardar y Emitir Receta
-            </button>
           </div>
         </form>
       </div>
 
-      {/* ===== Nuevo: Módulo de Emisión de Receta Rápida ===== */}
-      <div className="max-w-4xl w-full mx-auto mt-4">
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-gray-200">
-              <Pill className="h-5 w-5 text-cyan-400" />
-              <span className="font-medium">Emitir receta al finalizar</span>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-gray-300">
-              <input type="checkbox" checked={showPrescriptionModule} onChange={(e) => setShowPrescriptionModule(e.target.checked)} />
-              Activar módulo
-            </label>
-          </div>
 
-          {showPrescriptionModule && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">Diagnóstico para receta</label>
-                  <input
-                    type="text"
-                    value={prescriptionDiagnosis}
-                    onChange={(e) => setPrescriptionDiagnosis(e.target.value)}
-                    placeholder={watchedData.diagnosis || 'Usará el diagnóstico de la consulta si se deja vacío'}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">Notas/Indicaciones</label>
-                  <input
-                    type="text"
-                    value={prescriptionNotes}
-                    onChange={(e) => setPrescriptionNotes(e.target.value)}
-                    placeholder={watchedData.treatment || 'Opcional'}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-200"
-                  />
-                </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm text-gray-300">Medicamentos</label>
-                  <button
-                    type="button"
-                    onClick={() => setRxMedications(prev => [...prev, { name: '', dosage: '', frequency: '', duration: '', instructions: '' }])}
-                    className="text-cyan-400 hover:text-cyan-300 text-sm flex items-center"
-                  >
-                    <Plus className="h-4 w-4 mr-1" /> Agregar
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {rxMedications.map((m, idx) => (
-                    <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-start">
-                      <input
-                        placeholder="Nombre"
-                        value={m.name}
-                        onChange={(e) => setRxMedications(prev => prev.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
-                        className="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-gray-200"
-                      />
-                      <input
-                        placeholder="Dosis"
-                        value={m.dosage}
-                        onChange={(e) => setRxMedications(prev => prev.map((x, i) => i === idx ? { ...x, dosage: e.target.value } : x))}
-                        className="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-gray-200"
-                      />
-                      <input
-                        placeholder="Frecuencia"
-                        value={m.frequency}
-                        onChange={(e) => setRxMedications(prev => prev.map((x, i) => i === idx ? { ...x, frequency: e.target.value } : x))}
-                        className="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-gray-200"
-                      />
-                      <input
-                        placeholder="Duración"
-                        value={m.duration}
-                        onChange={(e) => setRxMedications(prev => prev.map((x, i) => i === idx ? { ...x, duration: e.target.value } : x))}
-                        className="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-gray-200"
-                      />
-                      <div className="flex items-center gap-2">
-                        <input
-                          placeholder="Instrucciones (opcional)"
-                          value={m.instructions || ''}
-                          onChange={(e) => setRxMedications(prev => prev.map((x, i) => i === idx ? { ...x, instructions: e.target.value } : x))}
-                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-2 text-gray-200"
-                        />
-                        {rxMedications.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setRxMedications(prev => prev.filter((_, i) => i !== idx))}
-                            className="text-red-400 hover:text-red-300"
-                            title="Quitar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400 mt-1">Para habilitar el botón "Guardar y Emitir Receta", ingresa al menos un medicamento completo.</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Modal de Éxito con Opción de Agendar Cita */}
+      {/* Modal de Éxito con Opción de Emitir Receta y Agendar Cita */}
       {consultationSaved && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-700">
@@ -2102,6 +1852,15 @@ ${classicData.therapeutic_plan.physical_therapy}`,
             </div>
 
             <div className="space-y-4">
+              {/* ===== BOTÓN EMITIR RECETA ===== */}
+              <button
+                onClick={() => setShowPrescriptionEmitModal(true)}
+                className="w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-lg hover:from-emerald-700 hover:to-green-800 transition-all flex items-center justify-center gap-2 font-medium shadow-lg shadow-emerald-900/30"
+              >
+                <Pill className="h-5 w-5" />
+                Emitir Receta
+              </button>
+
               <div className="bg-gray-700 rounded-lg p-4 border border-cyan-500">
                 <h4 className="text-white font-medium mb-2 flex items-center">
                   <Calendar className="h-4 w-4 mr-2 text-cyan-400" />
@@ -2125,18 +1884,31 @@ ${classicData.therapeutic_plan.physical_therapy}`,
                   onClick={handleSkipAppointment}
                   className="flex-1 px-4 py-2 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
                 >
-                  Omitir por Ahora
-                </button>
-                <button
-                  onClick={() => setShowAppointmentScheduler(true)}
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-colors"
-                >
-                  Más Opciones
+                  Cerrar
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ===== MODAL DE EMISIÓN DE RECETA (SEPARADO) ===== */}
+      {savedConsultationId && (
+        <PrescriptionEmitModal
+          isOpen={showPrescriptionEmitModal}
+          onClose={() => setShowPrescriptionEmitModal(false)}
+          consultationId={savedConsultationId}
+          patientId={patientId}
+          doctorId={doctorId}
+          diagnosis={watchedData.diagnosis || ''}
+          cie10Code={watchedData.cie10_code}
+          cie10Description={watchedData.cie10_description}
+          patientName={patientName}
+          treatment={watchedData.treatment}
+          onPrescriptionSaved={(rxId) => {
+            console.log('Receta emitida:', rxId);
+          }}
+        />
       )}
 
       <MedicalTranscription

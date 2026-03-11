@@ -4,6 +4,8 @@ import PatientPortalLayout from '@/components/Layout/PatientPortalLayout';
 import ClinicAdminLayout from '@/components/Layout/ClinicAdminLayout';
 
 import AdherenceDashboardPage from '@/features/adherence-dashboard/pages/AdherenceDashboardPage';
+import InactivityWarningModal from '@/features/authentication/components/InactivityWarningModal';
+import { useInactivityLogout } from '@/features/authentication/hooks/useInactivityLogout';
 import { ClinicProvider } from '@/features/clinic/context/ClinicContext';
 import ExerciseManagerPage from '@/features/exercise-manager/pages/ExerciseManagerPage';
 import QuestionnaireManagerPage from '@/features/questionnaire-manager/pages/QuestionnaireManagerPage';
@@ -59,6 +61,11 @@ function App() {
     authResolvedRef.current = true;
     setIsAuthenticated(prev => (prev === value ? prev : value));
   }, []);
+
+  // HIPAA Compliance: Auto-logoff after 15 min of inactivity
+  const { showWarning, secondsRemaining, resetTimer, logoutNow } = useInactivityLogout(
+    isAuthenticated === true
+  );
 
   useEffect(() => {
     // Check initial auth state with a safety timeout
@@ -116,6 +123,14 @@ function App() {
 
   return (
     <ErrorBoundary>
+      {/* HIPAA: Auto-logoff warning modal */}
+      {showWarning && (
+        <InactivityWarningModal
+          secondsRemaining={secondsRemaining}
+          onStayLoggedIn={resetTimer}
+          onLogout={logoutNow}
+        />
+      )}
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ClinicProvider>
           {/* Skip links para navegación accesible */}

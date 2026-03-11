@@ -5,8 +5,17 @@
  * to ensure HIPAA/NOM-024 compliance. Uses AES-GCM for authenticated encryption.
  */
 
-// Simple encryption for demonstration - In production, use proper key management
-const ENCRYPTION_KEY = import.meta.env.VITE_PHI_ENCRYPTION_KEY || 'default-key-change-in-production';
+// PHI encryption key - MUST be set via environment variable
+// HIPAA Compliance: No fallback key allowed; app will fail if key is missing
+const ENCRYPTION_KEY = import.meta.env.VITE_PHI_ENCRYPTION_KEY;
+
+if (!ENCRYPTION_KEY || ENCRYPTION_KEY.trim() === '') {
+  console.error('[HIPAA] CRITICAL: VITE_PHI_ENCRYPTION_KEY is not configured. PHI encryption is disabled.');
+  // In production, this should prevent the app from starting
+  if (import.meta.env.PROD) {
+    throw new Error('HIPAA VIOLATION: PHI encryption key is not configured. Set VITE_PHI_ENCRYPTION_KEY.');
+  }
+}
 
 /**
  * Encrypts sensitive PHI data using AES-GCM
